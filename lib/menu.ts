@@ -32,7 +32,7 @@ export const MENU: Producto[] = [
   { id: 'bienmesabe', nombre: 'Bienmesabe', precio: 2800, categoria: 'Postres' },
 ]
 
-export const CATEGORIAS = [...new Set(MENU.map(p => p.categoria))]
+export const CATEGORIAS = Array.from(new Set(MENU.map(p => p.categoria)))
 
 export const MESAS = [
   'Mesa 1', 'Mesa 2', 'Mesa 3', 'Mesa 4', 'Mesa 5', 'Mesa 6',
