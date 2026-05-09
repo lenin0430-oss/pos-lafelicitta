@@ -1,0 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f0e0c;
+  --surface: #1a1916;
+  --surface2: #242220;
+  --border: #2e2c29;
+  --gold: #c9a84c;
+  --gold-light: #e8c97a;
+  --red: #d94f3d;
+  --green: #4caf7d;
+  --blue: #4a9fd4;
+  --text: #f0ece4;
+  --muted: #7a7670;
+  --font: 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+  --display: 'Bebas Neue', sans-serif;
+}
+
+html, body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ---- PRINT 80mm ---- */
+@media print {
+  @page { size: 80mm auto; margin: 0; }
+  body { background: #fff; color: #000; }
+  .no-print { display: none !important; }
+  #ticket-print {
+    display: block !important;
+    width: 76mm;
+    padding: 3mm 2mm;
+    font-family: 'Courier New', monospace;
+    font-size: 9.5pt;
+    line-height: 1.45;
+  }
+  .t-center { text-align: center; }
+  .t-bold { font-weight: bold; }
+  .t-divider { border: none; border-top: 1px dashed #000; margin: 2mm 0; }
+  .t-logo { font-size: 15pt; font-weight: bold; text-align: center; letter-spacing: 2px; margin-bottom: 1mm; }
+  .t-sub { font-size: 8pt; text-align: center; margin-bottom: 2mm; }
+  .t-meta { font-size: 8.5pt; margin-bottom: 2mm; }
+  .t-meta span { display: block; }
+  .t-items { width: 100%; border-collapse: collapse; }
+  .t-items th { font-size: 8pt; border-bottom: 1px solid #000; padding: 1mm 0; text-align: left; }
+  .t-items th:last-child { text-align: right; }
+  .t-items td { font-size: 9pt; padding: 1.5mm 0; border-bottom: 1px dotted #ccc; vertical-align: top; }
+  .t-items td:last-child { text-align: right; white-space: nowrap; }
+  .t-items td .nota { font-size: 7.5pt; font-style: italic; color: #444; display: block; }
+  .t-totales { margin-top: 2mm; }
+  .t-fila { display: flex; justify-content: space-between; font-size: 9pt; padding: 0.5mm 0; }
+  .t-fila.grand { font-weight: bold; font-size: 12pt; border-top: 1px solid #000; margin-top: 1.5mm; padding-top: 1.5mm; }
+  .t-footer { text-align: center; font-size: 8pt; margin-top: 4mm; line-height: 1.6; }
+}
