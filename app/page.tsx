@@ -17,9 +17,6 @@ const EMOJI_TIPO: Record<TipoServicio, string> = {
   'Delivery': '🚗',
 }
 
-// Logo La Felicitta en base64 (pequeño, para el ticket)
-const LOGO_URL = 'https://menu-lafelicitta.vercel.app/favicon.ico'
-
 export default function CajaPage() {
   const [mesa, setMesa] = useState('Mesa 1')
   const [mesero, setMesero] = useState('')
@@ -36,9 +33,28 @@ export default function CajaPage() {
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
   const ticketRef = useRef<HTMLDivElement>(null)
 
+  // ── APERTURA DE CAJA ──
+  const [mostrarApertura, setMostrarApertura] = useState(false)
+  const [montoCaja, setMontoCaja] = useState('')
+  const [cajeroApertura, setCajeroApertura] = useState('')
+  const [cajaAbierta, setCajaAbierta] = useState(false)
+  const [montoInicial, setMontoInicial] = useState(0)
+
   useEffect(() => {
     const n = parseInt(localStorage.getItem('lf_orden_num') || '1')
     setOrdenNum(n)
+
+    // Verificar si ya se abrió caja hoy
+    const hoy = new Date().toLocaleDateString('es-CL')
+    const cajaHoy = localStorage.getItem('lf_caja_fecha')
+    if (cajaHoy !== hoy) {
+      setMostrarApertura(true)
+    } else {
+      const monto = parseInt(localStorage.getItem('lf_caja_monto') || '0')
+      setMontoInicial(monto)
+      setCajaAbierta(true)
+    }
+
     const tick = setInterval(() => {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     }, 1000)
@@ -50,6 +66,25 @@ export default function CajaPage() {
     else if (mesa === 'Delivery') setTipoServicio('Delivery')
     else setTipoServicio('Servir en mesa')
   }, [mesa])
+
+  async function abrirCaja() {
+    const monto = parseInt(montoCaja.replace(/\D/g, '')) || 0
+    const cajero = cajeroApertura.trim() || 'Caja'
+    try {
+      await supabase.from('aperturas_caja').insert({
+        fecha: new Date().toISOString().split('T')[0],
+        monto_inicial: monto,
+        cajero,
+        created_at: new Date().toISOString()
+      })
+    } catch (_) {}
+    const hoy = new Date().toLocaleDateString('es-CL')
+    localStorage.setItem('lf_caja_fecha', hoy)
+    localStorage.setItem('lf_caja_monto', String(monto))
+    setMontoInicial(monto)
+    setCajaAbierta(true)
+    setMostrarApertura(false)
+  }
 
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
   const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
@@ -130,7 +165,6 @@ export default function CajaPage() {
 
   return (
     <>
-      {/* ── ESTILOS DE IMPRESIÓN ── */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -144,7 +178,6 @@ export default function CajaPage() {
           color: #000;
           padding: 8px;
         }
-        .t-logo-img { display: block; margin: 0 auto 4px; width: 60px; height: 60px; object-fit: contain; }
         .t-logo { text-align: center; font-size: 20px; font-weight: 900; letter-spacing: 3px; margin-bottom: 2px; }
         .t-sub { text-align: center; font-size: 11px; margin-bottom: 6px; }
         .t-divider { border: none; border-top: 1px dashed #000; margin: 6px 0; }
@@ -164,17 +197,54 @@ export default function CajaPage() {
         .t-footer { text-align: center; font-size: 11px; margin-top: 8px; }
       `}</style>
 
+      {/* ── POPUP APERTURA DE CAJA ── */}
+      {mostrarApertura && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 32, width: 360, fontFamily: 'var(--font)' }}>
+            <div style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 3, color: 'var(--gold)', marginBottom: 6 }}>LA FELICITTA</div>
+            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Apertura de Caja</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24 }}>{fechaHoy}</div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Cajero / Encargado</label>
+              <input
+                value={cajeroApertura}
+                onChange={e => setCajeroApertura(e.target.value)}
+                placeholder="Nombre..."
+                style={inp}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Monto inicial en caja</label>
+              <input
+                value={montoCaja}
+                onChange={e => setMontoCaja(e.target.value)}
+                placeholder="$ 30.000"
+                type="number"
+                style={{ ...inp, fontSize: 20, fontFamily: 'var(--mono)', color: 'var(--gold)' }}
+                onKeyDown={e => e.key === 'Enter' && abrirCaja()}
+              />
+            </div>
+
+            <button onClick={abrirCaja} style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              🔓 Abrir Caja
+            </button>
+
+            <button onClick={() => { setMostrarApertura(false); setCajaAbierta(true) }} style={{ width: '100%', marginTop: 10, padding: '10px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              Omitir
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── TICKET PARA IMPRIMIR ── */}
       <div id="ticket-print" style={{ display: 'none' }}>
-        {/* Logo */}
-        <img className="t-logo-img" src={LOGO_URL} alt="La Felicitta" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
         <div className="t-logo">LA FELICITTA</div>
         <div className="t-sub">Barros Arana 504, Iquique<br />@lafelicittacl</div>
         <hr className="t-divider" />
-
-        {/* Tipo de servicio */}
         <div className="t-tipo">{EMOJI_TIPO[tipoServicio]} {tipoServicio}</div>
-
         <div className="t-meta">
           <span><strong>COMANDA #{String(ordenNum - 1).padStart(3, '0')}</strong></span>
           {tipoServicio === 'Servir en mesa' && <span>{mesa} — {personas} pax</span>}
@@ -183,19 +253,14 @@ export default function CajaPage() {
           <span>{fechaHoy} {horaImpresion}</span>
         </div>
         <hr className="t-divider" />
-
         <table className="t-items">
-          <thead>
-            <tr><th>Producto</th><th>C</th><th>Total</th></tr>
-          </thead>
+          <thead><tr><th>Producto</th><th>C</th><th>Total</th></tr></thead>
           <tbody>
             {items.map(i => (
               <tr key={i.id}>
                 <td>
                   {i.producto.nombre}
-                  {i.producto.ingredientes && (
-                    <span className="t-ingr">{i.producto.ingredientes}</span>
-                  )}
+                  {i.producto.ingredientes && <span className="t-ingr">{i.producto.ingredientes}</span>}
                   {i.nota && <span className="nota">↳ {i.nota}</span>}
                 </td>
                 <td>{i.cantidad}</td>
@@ -204,21 +269,12 @@ export default function CajaPage() {
             ))}
           </tbody>
         </table>
-
-        {nota && (
-          <div style={{ fontSize: 11, borderTop: '1px dashed #000', marginTop: 6, paddingTop: 4 }}>
-            <strong>Nota:</strong> {nota}
-          </div>
-        )}
-
+        {nota && <div style={{ fontSize: 11, borderTop: '1px dashed #000', marginTop: 6, paddingTop: 4 }}><strong>Nota:</strong> {nota}</div>}
         <div className="t-totales">
           <div className="t-fila grand"><span>TOTAL</span><span>{fmt(total)}</span></div>
         </div>
         <hr className="t-divider" />
-        <div className="t-footer">
-          QR MercadoPago ID: 1059389577<br />
-          ¡Gracias por su visita! 🧡
-        </div>
+        <div className="t-footer">QR MercadoPago ID: 1059389577<br />¡Gracias por su visita! 🧡</div>
       </div>
 
       {/* ── UI PANTALLA ── */}
@@ -234,6 +290,12 @@ export default function CajaPage() {
             ))}
           </nav>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
+            {/* Monto caja */}
+            {cajaAbierta && montoInicial > 0 && (
+              <span style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--surface2)', padding: '3px 10px', borderRadius: 12, border: '1px solid var(--border)' }}>
+                💰 Caja: {fmt(montoInicial)}
+              </span>
+            )}
             {mensaje && (
               <span style={{ fontSize: 13, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '4px 12px', borderRadius: 20, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>
                 {mensaje.txt}
@@ -244,7 +306,7 @@ export default function CajaPage() {
           </div>
         </header>
 
-        {/* PANEL IZQUIERDO — MENÚ */}
+        {/* PANEL IZQUIERDO */}
         <main style={{ padding: 16, overflowY: 'auto', borderRight: '1px solid var(--border)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
             {[
@@ -271,7 +333,6 @@ export default function CajaPage() {
             ))}
           </div>
 
-          {/* Grid de productos con ingredientes */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
             {productosFiltrados.map(p => (
               <button key={p.id} onClick={() => agregarProducto(p)}
@@ -316,9 +377,7 @@ export default function CajaPage() {
           {/* Items */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
             {items.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)', fontSize: 13 }}>
-                Toca un producto para agregar
-              </div>
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)', fontSize: 13 }}>Toca un producto para agregar</div>
             ) : items.map(item => (
               <div key={item.id} style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -341,12 +400,10 @@ export default function CajaPage() {
             ))}
           </div>
 
-          {/* Nota */}
           <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
             <input value={nota} onChange={e => setNota(e.target.value)} placeholder="📝 Nota general..." style={{ ...inp, width: '100%', fontSize: 12 }} />
           </div>
 
-          {/* Totales */}
           <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
               <span>{items.reduce((s, i) => s + i.cantidad, 0)} productos</span>
