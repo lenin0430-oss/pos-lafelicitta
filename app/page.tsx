@@ -10,13 +10,22 @@ interface ItemComanda {
   nota: string
 }
 
+type TipoServicio = 'Servir en mesa' | 'Para llevar' | 'Delivery'
+const TIPOS_SERVICIO: TipoServicio[] = ['Servir en mesa', 'Para llevar', 'Delivery']
+const EMOJI_TIPO: Record<TipoServicio, string> = {
+  'Servir en mesa': '🍽',
+  'Para llevar': '🥡',
+  'Delivery': '🚗',
+}
+
 export default function CajaPage() {
   const [mesa, setMesa] = useState('Mesa 1')
   const [mesero, setMesero] = useState('')
   const [personas, setPersonas] = useState(2)
   const [metodoPago, setMetodoPago] = useState('Débito')
+  const [tipoServicio, setTipoServicio] = useState<TipoServicio>('Servir en mesa')
   const [items, setItems] = useState<ItemComanda[]>([])
-  const [categoriaActiva, setCategoriaActiva] = useState('Principales')
+  const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0] || 'Burgers')
   const [busqueda, setBusqueda] = useState('')
   const [nota, setNota] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -34,13 +43,19 @@ export default function CajaPage() {
     return () => clearInterval(tick)
   }, [])
 
+  // Auto-ajustar tipo de servicio según mesa
+  useEffect(() => {
+    if (mesa === 'Para llevar') setTipoServicio('Para llevar')
+    else if (mesa === 'Delivery') setTipoServicio('Delivery')
+    else setTipoServicio('Servir en mesa')
+  }, [mesa])
+
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
   const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
 
   const productosFiltrados = MENU.filter(p => {
-    const enCat = p.categoria === categoriaActiva
-    const enBusq = busqueda === '' || p.nombre.toLowerCase().includes(busqueda.toLowerCase())
-    return enCat && enBusq
+    if (busqueda !== '') return p.nombre.toLowerCase().includes(busqueda.toLowerCase())
+    return p.categoria === categoriaActiva
   })
 
   function agregarProducto(p: Producto) {
@@ -74,6 +89,7 @@ export default function CajaPage() {
         mesero: mesero || 'Caja',
         personas,
         metodo_pago: metodoPago,
+        tipo_servicio: tipoServicio,
         total,
         items: items.map(i => ({
           nombre: i.producto.nombre,
@@ -81,6 +97,7 @@ export default function CajaPage() {
           precio_unit: i.producto.precio,
           nota: i.nota
         })),
+        nota_general: nota || null,
         estado: 'pendiente',
         created_at: new Date().toISOString()
       })
@@ -112,18 +129,34 @@ export default function CajaPage() {
 
   return (
     <>
-      {/* TICKET PARA IMPRIMIR */}
+      {/* ── TICKET PARA IMPRIMIR ── */}
       <div id="ticket-print" ref={ticketRef} style={{ display: 'none' }}>
         <div className="t-logo">LA FELICITTA</div>
         <div className="t-sub">Barros Arana 504, Iquique<br />@lafelicittacl</div>
         <hr className="t-divider" />
+
+        {/* TIPO DE SERVICIO destacado en el ticket */}
+        <div style={{
+          textAlign: 'center',
+          fontWeight: 900,
+          fontSize: 18,
+          letterSpacing: 2,
+          border: '2px solid #000',
+          padding: '6px 0',
+          marginBottom: 8,
+          textTransform: 'uppercase',
+        }}>
+          {EMOJI_TIPO[tipoServicio]} {tipoServicio}
+        </div>
+
         <div className="t-meta">
           <span><strong>COMANDA #{String(ordenNum - 1).padStart(3, '0')}</strong></span>
-          <span>{mesa} — {personas} pax</span>
+          {tipoServicio === 'Servir en mesa' && <span>{mesa} — {personas} pax</span>}
           <span>Mesero: {mesero || 'Caja'}</span>
           <span>{fechaHoy} {horaImpresion}</span>
         </div>
         <hr className="t-divider" />
+
         <table className="t-items">
           <thead>
             <tr><th>Producto</th><th>C</th><th>Total</th></tr>
@@ -131,13 +164,23 @@ export default function CajaPage() {
           <tbody>
             {items.map(i => (
               <tr key={i.id}>
-                <td>{i.producto.nombre}{i.nota && <span className="nota">↳ {i.nota}</span>}</td>
+                <td>
+                  {i.producto.nombre}
+                  {i.nota && <span className="nota">↳ {i.nota}</span>}
+                </td>
                 <td>{i.cantidad}</td>
                 <td>{fmt(i.cantidad * i.producto.precio)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        {nota && (
+          <div style={{ fontSize: 12, borderTop: '1px dashed #000', marginTop: 6, paddingTop: 4 }}>
+            <strong>Nota:</strong> {nota}
+          </div>
+        )}
+
         <div className="t-totales">
           <div className="t-fila grand"><span>TOTAL</span><span>{fmt(total)}</span></div>
           <div className="t-fila"><span>Pago:</span><span>{metodoPago}</span></div>
@@ -149,7 +192,7 @@ export default function CajaPage() {
         </div>
       </div>
 
-      {/* UI PANTALLA */}
+      {/* ── UI PANTALLA ── */}
       <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gridTemplateRows: '56px 1fr', height: '100vh', overflow: 'hidden' }}>
 
         {/* HEADER */}
@@ -162,7 +205,11 @@ export default function CajaPage() {
             ))}
           </nav>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
-            {mensaje && <span style={{ fontSize: 13, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '4px 12px', borderRadius: 20, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
+            {mensaje && (
+              <span style={{ fontSize: 13, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '4px 12px', borderRadius: 20, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>
+                {mensaje.txt}
+              </span>
+            )}
             <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)' }}>{hora}</span>
             <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)', background: 'var(--surface2)', padding: '3px 10px', borderRadius: 12, border: '1px solid var(--border)' }}>#{String(ordenNum).padStart(3, '0')}</span>
           </div>
@@ -170,7 +217,6 @@ export default function CajaPage() {
 
         {/* PANEL IZQUIERDO — MENÚ */}
         <main style={{ padding: 16, overflowY: 'auto', borderRight: '1px solid var(--border)' }}>
-          {/* Datos comanda */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
             {[
               { label: 'Mesa', el: <select value={mesa} onChange={e => setMesa(e.target.value)} style={sel}>{MESAS.map(m => <option key={m}>{m}</option>)}</select> },
@@ -185,25 +231,24 @@ export default function CajaPage() {
             ))}
           </div>
 
-          {/* Búsqueda */}
           <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar producto..." style={{ ...inp, width: '100%', marginBottom: 10 }} />
 
-          {/* Categorías */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             {CATEGORIAS.map(cat => (
-              <button key={cat} onClick={() => setCategoriaActiva(cat)} style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva ? '#000' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              <button key={cat} onClick={() => { setCategoriaActiva(cat); setBusqueda('') }}
+                style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva && busqueda === '' ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva && busqueda === '' ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva && busqueda === '' ? '#000' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                 {cat}
               </button>
             ))}
           </div>
 
-          {/* Grid de productos */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
             {productosFiltrados.map(p => (
-              <button key={p.id} onClick={() => agregarProducto(p)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', cursor: 'pointer', textAlign: 'left', transition: 'all .15s', fontFamily: 'var(--font)' }}
+              <button key={p.id} onClick={() => agregarProducto(p)}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', cursor: 'pointer', textAlign: 'left', transition: 'all .15s', fontFamily: 'var(--font)' }}
                 onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--gold)')}
                 onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}>
-                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{p.nombre}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, lineHeight: 1.3 }}>{p.nombre}</div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--gold)' }}>{fmt(p.precio)}</div>
               </button>
             ))}
@@ -215,6 +260,29 @@ export default function CajaPage() {
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontFamily: 'var(--display)', fontSize: 14, letterSpacing: 2, color: 'var(--muted)' }}>COMANDA</span>
             <button onClick={nuevaComanda} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 12, padding: '4px 10px', cursor: 'pointer', fontFamily: 'var(--font)' }}>+ Nueva</button>
+          </div>
+
+          {/* SELECTOR TIPO DE SERVICIO */}
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 6 }}>
+            {TIPOS_SERVICIO.map(t => (
+              <button key={t} onClick={() => setTipoServicio(t)} style={{
+                flex: 1,
+                padding: '6px 4px',
+                borderRadius: 8,
+                border: '1px solid ' + (t === tipoServicio ? 'var(--gold)' : 'var(--border)'),
+                background: t === tipoServicio ? 'var(--gold)' : 'var(--surface)',
+                color: t === tipoServicio ? '#000' : 'var(--muted)',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'var(--font)',
+                textAlign: 'center',
+                lineHeight: 1.4,
+              }}>
+                <div style={{ fontSize: 16, marginBottom: 2 }}>{EMOJI_TIPO[t]}</div>
+                {t === 'Servir en mesa' ? 'Mesa' : t}
+              </button>
+            ))}
           </div>
 
           {/* Items */}
@@ -255,10 +323,12 @@ export default function CajaPage() {
               <span>TOTAL</span><span>{fmt(total)}</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={registrarVenta} disabled={guardando || items.length === 0} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid var(--green)', background: 'transparent', color: 'var(--green)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              <button onClick={registrarVenta} disabled={guardando || items.length === 0}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid var(--green)', background: 'transparent', color: 'var(--green)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                 {guardando ? '...' : '💾 Guardar'}
               </button>
-              <button onClick={registrarEImprimir} disabled={guardando || items.length === 0} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              <button onClick={registrarEImprimir} disabled={guardando || items.length === 0}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                 🖨 Imprimir
               </button>
             </div>
