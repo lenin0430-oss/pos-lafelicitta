@@ -6,23 +6,34 @@ interface Venta {
   id: string
   numero: number
   mesa: string
+  mesero: string
   metodo_pago: string
+  tipo_servicio: string
   total: number
   items: { nombre: string; cantidad: number; precio_unit: number }[]
   created_at: string
   estado: string
 }
 
+interface AperturaCaja {
+  id: string
+  fecha: string
+  monto_inicial: number
+  cajero: string
+  created_at: string
+}
+
 type Periodo = 'hoy' | 'semana' | 'mes'
 
 export default function ReportesPage() {
   const [ventas, setVentas] = useState<Venta[]>([])
+  const [aperturas, setAperturas] = useState<AperturaCaja[]>([])
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
   const [cargando, setCargando] = useState(true)
 
-  useEffect(() => { cargarVentas() }, [periodo])
+  useEffect(() => { cargarDatos() }, [periodo])
 
-  async function cargarVentas() {
+  async function cargarDatos() {
     setCargando(true)
     const ahora = new Date()
     let desde: Date
@@ -35,25 +46,22 @@ export default function ReportesPage() {
       desde = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
     }
 
-    const { data } = await supabase
-      .from('ventas')
-      .select('*')
-      .gte('created_at', desde.toISOString())
-      .order('created_at', { ascending: false })
+    const [{ data: ventasData }, { data: aperturasData }] = await Promise.all([
+      supabase.from('ventas').select('*').gte('created_at', desde.toISOString()).order('created_at', { ascending: false }),
+      supabase.from('aperturas_caja').select('*').gte('created_at', desde.toISOString()).order('created_at', { ascending: false })
+    ])
 
-    if (data) setVentas(data)
+    if (ventasData) setVentas(ventasData)
+    if (aperturasData) setAperturas(aperturasData)
     setCargando(false)
   }
 
   function exportarCSV() {
     const filas = [
-      ['#', 'Mesa', 'Método pago', 'Total', 'Estado', 'Fecha'],
+      ['#', 'Mesa', 'Mesero', 'Tipo', 'Método pago', 'Total', 'Estado', 'Fecha'],
       ...ventas.map(v => [
-        v.numero,
-        v.mesa,
-        v.metodo_pago,
-        v.total,
-        v.estado,
+        v.numero, v.mesa, v.mesero || '', v.tipo_servicio || '',
+        v.metodo_pago, v.total, v.estado,
         new Date(v.created_at).toLocaleString('es-CL')
       ])
     ]
@@ -66,11 +74,38 @@ export default function ReportesPage() {
     a.click()
   }
 
+  const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
   const totalVentas = ventas.reduce((s, v) => s + v.total, 0)
   const ticketPromedio = ventas.length ? totalVentas / ventas.length : 0
-  const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
 
-  // Productos más vendidos
+  // Ventas por día
+  const porDia: Record<string, number> = {}
+  ventas.forEach(v => {
+    const dia = new Date(v.created_at).toLocaleDateString('es-CL')
+    porDia[dia] = (porDia[dia] || 0) + v.total
+  })
+  const diasOrdenados = Object.entries(porDia).sort((a, b) => {
+    const [dA, mA, yA] = a[0].split('-').map(Number)
+    const [dB, mB, yB] = b[0].split('-').map(Number)
+    return new Date(yB, mB - 1, dB).getTime() - new Date(yA, mA - 1, dA).getTime()
+  })
+
+  // Por método de pago
+  const porMetodo: Record<string, { total: number; count: number }> = {}
+  ventas.forEach(v => {
+    if (!porMetodo[v.metodo_pago]) porMetodo[v.metodo_pago] = { total: 0, count: 0 }
+    porMetodo[v.metodo_pago].total += v.total
+    porMetodo[v.metodo_pago].count += 1
+  })
+
+  // Por tipo de servicio
+  const porTipo: Record<string, number> = {}
+  ventas.forEach(v => {
+    const t = v.tipo_servicio || 'Mesa'
+    porTipo[t] = (porTipo[t] || 0) + v.total
+  })
+
+  // Top productos
   const conteoProductos: Record<string, { cantidad: number; ingresos: number }> = {}
   ventas.forEach(v => {
     (v.items || []).forEach(item => {
@@ -80,19 +115,27 @@ export default function ReportesPage() {
     })
   })
   const topProductos = Object.entries(conteoProductos)
-    .sort((a, b) => b[1].cantidad - a[1].cantidad)
-    .slice(0, 8)
+    .sort((a, b) => b[1].cantidad - a[1].cantidad).slice(0, 8)
 
-  // Por método de pago
-  const porMetodo: Record<string, number> = {}
-  ventas.forEach(v => {
-    porMetodo[v.metodo_pago] = (porMetodo[v.metodo_pago] || 0) + v.total
+  // Apertura de hoy
+  const aperturaHoy = aperturas.find(a => {
+    const fechaA = new Date(a.created_at).toLocaleDateString('es-CL')
+    const hoy = new Date().toLocaleDateString('es-CL')
+    return fechaA === hoy
   })
 
-  const card = (titulo: string, valor: string, sub?: string): React.ReactNode => (
+  const METODO_COLOR: Record<string, string> = {
+    'Efectivo': '#4CAF7D',
+    'Débito': '#D4A843',
+    'Transferencia': '#64B5F6',
+    'Crédito': '#CE93D8',
+    'Cortesía': '#F48FB1',
+  }
+
+  const card = (titulo: string, valor: string, sub?: string, color?: string) => (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px' }}>
       <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>{titulo}</div>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 700, color: 'var(--gold)' }}>{valor}</div>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 700, color: color || 'var(--gold)' }}>{valor}</div>
       {sub && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{sub}</div>}
     </div>
   )
@@ -109,17 +152,17 @@ export default function ReportesPage() {
         </nav>
       </header>
 
-      <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
         {/* Controles */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 24, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 24, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 2, marginRight: 8 }}>REPORTES</span>
           {(['hoy', 'semana', 'mes'] as Periodo[]).map(p => (
-            <button key={p} onClick={() => setPeriodo(p)} style={{ padding: '6px 16px', borderRadius: 20, border: '1px solid ' + (periodo === p ? 'var(--gold)' : 'var(--border)'), background: periodo === p ? 'var(--gold)' : 'transparent', color: periodo === p ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', textTransform: 'capitalize' }}>
+            <button key={p} onClick={() => setPeriodo(p)} style={{ padding: '6px 16px', borderRadius: 20, border: '1px solid ' + (periodo === p ? 'var(--gold)' : 'var(--border)'), background: periodo === p ? 'var(--gold)' : 'transparent', color: periodo === p ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
               {p === 'hoy' ? 'Hoy' : p === 'semana' ? 'Últimos 7 días' : 'Este mes'}
             </button>
           ))}
           <button onClick={exportarCSV} style={{ marginLeft: 'auto', padding: '6px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-            ⬇️ Exportar CSV
+            ⬇️ CSV
           </button>
         </div>
 
@@ -127,18 +170,115 @@ export default function ReportesPage() {
           <div style={{ textAlign: 'center', padding: 80, color: 'var(--muted)' }}>Cargando...</div>
         ) : (
           <>
+            {/* APERTURA DE CAJA */}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>🔓 Apertura de Caja — Hoy</div>
+                {aperturaHoy ? (
+                  <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 700, color: 'var(--green)' }}>{fmt(aperturaHoy.monto_inicial)}</span>
+                      <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>monto inicial</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                      Cajero: <strong style={{ color: 'var(--text)' }}>{aperturaHoy.cajero}</strong>
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                      Hora: <strong style={{ color: 'var(--text)' }}>{new Date(aperturaHoy.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</strong>
+                    </div>
+                    <div style={{ fontSize: 13 }}>
+                      Efectivo en caja estimado: <strong style={{ fontFamily: 'var(--mono)', color: 'var(--gold)' }}>
+                        {fmt(aperturaHoy.monto_inicial + (porMetodo['Efectivo']?.total || 0))}
+                      </strong>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: 'var(--muted)' }}>No se registró apertura hoy</div>
+                )}
+              </div>
+            </div>
+
             {/* KPIs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
               {card('Total ventas', fmt(totalVentas))}
               {card('N° comandas', String(ventas.length), 'órdenes registradas')}
               {card('Ticket promedio', fmt(ticketPromedio))}
               {card('Productos vendidos', String(Object.values(conteoProductos).reduce((s, p) => s + p.cantidad, 0)))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-              {/* Top productos */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+
+              {/* VENTAS POR DÍA */}
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>Top Productos</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>📅 Ventas por Día</div>
+                {diasOrdenados.length === 0 ? (
+                  <div style={{ color: 'var(--muted)', fontSize: 13 }}>Sin datos</div>
+                ) : diasOrdenados.map(([dia, monto]) => (
+                  <div key={dia} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                    <span style={{ color: 'var(--muted)' }}>{dia}</span>
+                    <span style={{ fontFamily: 'var(--mono)', color: 'var(--gold)', fontWeight: 600 }}>{fmt(monto)}</span>
+                  </div>
+                ))}
+                {diasOrdenados.length > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 0', fontSize: 13, fontWeight: 700 }}>
+                    <span>Total</span>
+                    <span style={{ fontFamily: 'var(--mono)', color: 'var(--gold)' }}>{fmt(totalVentas)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* VENTAS POR MÉTODO DE PAGO */}
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>💳 Por Método de Pago</div>
+                {Object.entries(porMetodo).length === 0 ? (
+                  <div style={{ color: 'var(--muted)', fontSize: 13 }}>Sin datos</div>
+                ) : Object.entries(porMetodo)
+                    .sort((a, b) => b[1].total - a[1].total)
+                    .map(([metodo, data]) => (
+                  <div key={metodo} style={{ padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: METODO_COLOR[metodo] || 'var(--muted)' }} />
+                        <span style={{ fontSize: 13 }}>{metodo}</span>
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{data.count} cmd</span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: METODO_COLOR[metodo] || 'var(--gold)' }}>{fmt(data.total)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{totalVentas ? Math.round(data.total / totalVentas * 100) : 0}%</div>
+                      </div>
+                    </div>
+                    {/* Barra */}
+                    <div style={{ marginTop: 4, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${totalVentas ? Math.round(data.total / totalVentas * 100) : 0}%`, background: METODO_COLOR[metodo] || 'var(--gold)', borderRadius: 2 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* POR TIPO DE SERVICIO */}
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>🍽 Por Tipo de Servicio</div>
+                {Object.entries(porTipo).length === 0 ? (
+                  <div style={{ color: 'var(--muted)', fontSize: 13 }}>Sin datos</div>
+                ) : Object.entries(porTipo).sort((a, b) => b[1] - a[1]).map(([tipo, monto]) => {
+                  const emoji = tipo === 'Para llevar' ? '🥡' : tipo === 'Delivery' ? '🚗' : '🍽'
+                  return (
+                    <div key={tipo} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                      <span>{emoji} {tipo}</span>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: 'var(--mono)', color: 'var(--gold)', fontWeight: 600 }}>{fmt(monto)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{totalVentas ? Math.round(monto / totalVentas * 100) : 0}%</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+              {/* TOP PRODUCTOS */}
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>🏆 Top Productos</div>
                 {topProductos.length === 0 ? <div style={{ color: 'var(--muted)', fontSize: 13 }}>Sin datos</div> : topProductos.map(([nombre, data]) => (
                   <div key={nombre} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                     <span>{nombre}</span>
@@ -147,22 +287,26 @@ export default function ReportesPage() {
                 ))}
               </div>
 
-              {/* Por método de pago */}
+              {/* APERTURAS DE CAJA */}
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>Por Método de Pago</div>
-                {Object.entries(porMetodo).length === 0 ? <div style={{ color: 'var(--muted)', fontSize: 13 }}>Sin datos</div> : Object.entries(porMetodo).map(([metodo, monto]) => (
-                  <div key={metodo} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
-                    <span style={{ fontSize: 13 }}>{metodo}</span>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'var(--mono)', color: 'var(--gold)', fontSize: 13 }}>{fmt(monto)}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{totalVentas ? Math.round(monto / totalVentas * 100) : 0}%</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>🔓 Aperturas de Caja</div>
+                {aperturas.length === 0 ? (
+                  <div style={{ color: 'var(--muted)', fontSize: 13 }}>Sin registros</div>
+                ) : aperturas.map(a => (
+                  <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{a.cajero}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        {new Date(a.created_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
+                    <span style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 14, fontWeight: 700 }}>{fmt(a.monto_inicial)}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Tabla de ventas */}
+            {/* TABLA DE VENTAS */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' }}>
                 Detalle de Ventas ({ventas.length})
@@ -171,7 +315,7 @@ export default function ReportesPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      {['#', 'Mesa', 'Productos', 'Método', 'Total', 'Fecha', 'Estado'].map(h => (
+                      {['#', 'Mesa', 'Tipo', 'Productos', 'Método', 'Total', 'Fecha', 'Estado'].map(h => (
                         <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', fontWeight: 500 }}>{h}</th>
                       ))}
                     </tr>
@@ -181,8 +325,14 @@ export default function ReportesPage() {
                       <tr key={v.id} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)' }}>#{String(v.numero).padStart(3, '0')}</td>
                         <td style={{ padding: '9px 12px', fontSize: 13 }}>{v.mesa}</td>
-                        <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--muted)' }}>{(v.items || []).map(i => `${i.cantidad}× ${i.nombre}`).join(', ').substring(0, 40)}...</td>
-                        <td style={{ padding: '9px 12px', fontSize: 12 }}>{v.metodo_pago}</td>
+                        <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--muted)' }}>
+                          {v.tipo_servicio === 'Para llevar' ? '🥡' : v.tipo_servicio === 'Delivery' ? '🚗' : '🍽'} {v.tipo_servicio || 'Mesa'}
+                        </td>
+                        <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--muted)', maxWidth: 200 }}>{(v.items || []).map(i => `${i.cantidad}× ${i.nombre}`).join(', ').substring(0, 50)}{(v.items||[]).length > 2 ? '...' : ''}</td>
+                        <td style={{ padding: '9px 12px', fontSize: 12 }}>
+                          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: METODO_COLOR[v.metodo_pago] || 'var(--muted)', marginRight: 6 }} />
+                          {v.metodo_pago}
+                        </td>
                         <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', fontWeight: 600 }}>{fmt(v.total)}</td>
                         <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{new Date(v.created_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                         <td style={{ padding: '9px 12px' }}>
