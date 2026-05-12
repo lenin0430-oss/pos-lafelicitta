@@ -42,7 +42,8 @@ export default function CierrePage() {
 
   async function cargarVentasHoy() {
     const hoy = new Date()
-    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+    const ultimoCierre = await supabase.from('cierres_caja').select('created_at').gte('created_at', new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()).order('created_at', { ascending: false }).limit(1)
+    const desde = ultimoCierre.data && ultimoCierre.data.length > 0 ? ultimoCierre.data[0].created_at : new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
     const hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1).toISOString()
 
     const { data } = await supabase
@@ -270,3 +271,4 @@ setTimeout(() => { setEfectivoFisico(''); setNotas('') }, 3000)
     </>
   )
 }
+
