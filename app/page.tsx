@@ -275,7 +275,7 @@ export default function CajaPage() {
           </button>
         </div>
         <div style={{ height: 'calc(100vh - 100px)', overflow: 'hidden' }}>
-          {tabMovil === 'menu' ? panelMenu : panelComanda}
+          <div className="no-print">{tabMovil === 'menu' ? panelMenu : panelComanda}</div>
         </div>
       </div>
 
@@ -293,6 +293,7 @@ export default function CajaPage() {
     </>
   )
 }
+
 
 
 
