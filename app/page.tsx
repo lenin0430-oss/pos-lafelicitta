@@ -41,7 +41,7 @@ export default function CajaPage() {
   const [montoInicial, setMontoInicial] = useState(0)
 
   useEffect(() => {
-    const n = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
+    const n = parseInt((typeof window !== 'undefined' ? (typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) : null) || '1')
     setOrdenNum(n)
     const hoy = new Date().toLocaleDateString('es-CL')
     const cajaHoy = localStorage.getItem('lf_caja_fecha')
@@ -116,7 +116,7 @@ export default function CajaPage() {
     if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return }
     setGuardando(true)
     try {
-      const numActual = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
+      const numActual = parseInt((typeof window !== 'undefined' ? (typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) : null) || '1')
       const { error } = await supabase.from('ventas').insert({
         numero: numActual,
         mesa,
@@ -139,7 +139,7 @@ export default function CajaPage() {
       mostrarMensaje(`Venta #${numActual} registrada ✓`, 'ok')
       const nuevoNum = numActual + 1
       setOrdenNum(nuevoNum)
-      if (typeof window !== 'undefined') localStorage.setItem('lf_orden_num', String(nuevoNum))
+      if (typeof window !== 'undefined') if(typeof window !== 'undefined') localStorage.setItem('lf_orden_num', String(nuevoNum))
     } catch (e: any) {
       mostrarMensaje('Error: ' + e.message, 'err')
     }
@@ -160,7 +160,7 @@ export default function CajaPage() {
 
   const fechaHoy = new Date().toLocaleDateString('es-CL')
   const horaImpresion = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
-  const numImpresion = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
+  const numImpresion = parseInt((typeof window !== 'undefined' ? (typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) : null) || '1')
 
   return (
     <>
