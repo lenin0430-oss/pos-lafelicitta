@@ -14,7 +14,7 @@ export default function CajaPage() {
   const [mesa, setMesa] = useState('Mesa 1')
   const [mesero, setMesero] = useState('')
   const [personas, setPersonas] = useState(2)
-  const [metodoPago, setMetodoPago] = useState('Débito')
+  const [metodoPago, setMetodoPago] = useState('')
   const [items, setItems] = useState<ItemComanda[]>([])
   const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0] || '')
   const [busqueda, setBusqueda] = useState('')
@@ -97,6 +97,7 @@ export default function CajaPage() {
     setItems([])
     setNota('')
     setBusqueda('')
+    setMetodoPago('')
     setTabMovil('menu')
   }
 
@@ -114,23 +115,19 @@ export default function CajaPage() {
   const panelMenu = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-      {/* Datos comanda */}
+      {/* Datos comanda — solo Mesa, Mesero, Personas. Pago va en la comanda */}
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: 8, marginBottom: 8 }}>
           <div>
             <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Mesa</label>
             <select value={mesa} onChange={e => setMesa(e.target.value)} style={sel}>{MESAS.map(m => <option key={m}>{m}</option>)}</select>
-          </div>
-          <div>
-            <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Pago</label>
-            <select value={metodoPago} onChange={e => setMetodoPago(e.target.value)} style={sel}>{METODOS_PAGO.map(m => <option key={m}>{m}</option>)}</select>
           </div>
           <div>
             <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Mesero</label>
             <input value={mesero} onChange={e => setMesero(e.target.value)} placeholder="Nombre..." style={inp} />
           </div>
           <div>
-            <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Personas</label>
+            <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Pax</label>
             <input type="number" value={personas} onChange={e => setPersonas(+e.target.value)} min={1} max={20} style={inp} />
           </div>
         </div>
@@ -205,17 +202,37 @@ export default function CajaPage() {
       </div>
 
       <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
+        {/* Subtotal */}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', marginBottom: 4, fontSize: 13, color: 'var(--muted)' }}>
           <span>{totalItems} productos</span><span>{fmt(total)}</span>
         </div>
+        {/* Total grande */}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 22, fontWeight: 700, fontFamily: 'var(--mono)', color: 'var(--gold)', marginBottom: 12 }}>
           <span>TOTAL</span><span>{fmt(total)}</span>
         </div>
+        {/* Método de pago — aquí cuando el cliente ya pidió todo */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={{ fontSize: 10, color: metodoPago ? 'var(--muted)' : 'var(--gold)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 5, fontWeight: metodoPago ? 400 : 700 }}>
+            💳 {metodoPago ? 'Método de pago' : '⚠️ Selecciona método de pago'}
+          </label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {METODOS_PAGO.map(m => (
+              <button key={m} onClick={() => setMetodoPago(m)} style={{
+                padding: '7px 14px', borderRadius: 20,
+                border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'),
+                background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)',
+                color: m === metodoPago ? '#000' : 'var(--muted)',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)'
+              }}>{m}</button>
+            ))}
+          </div>
+        </div>
+        {/* Botones — bloqueados si no hay método de pago */}
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={registrarVenta} disabled={guardando || items.length === 0} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: 'var(--green)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+          <button onClick={registrarVenta} disabled={guardando || items.length === 0 || !metodoPago} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: (!metodoPago || items.length === 0) ? 'var(--muted)' : 'var(--green)', fontSize: 14, fontWeight: 700, cursor: (!metodoPago || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!metodoPago || items.length === 0) ? 0.4 : 1 }}>
             {guardando ? '...' : '💾 Guardar'}
           </button>
-          <button onClick={registrarEImprimir} disabled={guardando || items.length === 0} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+          <button onClick={registrarEImprimir} disabled={guardando || items.length === 0 || !metodoPago} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: (!metodoPago || items.length === 0) ? 'var(--surface2)' : 'var(--gold)', color: (!metodoPago || items.length === 0) ? 'var(--muted)' : '#000', fontSize: 14, fontWeight: 700, cursor: (!metodoPago || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!metodoPago || items.length === 0) ? 0.4 : 1 }}>
             🖨 Imprimir
           </button>
         </div>
