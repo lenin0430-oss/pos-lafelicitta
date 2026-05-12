@@ -140,7 +140,7 @@ export default function CajaPage() {
       {/* Categorías — fila fija, no se encoge */}
       <div style={{ display: 'flex', gap: 6, padding: '10px 14px', overflowX: 'auto', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         {CATEGORIAS.map(cat => (
-          <button key={cat} onClick={() => setCategoriaActiva(cat)} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva ? '#000' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}>
+          <button key={cat} onClick={() => setCategoriaActiva(cat)} style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva ? '#000' : 'var(--muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}>
             {cat}
           </button>
         ))}
@@ -160,9 +160,9 @@ export default function CajaPage() {
       }}>
         {productosFiltrados.map(p => (
           <button key={p.id} onClick={() => agregarProducto(p)}
-            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px', color: 'var(--text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', minHeight: 70 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, lineHeight: 1.3 }}>{p.nombre}</div>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', fontWeight: 700 }}>{fmt(p.precio)}</div>
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px', color: 'var(--text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', minHeight: 80 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, lineHeight: 1.3 }}>{p.nombre}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 15, color: 'var(--gold)', fontWeight: 700 }}>{fmt(p.precio)}</div>
           </button>
         ))}
       </div>
