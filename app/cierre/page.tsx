@@ -97,7 +97,7 @@ export default function CierrePage() {
     else {
       mostrarMensaje('Cierre registrado ✓', 'ok')
       cargarCierres()
-setTimeout(() => { window.print() }, 400)
+const notaEl = document.getElementById("notas-ticket"); if (notaEl) notaEl.textContent = notas; setTimeout(() => { window.print() }, 400)
 setTimeout(() => { setEfectivoFisico(''); setNotas('') }, 3000)
           }
     setGuardando(false)
