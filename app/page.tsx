@@ -213,6 +213,7 @@ export default function CajaPage() {
       <div id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
         <div className="t-logo">LA FELICITTA</div>
         <div className="t-sub">Barros Arana 504, Iquique<br />@lafelicittacl</div>
+        <div className="t-tipo">{mesa.toLowerCase().includes('llevar') ? '?? PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? '?? DELIVERY' : '??? SERVIR EN MESA'}</div>
         <hr className="t-divider" />
         <div className="t-meta">
           <span><strong>COMANDA #{String(ordenNum - 1).padStart(3, '0')}</strong></span>
@@ -293,6 +294,7 @@ export default function CajaPage() {
     </>
   )
 }
+
 
 
 
