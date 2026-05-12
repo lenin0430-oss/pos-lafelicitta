@@ -99,7 +99,7 @@ export default function CierrePage() {
       setEfectivoFisico('')
       setNotas('')
       cargarCierres()
-      const contenido = document.getElementById("cierre-print")?.innerHTML || ""; const ventana = window.open("","_blank","width=400,height=600"); ventana?.document.write("<html><head><style>body{font-family:monospace;font-size:10pt;padding:10px;width:76mm} .t-logo{font-size:15pt;font-weight:bold;text-align:center;margin-bottom:5px} .t-sub{text-align:center;font-size:8pt;margin-bottom:8px} .t-divider{border:none;border-top:1px dashed #000;margin:5px 0} .t-meta span{display:block;font-size:9pt;margin:2px 0} .t-footer{text-align:center;font-size:8pt;margin-top:10px}</style></head><body>"+contenido+"</body></html>"); ventana?.document.close(); setTimeout(() => { ventana?.print(); ventana?.close(); }, 300)
+      setTimeout(() => window.print(), 400)
     }
     setGuardando(false)
   }

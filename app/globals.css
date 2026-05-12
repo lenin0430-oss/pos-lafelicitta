@@ -31,7 +31,7 @@ html, body {
   @page { size: 80mm auto; margin: 0; }
   body { background: #fff; color: #000; }
   .no-print { display: none !important; }
-  #ticket-print {
+  #ticket-print, #cierre-print {
     display: block !important;
     width: 76mm;
     padding: 3mm 2mm;
