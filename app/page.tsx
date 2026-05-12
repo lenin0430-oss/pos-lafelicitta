@@ -184,11 +184,11 @@ export default function CajaPage() {
         ))}
       </div>
 
-      <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
+      <div className="no-print" style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
         <input value={nota} onChange={e => setNota(e.target.value)} placeholder="📝 Nota..." style={{ ...inp, fontSize: 13 }} />
       </div>
 
-      <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+      <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', marginBottom: 4, fontSize: 13, color: 'var(--muted)' }}>
           <span>{totalItems} productos</span><span>{fmt(total)}</span>
         </div>
@@ -293,6 +293,7 @@ export default function CajaPage() {
     </>
   )
 }
+
 
 
 
