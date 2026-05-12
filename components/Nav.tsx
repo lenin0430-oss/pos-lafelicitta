@@ -6,16 +6,19 @@ const LINKS = [
   { href: '/cocina', label: '🍳 Cocina' },
   { href: '/gastos', label: '💸 Gastos' },
   { href: '/reportes', label: '📊 Reportes' },
+  { href: '/cierre', label: '🔒 Cierre' },
 ]
 
 export default function Nav({ active }: { active: string }) {
   const [hora, setHora] = useState('')
+
   useEffect(() => {
     const tick = setInterval(() => {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
     }, 1000)
     return () => clearInterval(tick)
   }, [])
+
   return (
     <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 100 }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', justifyContent: 'space-between' }}>
@@ -24,7 +27,13 @@ export default function Nav({ active }: { active: string }) {
       </div>
       <div style={{ display: 'flex', borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
         {LINKS.map(link => (
-          <a key={link.href} href={link.href} style={{ flex: 1, textAlign: 'center', padding: '10px 8px', fontSize: 12, fontWeight: 600, textDecoration: 'none', fontFamily: 'var(--font)', whiteSpace: 'nowrap', borderBottom: active === link.href ? '2px solid var(--gold)' : '2px solid transparent', color: active === link.href ? 'var(--gold)' : 'var(--muted)', background: 'transparent' }}>
+          <a key={link.href} href={link.href} style={{
+            flex: 1, textAlign: 'center', padding: '10px 8px', fontSize: 12, fontWeight: 600,
+            textDecoration: 'none', fontFamily: 'var(--font)', whiteSpace: 'nowrap',
+            borderBottom: active === link.href ? '2px solid var(--gold)' : '2px solid transparent',
+            color: active === link.href ? 'var(--gold)' : 'var(--muted)',
+            background: 'transparent', transition: 'color .15s',
+          }}>
             {link.label}
           </a>
         ))}
