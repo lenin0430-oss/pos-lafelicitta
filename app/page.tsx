@@ -280,7 +280,7 @@ export default function CajaPage() {
       </div>
 
       <style>{`
-        @media print { body { background: white !important; } #ticket-print { display: block !important; } .no-print { display: none !important; } header { display: none !important; } footer { display: none !important; } .mobile-layout { display: none !important; } .desktop-layout { display: none !important; } div[style*="Nota"] { display: none !important; } button { display: none !important; } input { display: none !important; } select { display: none !important; } }
+        @media print { * { display: none !important; } #ticket-print, #ticket-print * { display: block !important; } }
         @media (min-width: 768px) {
           .desktop-layout { display: block !important; }
           .mobile-layout { display: none !important; }
@@ -293,6 +293,7 @@ export default function CajaPage() {
     </>
   )
 }
+
 
 
 
