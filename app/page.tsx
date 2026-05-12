@@ -107,10 +107,15 @@ export default function CajaPage() {
   const sel: React.CSSProperties = { ...inp }
   const qtyBtn: React.CSSProperties = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font)', padding: 0 }
 
+  // ── PANEL MENÚ ──────────────────────────────────────────────────────────────
+  // FIX: display:flex + flexDirection:column + height:100% encadenado hasta
+  // el grid de productos, que tiene flex:1 + overflowY:auto + minHeight:0
+  // Esto permite que el scroll funcione en TODAS las categorías, incl. Bebidas
   const panelMenu = (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-      {/* Datos comanda - mobile: 2 cols, desktop: 4 cols */}
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+      {/* Datos comanda */}
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
           <div>
             <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Mesa</label>
@@ -132,7 +137,7 @@ export default function CajaPage() {
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar producto..." style={{ ...inp, background: 'var(--surface)' }} />
       </div>
 
-      {/* Categorías */}
+      {/* Categorías — fila fija, no se encoge */}
       <div style={{ display: 'flex', gap: 6, padding: '10px 14px', overflowX: 'auto', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         {CATEGORIAS.map(cat => (
           <button key={cat} onClick={() => setCategoriaActiva(cat)} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva ? '#000' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}>
@@ -141,8 +146,18 @@ export default function CajaPage() {
         ))}
       </div>
 
-      {/* Grid productos */}
-      <div style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, overflowY: 'auto' }}>
+      {/* Grid productos — ocupa el espacio restante y hace scroll */}
+      <div style={{
+        flex: 1,
+        minHeight: 0,          // ← KEY: sin esto flex no permite scroll en hijo
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch', // ← momentum scroll en iOS
+        padding: 12,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+        gap: 8,
+        alignContent: 'start', // ← evita que las cards se estiren verticalmente
+      }}>
         {productosFiltrados.map(p => (
           <button key={p.id} onClick={() => agregarProducto(p)}
             style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px', color: 'var(--text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', minHeight: 70 }}>
@@ -154,14 +169,15 @@ export default function CajaPage() {
     </div>
   )
 
+  // ── PANEL COMANDA ────────────────────────────────────────────────────────────
   const panelComanda = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <span style={{ fontFamily: 'var(--display)', fontSize: 14, letterSpacing: 2, color: 'var(--muted)' }}>COMANDA #{String(ordenNum).padStart(3,'0')}</span>
         <button onClick={nuevaComanda} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 12, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--font)' }}>🗑 Nueva</button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' as any, padding: '4px 0' }}>
         {items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)', fontSize: 14 }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>
@@ -184,11 +200,11 @@ export default function CajaPage() {
         ))}
       </div>
 
-      <div className="no-print" style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
+      <div className="no-print" style={{ padding: '8px 14px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
         <input value={nota} onChange={e => setNota(e.target.value)} placeholder="📝 Nota..." style={{ ...inp, fontSize: 13 }} />
       </div>
 
-      <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+      <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', marginBottom: 4, fontSize: 13, color: 'var(--muted)' }}>
           <span>{totalItems} productos</span><span>{fmt(total)}</span>
         </div>
@@ -266,7 +282,7 @@ export default function CajaPage() {
 
       {/* MOBILE: tabs */}
       <div className="no-print mobile-layout" style={{ display: 'none' }}>
-        {/* Tabs */}
+        {/* Tabs nav */}
         <div style={{ display: 'flex', background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 52, zIndex: 99 }}>
           <button onClick={() => setTabMovil('menu')} style={{ flex: 1, padding: '12px', border: 'none', background: 'transparent', color: tabMovil === 'menu' ? 'var(--gold)' : 'var(--muted)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', borderBottom: tabMovil === 'menu' ? '2px solid var(--gold)' : '2px solid transparent' }}>
             🍽️ Menú
@@ -275,8 +291,10 @@ export default function CajaPage() {
             🧾 Comanda {totalItems > 0 && <span style={{ background: 'var(--gold)', color: '#000', borderRadius: 10, fontSize: 11, fontWeight: 700, padding: '1px 6px', marginLeft: 4 }}>{totalItems}</span>}
           </button>
         </div>
-        <div style={{ height: 'calc(100vh - 100px)', overflow: 'hidden' }}>
-          <div className="no-print">{tabMovil === 'menu' ? panelMenu : panelComanda}</div>
+
+        {/* Contenedor tab — FIX: overflow:hidden aquí, el scroll lo maneja el panel interno */}
+        <div style={{ height: 'calc(100vh - 104px)', overflow: 'hidden' }}>
+          {tabMovil === 'menu' ? panelMenu : panelComanda}
         </div>
       </div>
 
@@ -294,21 +312,3 @@ export default function CajaPage() {
     </>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
