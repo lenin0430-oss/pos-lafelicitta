@@ -97,11 +97,8 @@ export default function CierrePage() {
     else {
       mostrarMensaje('Cierre registrado ✓', 'ok')
       cargarCierres()
-setTimeout(() => {
-  window.print()
-  setEfectivoFisico('')
-  setNotas('')
-}, 400)
+setTimeout(() => { window.print() }, 400)
+setTimeout(() => { setEfectivoFisico(''); setNotas('') }, 3000)
           }
     setGuardando(false)
   }
