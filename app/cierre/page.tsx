@@ -142,7 +142,7 @@ export default function CierrePage() {
           <span>Efectivo físico: {fmt(fisico)}</span>
           <span><strong>DIFERENCIA: {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}</strong></span>
         </div>
-        {notas && <><hr className="t-divider" /><div className="t-meta"><span>Notas: {notas}</span></div></>}
+        <><hr className="t-divider" /><div className="t-meta"><span>Notas: {notas || "—"}</span></div></><hr className="t-divider" /><div className="t-meta"><span>Notas: {notas}</span></div></>}
         <hr className="t-divider" />
         <div className="t-footer">Firma: _______________<br />¡Gracias por tu trabajo hoy!</div>
       </div>
