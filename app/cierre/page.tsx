@@ -42,8 +42,7 @@ export default function CierrePage() {
 
   async function cargarVentasHoy() {
     const hoy = new Date()
-    const ultimoCierre = await supabase.from('cierres_caja').select('created_at').gte('created_at', new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()).order('created_at', { ascending: false }).limit(1)
-    const desde = ultimoCierre.data && ultimoCierre.data.length > 0 ? ultimoCierre.data[0].created_at : new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
     const hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1).toISOString()
 
     const { data } = await supabase
@@ -98,8 +97,11 @@ export default function CierrePage() {
     else {
       mostrarMensaje('Cierre registrado ✓', 'ok')
       cargarCierres()
-const notaEl = document.getElementById("notas-ticket"); if (notaEl) notaEl.textContent = notas; setTimeout(() => { window.print() }, 400)
-setTimeout(() => { setEfectivoFisico(''); setNotas('') }, 3000)
+setTimeout(() => {
+  window.print()
+  setEfectivoFisico('')
+  setNotas('')
+}, 400)
           }
     setGuardando(false)
   }
@@ -142,7 +144,7 @@ setTimeout(() => { setEfectivoFisico(''); setNotas('') }, 3000)
           <span>Efectivo físico: {fmt(fisico)}</span>
           <span><strong>DIFERENCIA: {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}</strong></span>
         </div>
-        {notas && <><hr className="t-divider" /><div className="t-meta"><span>Notas: {notas}</span></div></>}iv className="t-meta"><span>Notas: {notas}</span></div></>}
+        <><hr className="t-divider" /><div className="t-meta"><span>Notas: {notas || "—"}</span></div></><hr className="t-divider" /><div className="t-meta"><span>Notas: {notas}</span></div></>}
         <hr className="t-divider" />
         <div className="t-footer">Firma: _______________<br />¡Gracias por tu trabajo hoy!</div>
       </div>
@@ -271,4 +273,3 @@ setTimeout(() => { setEfectivoFisico(''); setNotas('') }, 3000)
     </>
   )
 }
-
