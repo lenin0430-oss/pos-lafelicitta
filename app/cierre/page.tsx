@@ -96,11 +96,13 @@ export default function CierrePage() {
     if (error) { mostrarMensaje('Error: ' + error.message, 'err') }
     else {
       mostrarMensaje('Cierre registrado ✓', 'ok')
-      setEfectivoFisico('')
-      setNotas('')
       cargarCierres()
-      setTimeout(() => window.print(), 400)
-    }
+setTimeout(() => {
+  window.print()
+  setEfectivoFisico('')
+  setNotas('')
+}, 400)
+          }
     setGuardando(false)
   }
 
