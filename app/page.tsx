@@ -210,7 +210,7 @@ export default function CajaPage() {
   return (
     <>
       {/* TICKET IMPRIMIR */}
-      <div id="ticket-print" style={{ display: 'none' }}>
+      <div id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
         <div className="t-logo">LA FELICITTA</div>
         <div className="t-sub">Barros Arana 504, Iquique<br />@lafelicittacl</div>
         <hr className="t-divider" />
@@ -292,3 +292,4 @@ export default function CajaPage() {
     </>
   )
 }
+
