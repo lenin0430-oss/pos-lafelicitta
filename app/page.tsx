@@ -280,7 +280,7 @@ export default function CajaPage() {
       </div>
 
       <style>{`
-        @media print { body, * { background: white !important; color: black !important; } #ticket-print { display: block !important; } .no-print { display: none !important; } }
+        @media print { body { background: white !important; } #ticket-print { display: block !important; } .no-print { display: none !important; } header { display: none !important; } footer { display: none !important; } .mobile-layout { display: none !important; } .desktop-layout { display: none !important; } }
         @media (min-width: 768px) {
           .desktop-layout { display: block !important; }
           .mobile-layout { display: none !important; }
@@ -293,5 +293,6 @@ export default function CajaPage() {
     </>
   )
 }
+
 
 
