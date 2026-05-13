@@ -256,11 +256,16 @@ export default function CajaPage() {
         </div>
         <hr className="t-divider" />
         <table className="t-items">
-          <thead><tr><th>Producto</th><th>C</th><th>Total</th></tr></thead>
+          <thead><tr><th>Producto</th><th>C</th><th>$</th></tr></thead>
           <tbody>
             {items.map(i => (
               <tr key={i.id}>
-                <td>{i.producto.nombre}{i.nota && <span className="nota">↳ {i.nota}</span>}</td>
+                <td>
+                  {i.producto.nombre.length > 14 
+                    ? i.producto.nombre.replace('Burger ', 'B.').replace('Especial ', 'Esp.').replace('Felicitta', 'Felic.').replace('Super ', 'Sup.')
+                    : i.producto.nombre}
+                  {i.nota && <span className="nota">↳ {i.nota}</span>}
+                </td>
                 <td>{i.cantidad}</td>
                 <td>{fmt(i.cantidad * i.producto.precio)}</td>
               </tr>
