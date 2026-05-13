@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, type Producto } from '@/lib/menu'
 
@@ -18,7 +18,6 @@ export default function CajaPage() {
   const [items, setItems] = useState<ItemComanda[]>([])
   const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0] || '')
   const [busqueda, setBusqueda] = useState('')
-  const [nota, setNota] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [ordenNum, setOrdenNum] = useState(1)
   const [hora, setHora] = useState('')
@@ -99,14 +98,10 @@ export default function CajaPage() {
   function nuevaComanda() {
     if (items.length > 0 && !confirm('¿Limpiar comanda actual?')) return
     setItems([])
-    setNota('')
     setBusqueda('')
     setMetodoPago('')
     setTabMovil('menu')
   }
-
-  const fechaHoy = new Date().toLocaleDateString('es-CL')
-  const horaImpresion = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
 
   const inp: React.CSSProperties = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }
   const sel: React.CSSProperties = { ...inp }
