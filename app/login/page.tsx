@@ -12,9 +12,8 @@ export default function LoginPage() {
   const [cargando, setCargando] = useState(false)
 
   useEffect(() => {
-    // Si ya hay sesión, redirigir
-    const s = getSesion()
-    if (s) window.location.href = '/'
+    // Limpiar sesión anterior al entrar al login
+    localStorage.removeItem('lf_sesion')
   }, [])
 
   function presionarPin(num: string) {
