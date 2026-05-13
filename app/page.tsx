@@ -25,6 +25,7 @@ export default function CajaPage() {
   const [hora, setHora] = useState('')
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
   const [tabMovil, setTabMovil] = useState<'menu'|'comanda'>('menu')
+  const [cajaAbierta, setCajaAbierta] = useState<boolean | null>(null) // null = cargando
 
   useEffect(() => {
     const n = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
@@ -32,8 +33,20 @@ export default function CajaPage() {
     const tick = setInterval(() => {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
     }, 1000)
+    verificarApertura()
     return () => clearInterval(tick)
   }, [])
+
+  async function verificarApertura() {
+    const hoy = new Date()
+    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+    const { data } = await supabase
+      .from('aperturas_caja')
+      .select('id')
+      .gte('created_at', desde)
+      .limit(1)
+    setCajaAbierta(!!(data && data.length > 0))
+  }
 
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
   const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
@@ -216,6 +229,29 @@ export default function CajaPage() {
   return (
     <AuthGuard>
       <>
+      {/* CAJA CERRADA */}
+      {cajaAbierta === false && (
+        <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font)', padding: 24 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🔴</div>
+          <div style={{ fontFamily: 'var(--display)', fontSize: 24, letterSpacing: 3, color: 'var(--gold)', marginBottom: 8 }}>CAJA CERRADA</div>
+          <div style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', marginBottom: 32, maxWidth: 280 }}>
+            El administrador no ha abierto la caja hoy. Contacta a Lenin para comenzar.
+          </div>
+          <button onClick={verificarApertura} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+            🔄 Verificar nuevamente
+          </button>
+        </div>
+      )}
+
+      {/* CARGANDO */}
+      {cajaAbierta === null && (
+        <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontFamily: 'var(--font)', fontSize: 14 }}>
+          Verificando caja...
+        </div>
+      )}
+
+      {/* CAJA ABIERTA - sistema normal */}
+      {cajaAbierta === true && <>
       {/* TICKET IMPRIMIR */}
       <div id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
         <div className="t-logo">LA FELICITTA</div>
@@ -302,6 +338,7 @@ export default function CajaPage() {
         @media (min-width: 768px) { .desktop-layout { display: block !important; } .mobile-layout { display: none !important; } }
         @media (max-width: 767px) { .mobile-layout { display: block !important; } .desktop-layout { display: none !important; } }
       `}</style>
+      </>}
       </>
     </AuthGuard>
   )
