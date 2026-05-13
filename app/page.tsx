@@ -64,7 +64,7 @@ export default function CajaPage() {
     setItems(prev => prev.map(i => i.id === id ? { ...i, nota } : i))
   }
 
-
+  function mostrarMensaje(txt: string, tipo: 'ok' | 'err') {
     setMensaje({ txt, tipo })
     setTimeout(() => setMensaje(null), 3000)
   }
@@ -84,8 +84,8 @@ export default function CajaPage() {
       const nuevoNum = ordenNum + 1
       setOrdenNum(nuevoNum)
       if (typeof window !== 'undefined') localStorage.setItem('lf_orden_num', String(nuevoNum))
-    } catch (e: any) {
-      mostrarMensaje('Error: ' + e.message, 'err')
+    } catch (e: unknown) {
+      mostrarMensaje('Error: ' + (e as Error).message, 'err')
     }
     setGuardando(false)
   }
@@ -107,11 +107,8 @@ export default function CajaPage() {
   const sel: React.CSSProperties = { ...inp }
   const qtyBtn: React.CSSProperties = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font)', padding: 0 }
 
-  // ── PANEL MENÚ ──────────────────────────────────────────────────────────────
-  function renderPanelMenu() { return (
+  const panelMenuJSX = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-
-      {/* Datos comanda — solo Mesa, Mesero, Personas. Pago va en la comanda */}
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: 8, marginBottom: 8 }}>
           <div>
@@ -129,8 +126,6 @@ export default function CajaPage() {
         </div>
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar producto..." style={{ ...inp, background: 'var(--surface)' }} />
       </div>
-
-      {/* Categorías — fila fija, no se encoge */}
       <div style={{ display: 'flex', gap: 6, padding: '10px 14px', overflowX: 'auto', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         {CATEGORIAS.map(cat => (
           <button key={cat} onClick={() => setCategoriaActiva(cat)} style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva ? '#000' : 'var(--muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}>
@@ -138,96 +133,72 @@ export default function CajaPage() {
           </button>
         ))}
       </div>
-
-      {/* Grid productos — ocupa el espacio restante y hace scroll */}
-      <div style={{
-        flex: 1,
-        minHeight: 0,          // ← KEY: sin esto flex no permite scroll en hijo
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch' as any, // ← momentum scroll en iOS
-        padding: 12,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-        gap: 8,
-        alignContent: 'start', // ← evita que las cards se estiren verticalmente
-      }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, alignContent: 'start' as const }}>
         {productosFiltrados.map(p => (
-          <button key={p.id} onClick={() => agregarProducto(p)}
-            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px', color: 'var(--text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', minHeight: 80 }}>
+          <button key={p.id} onClick={() => agregarProducto(p)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px', color: 'var(--text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', minHeight: 80 }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, lineHeight: 1.3 }}>{p.nombre}</div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 15, color: 'var(--gold)', fontWeight: 700 }}>{fmt(p.precio)}</div>
           </button>
         ))}
       </div>
     </div>
-  ) }
+  )
 
-  // ── PANEL COMANDA ────────────────────────────────────────────────────────────
-  function renderPanelComanda() { return (
+  const panelComandaJSX = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <span style={{ fontFamily: 'var(--display)', fontSize: 14, letterSpacing: 2, color: 'var(--muted)' }}>COMANDA #{String(ordenNum).padStart(3,'0')}</span>
         <button onClick={nuevaComanda} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 12, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--font)' }}>🗑 Nueva</button>
       </div>
-
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' as any, padding: '4px 0' }}>
-        {items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)', fontSize: 14 }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>
-            Toca un producto para agregar
-          </div>
-        ) : items.map(item => (
-          <div key={item.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{item.producto.nombre}</div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', marginTop: 2 }}>{fmt(item.producto.precio * item.cantidad)}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <button onClick={() => cambiarCantidad(item.id, -1)} style={qtyBtn}>−</button>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 14, width: 24, textAlign: 'center', fontWeight: 700 }}>{item.cantidad}</span>
-                <button onClick={() => cambiarCantidad(item.id, +1)} style={qtyBtn}>+</button>
-                <button onClick={() => eliminarItem(item.id)} style={{ ...qtyBtn, color: 'var(--red)', background: 'transparent', border: 'none' }}>✕</button>
-              </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
+        {items.length === 0
+          ? (
+            <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)', fontSize: 14 }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>
+              Toca un producto para agregar
             </div>
-            {/* Nota por producto */}
-            <input
-              value={item.nota}
-              onChange={e => editarNota(item.id, e.target.value)}
-              placeholder="📝 Sin cebolla, sin salsa..."
-              style={{ ...inp, fontSize: 12, marginTop: 6, background: 'var(--bg)', borderColor: item.nota ? 'var(--gold)' : 'var(--border)' }}
-            />
-          </div>
-        ))}
+          )
+          : items.map(item => (
+            <div key={item.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{item.producto.nombre}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', marginTop: 2 }}>{fmt(item.producto.precio * item.cantidad)}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button onClick={() => cambiarCantidad(item.id, -1)} style={qtyBtn}>−</button>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 14, width: 24, textAlign: 'center', fontWeight: 700 }}>{item.cantidad}</span>
+                  <button onClick={() => cambiarCantidad(item.id, +1)} style={qtyBtn}>+</button>
+                  <button onClick={() => eliminarItem(item.id)} style={{ ...qtyBtn, color: 'var(--red)', background: 'transparent', border: 'none' }}>✕</button>
+                </div>
+              </div>
+              <input
+                value={item.nota}
+                onChange={e => editarNota(item.id, e.target.value)}
+                placeholder="📝 Sin cebolla, sin salsa..."
+                style={{ ...inp, fontSize: 12, marginTop: 6, background: 'var(--bg)', borderColor: item.nota ? 'var(--gold)' : 'var(--border)' }}
+              />
+            </div>
+          ))
+        }
       </div>
-
       <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
-        {/* Subtotal */}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', marginBottom: 4, fontSize: 13, color: 'var(--muted)' }}>
           <span>{totalItems} productos</span><span>{fmt(total)}</span>
         </div>
-        {/* Total grande */}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 22, fontWeight: 700, fontFamily: 'var(--mono)', color: 'var(--gold)', marginBottom: 12 }}>
           <span>TOTAL</span><span>{fmt(total)}</span>
         </div>
-        {/* Método de pago — aquí cuando el cliente ya pidió todo */}
         <div style={{ marginBottom: 10 }}>
           <label style={{ fontSize: 10, color: metodoPago ? 'var(--muted)' : 'var(--gold)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 5, fontWeight: metodoPago ? 400 : 700 }}>
-            💳 {metodoPago ? 'Método de pago' : '⚠️ Selecciona método de pago'}
+            {metodoPago ? '💳 Método de pago' : '⚠️ Selecciona método de pago'}
           </label>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {METODOS_PAGO.map(m => (
-              <button key={m} onClick={() => setMetodoPago(m)} style={{
-                padding: '7px 14px', borderRadius: 20,
-                border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'),
-                background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)',
-                color: m === metodoPago ? '#000' : 'var(--muted)',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)'
-              }}>{m}</button>
+              <button key={m} onClick={() => setMetodoPago(m)} style={{ padding: '7px 14px', borderRadius: 20, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
             ))}
           </div>
         </div>
-        {/* Botones — bloqueados si no hay método de pago */}
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={registrarVenta} disabled={guardando || items.length === 0 || !metodoPago} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: (!metodoPago || items.length === 0) ? 'var(--muted)' : 'var(--green)', fontSize: 14, fontWeight: 700, cursor: (!metodoPago || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!metodoPago || items.length === 0) ? 0.4 : 1 }}>
             {guardando ? '...' : '💾 Guardar'}
@@ -238,7 +209,7 @@ export default function CajaPage() {
         </div>
       </div>
     </div>
-  ) }
+  )
 
   return (
     <>
@@ -246,7 +217,9 @@ export default function CajaPage() {
       <div id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
         <div className="t-logo">LA FELICITTA</div>
         <div className="t-sub">@lafelicittacl</div>
-        <div className="t-tipo">{mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA'}</div>
+        <div className="t-tipo">
+          {mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA'}
+        </div>
         <hr className="t-divider" />
         <div className="t-meta">
           <span><strong>COMANDA #{String(ordenNum - 1).padStart(3, '0')}</strong></span>
@@ -255,14 +228,14 @@ export default function CajaPage() {
         </div>
         <hr className="t-divider" />
         <table className="t-items">
-          <thead><tr><th>Producto</th><th>C</th><th>$</th></tr></thead>
+          <thead>
+            <tr><th>Producto</th><th>C</th><th>$</th></tr>
+          </thead>
           <tbody>
             {items.map(i => (
               <tr key={i.id}>
                 <td>
-                  {i.producto.nombre.length > 13
-                    ? i.producto.nombre.substring(0, 13) + '…'
-                    : i.producto.nombre}
+                  {i.producto.nombre.length > 13 ? i.producto.nombre.substring(0, 13) + '…' : i.producto.nombre}
                   {i.nota && <span className="nota">↳ {i.nota}</span>}
                 </td>
                 <td>{i.cantidad}</td>
@@ -288,22 +261,25 @@ export default function CajaPage() {
           ))}
         </nav>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 12 }}>
-          {mensaje && <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
+          {mensaje && (
+            <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>
+              {mensaje.txt}
+            </span>
+          )}
           <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--gold)' }}>{hora}</span>
         </div>
       </header>
 
-      {/* DESKTOP: dos paneles */}
+      {/* DESKTOP */}
       <div className="no-print desktop-layout" style={{ display: 'none' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', height: 'calc(100vh - 52px)', overflow: 'hidden' }}>
-          <div style={{ borderRight: '1px solid var(--border)', overflow: 'hidden' }}>{renderPanelMenu()}</div>
-          <div style={{ overflow: 'hidden' }}>{renderPanelComanda()}</div>
+          <div style={{ borderRight: '1px solid var(--border)', overflow: 'hidden' }}>{panelMenuJSX}</div>
+          <div style={{ overflow: 'hidden' }}>{panelComandaJSX}</div>
         </div>
       </div>
 
-      {/* MOBILE: tabs */}
+      {/* MOBILE */}
       <div className="no-print mobile-layout" style={{ display: 'none' }}>
-        {/* Tabs nav */}
         <div style={{ display: 'flex', background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 52, zIndex: 99 }}>
           <button onClick={() => setTabMovil('menu')} style={{ flex: 1, padding: '12px', border: 'none', background: 'transparent', color: tabMovil === 'menu' ? 'var(--gold)' : 'var(--muted)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', borderBottom: tabMovil === 'menu' ? '2px solid var(--gold)' : '2px solid transparent' }}>
             🍽️ Menú
@@ -312,23 +288,15 @@ export default function CajaPage() {
             🧾 Comanda {totalItems > 0 && <span style={{ background: 'var(--gold)', color: '#000', borderRadius: 10, fontSize: 11, fontWeight: 700, padding: '1px 6px', marginLeft: 4 }}>{totalItems}</span>}
           </button>
         </div>
-
-        {/* Contenedor tab — FIX: overflow:hidden aquí, el scroll lo maneja el panel interno */}
         <div style={{ height: 'calc(100vh - 104px)', overflow: 'hidden' }}>
-          {tabMovil === 'menu' ? renderPanelMenu() : renderPanelComanda()}
+          {tabMovil === 'menu' ? panelMenuJSX : panelComandaJSX}
         </div>
       </div>
 
       <style>{`
         @media print { body * { visibility: hidden; } #ticket-print, #ticket-print * { visibility: visible; } #ticket-print { position: fixed; top: 0; left: 0; width: 100%; background: white; } }
-        @media (min-width: 768px) {
-          .desktop-layout { display: block !important; }
-          .mobile-layout { display: none !important; }
-        }
-        @media (max-width: 767px) {
-          .mobile-layout { display: block !important; }
-          .desktop-layout { display: none !important; }
-        }
+        @media (min-width: 768px) { .desktop-layout { display: block !important; } .mobile-layout { display: none !important; } }
+        @media (max-width: 767px) { .mobile-layout { display: block !important; } .desktop-layout { display: none !important; } }
       `}</style>
     </>
   )
