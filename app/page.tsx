@@ -38,6 +38,11 @@ export default function CajaPage() {
   }, [])
 
   async function verificarApertura() {
+    // Admins siempre pueden entrar
+    const { getSesion } = await import('@/lib/auth')
+    const sesion = getSesion()
+    if (sesion?.rol === 'admin') { setCajaAbierta(true); return }
+
     const hoy = new Date()
     const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
     const { data } = await supabase
@@ -237,9 +242,14 @@ export default function CajaPage() {
           <div style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', marginBottom: 32, maxWidth: 280 }}>
             El administrador no ha abierto la caja hoy. Contacta a Lenin para comenzar.
           </div>
-          <button onClick={verificarApertura} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-            🔄 Verificar nuevamente
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={verificarApertura} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              🔄 Verificar nuevamente
+            </button>
+            <button onClick={() => window.location.href = '/login'} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              🚪 Salir
+            </button>
+          </div>
         </div>
       )}
 
