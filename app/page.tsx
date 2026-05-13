@@ -61,7 +61,11 @@ export default function CajaPage() {
     setItems(prev => prev.filter(i => i.id !== id))
   }
 
-  function mostrarMensaje(txt: string, tipo: 'ok' | 'err') {
+  function editarNota(id: number, nota: string) {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, nota } : i))
+  }
+
+
     setMensaje({ txt, tipo })
     setTimeout(() => setMensaje(null), 3000)
   }
@@ -181,24 +185,28 @@ export default function CajaPage() {
             Toca un producto para agregar
           </div>
         ) : items.map(item => (
-          <div key={item.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{item.producto.nombre}</div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', marginTop: 2 }}>{fmt(item.producto.precio * item.cantidad)}</div>
-              {item.nota && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>↳ {item.nota}</div>}
+          <div key={item.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{item.producto.nombre}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', marginTop: 2 }}>{fmt(item.producto.precio * item.cantidad)}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button onClick={() => cambiarCantidad(item.id, -1)} style={qtyBtn}>−</button>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 14, width: 24, textAlign: 'center', fontWeight: 700 }}>{item.cantidad}</span>
+                <button onClick={() => cambiarCantidad(item.id, +1)} style={qtyBtn}>+</button>
+                <button onClick={() => eliminarItem(item.id)} style={{ ...qtyBtn, color: 'var(--red)', background: 'transparent', border: 'none' }}>✕</button>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button onClick={() => cambiarCantidad(item.id, -1)} style={qtyBtn}>−</button>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 14, width: 24, textAlign: 'center', fontWeight: 700 }}>{item.cantidad}</span>
-              <button onClick={() => cambiarCantidad(item.id, +1)} style={qtyBtn}>+</button>
-              <button onClick={() => eliminarItem(item.id)} style={{ ...qtyBtn, color: 'var(--red)', background: 'transparent', border: 'none' }}>✕</button>
-            </div>
+            {/* Nota por producto */}
+            <input
+              value={item.nota}
+              onChange={e => editarNota(item.id, e.target.value)}
+              placeholder="📝 Sin cebolla, sin salsa..."
+              style={{ ...inp, fontSize: 12, marginTop: 6, background: 'var(--bg)', borderColor: item.nota ? 'var(--gold)' : 'var(--border)' }}
+            />
           </div>
         ))}
-      </div>
-
-      <div className="no-print" style={{ padding: '8px 14px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-        <input value={nota} onChange={e => setNota(e.target.value)} placeholder="📝 Nota..." style={{ ...inp, fontSize: 13 }} />
       </div>
 
       <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
