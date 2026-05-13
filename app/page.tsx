@@ -240,14 +240,17 @@ export default function CajaPage() {
           <div style={{ fontSize: 48, marginBottom: 16 }}>🔴</div>
           <div style={{ fontFamily: 'var(--display)', fontSize: 24, letterSpacing: 3, color: 'var(--gold)', marginBottom: 8 }}>CAJA CERRADA</div>
           <div style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', marginBottom: 32, maxWidth: 280 }}>
-            El administrador no ha abierto la caja hoy. Contacta a Lenin para comenzar.
+            El administrador no ha abierto la caja hoy.
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 280 }}>
+            <button onClick={() => window.location.href = '/cierre'} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              🔓 Abrir Caja (Admin)
+            </button>
             <button onClick={verificarApertura} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
               🔄 Verificar nuevamente
             </button>
-            <button onClick={() => window.location.href = '/login'} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-              🚪 Salir
+            <button onClick={() => { localStorage.removeItem('lf_sesion'); window.location.href = '/login' }} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              🚪 Cambiar usuario
             </button>
           </div>
         </div>
@@ -308,6 +311,9 @@ export default function CajaPage() {
           {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/reportes', '📊']].map(([href, icon]) => (
             <a key={href} href={href} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? '#000' : 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
           ))}
+          {typeof window !== 'undefined' && (() => { try { const s = JSON.parse(localStorage.getItem('lf_sesion') || '{}'); return s.rol === 'admin' } catch { return false } })() && (
+            <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--green)', fontSize: 18, textDecoration: 'none' }}>🔓</a>
+          )}
         </nav>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 12 }}>
           {mensaje && (
