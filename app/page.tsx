@@ -108,10 +108,7 @@ export default function CajaPage() {
   const qtyBtn: React.CSSProperties = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font)', padding: 0 }
 
   // ── PANEL MENÚ ──────────────────────────────────────────────────────────────
-  // FIX: display:flex + flexDirection:column + height:100% encadenado hasta
-  // el grid de productos, que tiene flex:1 + overflowY:auto + minHeight:0
-  // Esto permite que el scroll funcione en TODAS las categorías, incl. Bebidas
-  const panelMenu = (
+  function renderPanelMenu() { return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* Datos comanda — solo Mesa, Mesero, Personas. Pago va en la comanda */}
@@ -147,7 +144,7 @@ export default function CajaPage() {
         flex: 1,
         minHeight: 0,          // ← KEY: sin esto flex no permite scroll en hijo
         overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch', // ← momentum scroll en iOS
+        WebkitOverflowScrolling: 'touch' as any, // ← momentum scroll en iOS
         padding: 12,
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
@@ -163,10 +160,10 @@ export default function CajaPage() {
         ))}
       </div>
     </div>
-  )
+  ) }
 
   // ── PANEL COMANDA ────────────────────────────────────────────────────────────
-  const panelComanda = (
+  function renderPanelComanda() { return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <span style={{ fontFamily: 'var(--display)', fontSize: 14, letterSpacing: 2, color: 'var(--muted)' }}>COMANDA #{String(ordenNum).padStart(3,'0')}</span>
@@ -241,7 +238,7 @@ export default function CajaPage() {
         </div>
       </div>
     </div>
-  )
+  ) }
 
   return (
     <>
@@ -299,8 +296,8 @@ export default function CajaPage() {
       {/* DESKTOP: dos paneles */}
       <div className="no-print desktop-layout" style={{ display: 'none' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', height: 'calc(100vh - 52px)', overflow: 'hidden' }}>
-          <div style={{ borderRight: '1px solid var(--border)', overflow: 'hidden' }}>{panelMenu}</div>
-          <div style={{ overflow: 'hidden' }}>{panelComanda}</div>
+          <div style={{ borderRight: '1px solid var(--border)', overflow: 'hidden' }}>{renderPanelMenu()}</div>
+          <div style={{ overflow: 'hidden' }}>{renderPanelComanda()}</div>
         </div>
       </div>
 
@@ -318,7 +315,7 @@ export default function CajaPage() {
 
         {/* Contenedor tab — FIX: overflow:hidden aquí, el scroll lo maneja el panel interno */}
         <div style={{ height: 'calc(100vh - 104px)', overflow: 'hidden' }}>
-          {tabMovil === 'menu' ? panelMenu : panelComanda}
+          {tabMovil === 'menu' ? renderPanelMenu() : renderPanelComanda()}
         </div>
       </div>
 
