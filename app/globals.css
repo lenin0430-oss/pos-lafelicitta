@@ -49,13 +49,13 @@ html, body {
     padding: 2mm 1mm;
     margin: 0 !important;
     font-family: 'Courier New', monospace;
-    font-size: 14pt;
-    line-height: 1.5;
+    font-size: 10pt;
+    line-height: 1.4;
   }
 
   /* LOGO */
   .t-logo {
-    font-size: 13pt;
+    font-size: 11pt;
     font-weight: bold;
     text-align: center;
     letter-spacing: 1px;
@@ -63,7 +63,7 @@ html, body {
   }
 
   .t-sub {
-    font-size: 9pt;
+    font-size: 8pt;
     text-align: center;
     margin-bottom: 2mm;
   }
@@ -72,10 +72,10 @@ html, body {
   .t-tipo {
     border: 2px solid black;
     text-align: center;
-    font-size: 13pt;
+    font-size: 11pt;
     font-weight: 900;
-    padding: 3px 6px;
-    margin: 4px 0 6px 0;
+    padding: 2px 4px;
+    margin: 3px 0 5px 0;
     letter-spacing: 1px;
     display: block;
   }
@@ -88,14 +88,14 @@ html, body {
 
   /* META: comanda #, mesa, mesero, fecha */
   .t-meta {
-    font-size: 11pt;        /* ← subido */
+    font-size: 9pt;
     margin-bottom: 2mm;
     font-weight: 600;
   }
 
   .t-meta span {
     display: block;
-    margin-bottom: 1mm;
+    margin-bottom: 0.5mm;
   }
 
   /* TABLA DE PRODUCTOS */
@@ -105,9 +105,9 @@ html, body {
   }
 
   .t-items th {
-    font-size: 11pt;        /* ← subido */
+    font-size: 9pt;
     border-bottom: 2px solid #000;
-    padding: 1.5mm 0;
+    padding: 1mm 0;
     text-align: left;
     font-weight: 900;
   }
@@ -117,11 +117,11 @@ html, body {
   }
 
   .t-items td {
-    font-size: 13pt;        /* ← grande para cocina */
-    padding: 2mm 0;
+    font-size: 10pt;
+    padding: 1.5mm 0;
     border-bottom: 1px dotted #999;
     vertical-align: top;
-    font-weight: 600;       /* ← negrita para que se lea rápido */
+    font-weight: 600;
   }
 
   .t-items td:last-child {
@@ -130,47 +130,47 @@ html, body {
     font-weight: 700;
   }
 
-  /* CANTIDAD — columna C, hacerla destacar */
+  /* CANTIDAD — columna C */
   .t-items td:nth-child(2) {
-    font-size: 15pt;        /* ← cantidad MUY grande */
+    font-size: 11pt;
     font-weight: 900;
     text-align: center;
-    padding: 2mm 3mm;
+    padding: 1.5mm 2mm;
   }
 
   .t-items td .nota {
-    font-size: 11pt;        /* ← subido */
+    font-size: 9pt;
     font-style: italic;
     color: #333;
     display: block;
-    margin-top: 1mm;
+    margin-top: 0.5mm;
   }
 
   /* TOTALES */
   .t-totales {
-    margin-top: 3mm;
+    margin-top: 2mm;
   }
 
   .t-fila {
     display: flex;
     justify-content: space-between;
-    font-size: 12pt;        /* ← subido */
-    padding: 1mm 0;
+    font-size: 9pt;
+    padding: 0.5mm 0;
   }
 
   .t-fila.grand {
     font-weight: bold;
-    font-size: 16pt;        /* ← total grande */
+    font-size: 12pt;
     border-top: 2px solid #000;
-    margin-top: 2mm;
-    padding-top: 2mm;
+    margin-top: 1.5mm;
+    padding-top: 1.5mm;
   }
 
   /* FOOTER */
   .t-footer {
     text-align: center;
-    font-size: 10pt;        /* ← subido */
-    margin-top: 4mm;
-    line-height: 1.7;
+    font-size: 8pt;
+    margin-top: 3mm;
+    line-height: 1.5;
   }
 }
