@@ -1,7 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
   --bg: #0f0e0c;
   --surface: #1a1916;
@@ -18,7 +16,6 @@
   --mono: 'DM Mono', monospace;
   --display: 'Bebas Neue', sans-serif;
 }
-
 html, body {
   font-family: var(--font);
   background: var(--bg);
@@ -26,36 +23,149 @@ html, body {
   min-height: 100vh;
 }
 
-/* ---- PRINT 80mm ---- */
+/* ---- PRINT 58mm COMANDA COCINA ---- */
 @media print {
-  @page { size: 80mm auto; margin: 0; }
-  body { background: #fff; color: #000; }
-  .no-print { display: none !important; }
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
   #ticket-print, #cierre-print {
     display: block !important;
-    width: 76mm;
+    width: 54mm;
     padding: 3mm 2mm;
     font-family: 'Courier New', monospace;
-    font-size: 9.5pt;
-    line-height: 1.45;
+    font-size: 13pt;        /* ← subido de 9.5pt a 13pt */
+    line-height: 1.5;
   }
-  .t-center { text-align: center; }
-  .t-bold { font-weight: bold; }
-  .t-divider { border: none; border-top: 1px dashed #000; margin: 2mm 0; }
-  .t-tipo { border: 2px solid black; text-align: center; font-size: 13pt; font-weight: 700; padding: 4px 8px; margin: 4px 0 6px 0; letter-spacing: 2px; display: block; }
-.t-logo { font-size: 15pt; font-weight: bold; text-align: center; letter-spacing: 2px; margin-bottom: 1mm; }
-  .t-sub { font-size: 8pt; text-align: center; margin-bottom: 2mm; }
-  .t-meta { font-size: 8.5pt; margin-bottom: 2mm; }
-  .t-meta span { display: block; }
-  .t-items { width: 100%; border-collapse: collapse; }
-  .t-items th { font-size: 8pt; border-bottom: 1px solid #000; padding: 1mm 0; text-align: left; }
-  .t-items th:last-child { text-align: right; }
-  .t-items td { font-size: 9pt; padding: 1.5mm 0; border-bottom: 1px dotted #ccc; vertical-align: top; }
-  .t-items td:last-child { text-align: right; white-space: nowrap; }
-  .t-items td .nota { font-size: 7.5pt; font-style: italic; color: #444; display: block; }
-  .t-totales { margin-top: 2mm; }
-  .t-fila { display: flex; justify-content: space-between; font-size: 9pt; padding: 0.5mm 0; }
-  .t-fila.grand { font-weight: bold; font-size: 12pt; border-top: 1px solid #000; margin-top: 1.5mm; padding-top: 1.5mm; }
-  .t-footer { text-align: center; font-size: 8pt; margin-top: 4mm; line-height: 1.6; }
-}
 
+  /* LOGO */
+  .t-logo {
+    font-size: 20pt;        /* ← subido */
+    font-weight: bold;
+    text-align: center;
+    letter-spacing: 2px;
+    margin-bottom: 1mm;
+  }
+
+  .t-sub {
+    font-size: 10pt;        /* ← subido */
+    text-align: center;
+    margin-bottom: 2mm;
+  }
+
+  /* TIPO: SERVIR EN MESA / PARA LLEVAR / DELIVERY */
+  .t-tipo {
+    border: 3px solid black;  /* ← borde más grueso */
+    text-align: center;
+    font-size: 16pt;          /* ← MUY grande, cocina lo ve de lejos */
+    font-weight: 900;
+    padding: 4px 8px;
+    margin: 4px 0 6px 0;
+    letter-spacing: 2px;
+    display: block;
+  }
+
+  .t-divider {
+    border: none;
+    border-top: 2px dashed #000;  /* ← más grueso */
+    margin: 2mm 0;
+  }
+
+  /* META: comanda #, mesa, mesero, fecha */
+  .t-meta {
+    font-size: 11pt;        /* ← subido */
+    margin-bottom: 2mm;
+    font-weight: 600;
+  }
+
+  .t-meta span {
+    display: block;
+    margin-bottom: 1mm;
+  }
+
+  /* TABLA DE PRODUCTOS */
+  .t-items {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .t-items th {
+    font-size: 11pt;        /* ← subido */
+    border-bottom: 2px solid #000;
+    padding: 1.5mm 0;
+    text-align: left;
+    font-weight: 900;
+  }
+
+  .t-items th:last-child {
+    text-align: right;
+  }
+
+  .t-items td {
+    font-size: 13pt;        /* ← grande para cocina */
+    padding: 2mm 0;
+    border-bottom: 1px dotted #999;
+    vertical-align: top;
+    font-weight: 600;       /* ← negrita para que se lea rápido */
+  }
+
+  .t-items td:last-child {
+    text-align: right;
+    white-space: nowrap;
+    font-weight: 700;
+  }
+
+  /* CANTIDAD — columna C, hacerla destacar */
+  .t-items td:nth-child(2) {
+    font-size: 15pt;        /* ← cantidad MUY grande */
+    font-weight: 900;
+    text-align: center;
+    padding: 2mm 3mm;
+  }
+
+  .t-items td .nota {
+    font-size: 11pt;        /* ← subido */
+    font-style: italic;
+    color: #333;
+    display: block;
+    margin-top: 1mm;
+  }
+
+  /* TOTALES */
+  .t-totales {
+    margin-top: 3mm;
+  }
+
+  .t-fila {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12pt;        /* ← subido */
+    padding: 1mm 0;
+  }
+
+  .t-fila.grand {
+    font-weight: bold;
+    font-size: 16pt;        /* ← total grande */
+    border-top: 2px solid #000;
+    margin-top: 2mm;
+    padding-top: 2mm;
+  }
+
+  /* FOOTER */
+  .t-footer {
+    text-align: center;
+    font-size: 10pt;        /* ← subido */
+    margin-top: 4mm;
+    line-height: 1.7;
+  }
+}
