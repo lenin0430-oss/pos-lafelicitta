@@ -27,12 +27,15 @@ html, body {
 @media print {
   @page {
     size: 58mm auto;
-    margin: 0;
+    margin: 0mm;
   }
 
-  body {
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
     background: #fff;
     color: #000;
+    width: 58mm;
   }
 
   .no-print {
@@ -41,10 +44,12 @@ html, body {
 
   #ticket-print, #cierre-print {
     display: block !important;
-    width: 54mm;
-    padding: 3mm 2mm;
+    width: 56mm;
+    max-width: 56mm;
+    padding: 2mm 1mm;
+    margin: 0 !important;
     font-family: 'Courier New', monospace;
-    font-size: 13pt;        /* ← subido de 9.5pt a 13pt */
+    font-size: 14pt;
     line-height: 1.5;
   }
 
