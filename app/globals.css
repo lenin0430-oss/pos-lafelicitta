@@ -55,10 +55,10 @@ html, body {
 
   /* LOGO */
   .t-logo {
-    font-size: 16pt;
+    font-size: 13pt;
     font-weight: bold;
     text-align: center;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     margin-bottom: 1mm;
   }
 
