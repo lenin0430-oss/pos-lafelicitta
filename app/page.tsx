@@ -250,8 +250,7 @@ export default function CajaPage() {
         <hr className="t-divider" />
         <div className="t-meta">
           <span><strong>COMANDA #{String(ordenNum - 1).padStart(3, '0')}</strong></span>
-          <span>{mesa} — {personas} pax</span>
-          <span>Mesero: {mesero || 'Caja'}</span>
+          <span>{mesa}</span>
           <span>{fechaHoy} {horaImpresion}</span>
         </div>
         <hr className="t-divider" />
@@ -261,8 +260,8 @@ export default function CajaPage() {
             {items.map(i => (
               <tr key={i.id}>
                 <td>
-                  {i.producto.nombre.length > 14 
-                    ? i.producto.nombre.replace('Burger ', 'B.').replace('Especial ', 'Esp.').replace('Felicitta', 'Felic.').replace('Super ', 'Sup.')
+                  {i.producto.nombre.length > 13
+                    ? i.producto.nombre.substring(0, 13) + '…'
                     : i.producto.nombre}
                   {i.nota && <span className="nota">↳ {i.nota}</span>}
                 </td>
