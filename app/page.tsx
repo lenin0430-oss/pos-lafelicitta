@@ -245,13 +245,13 @@ export default function CajaPage() {
       {/* TICKET IMPRIMIR */}
       <div id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
         <div className="t-logo">LA FELICITTA</div>
-        <div className="t-sub">Barros Arana 504, Iquique<br />@lafelicittacl</div>
+        <div className="t-sub">@lafelicittacl</div>
         <div className="t-tipo">{mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA'}</div>
         <hr className="t-divider" />
         <div className="t-meta">
           <span><strong>COMANDA #{String(ordenNum - 1).padStart(3, '0')}</strong></span>
           <span>{mesa}</span>
-          <span>{fechaHoy} {horaImpresion}</span>
+          <span>{new Date().toLocaleDateString('es-CL')} {new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
         <hr className="t-divider" />
         <table className="t-items">
@@ -276,7 +276,7 @@ export default function CajaPage() {
           <div className="t-fila"><span>Pago:</span><span>{metodoPago}</span></div>
         </div>
         <hr className="t-divider" />
-        <div className="t-footer">QR MercadoPago ID: 1059389577<br />¡Gracias por su visita! ❤️</div>
+        <div className="t-footer">¡Gracias por su visita! ❤️</div>
       </div>
 
       {/* HEADER */}
