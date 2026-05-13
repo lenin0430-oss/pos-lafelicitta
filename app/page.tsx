@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, type Producto } from '@/lib/menu'
+import AuthGuard from '@/components/AuthGuard'
+import SesionBar from '@/components/SesionBar'
 
 interface ItemComanda {
   id: number
@@ -212,7 +214,8 @@ export default function CajaPage() {
   )
 
   return (
-    <>
+    <AuthGuard>
+      <>
       {/* TICKET IMPRIMIR */}
       <div id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
         <div className="t-logo">LA FELICITTA</div>
@@ -267,6 +270,7 @@ export default function CajaPage() {
             </span>
           )}
           <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--gold)' }}>{hora}</span>
+          <SesionBar />
         </div>
       </header>
 
@@ -298,6 +302,7 @@ export default function CajaPage() {
         @media (min-width: 768px) { .desktop-layout { display: block !important; } .mobile-layout { display: none !important; } }
         @media (max-width: 767px) { .mobile-layout { display: block !important; } .desktop-layout { display: none !important; } }
       `}</style>
-    </>
+      </>
+    </AuthGuard>
   )
 }
