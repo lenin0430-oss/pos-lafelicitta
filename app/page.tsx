@@ -17,6 +17,7 @@ export default function CajaPage() {
   const [mesero, setMesero] = useState('')
   const [personas, setPersonas] = useState(2)
   const [metodoPago, setMetodoPago] = useState('')
+  const [pagosMixtos, setPagosMixtos] = useState({ Efectivo: '', Débito: '', Transferencia: '', Crédito: '' })
   const [items, setItems] = useState<ItemComanda[]>([])
   const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0] || '')
   const [busqueda, setBusqueda] = useState('')
@@ -56,12 +57,29 @@ export default function CajaPage() {
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
   const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
   const totalItems = items.reduce((s, i) => s + i.cantidad, 0)
+  const esPagoMixto = metodoPago === 'Mixto'
+  const montoMixto = Object.values(pagosMixtos).reduce((s, v) => s + (parseInt(v || '0') || 0), 0)
+  const restanteMixto = total - montoMixto
+  const detalleMetodoPago = esPagoMixto
+    ? 'Mixto: ' + Object.entries(pagosMixtos).filter(([, v]) => (parseInt(v || '0') || 0) > 0).map(([k, v]) => `${k} ${fmt(parseInt(v || '0') || 0)}`).join(' + ')
+    : metodoPago
+  const pagoValido = !esPagoMixto ? !!metodoPago : total > 0 && montoMixto === total
 
   const productosFiltrados = MENU.filter(p => {
     const enCat = p.categoria === categoriaActiva
     const enBusq = busqueda === '' || p.nombre.toLowerCase().includes(busqueda.toLowerCase())
     return enCat && enBusq
   })
+
+  function seleccionarMetodoPago(m: string) {
+    setMetodoPago(m)
+    if (m !== 'Mixto') setPagosMixtos({ Efectivo: '', Débito: '', Transferencia: '', Crédito: '' })
+  }
+
+  function cambiarPagoMixto(tipo: 'Efectivo' | 'Débito' | 'Transferencia' | 'Crédito', valor: string) {
+    const limpio = valor.replace(/[^0-9]/g, '')
+    setPagosMixtos(prev => ({ ...prev, [tipo]: limpio }))
+  }
 
   function agregarProducto(p: Producto) {
     setItems(prev => {
@@ -91,11 +109,15 @@ export default function CajaPage() {
 
   async function registrarVenta() {
     if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return }
+    if (!pagoValido) {
+      mostrarMensaje(esPagoMixto ? `Pago mixto incompleto. Falta ${fmt(Math.max(restanteMixto, 0))}` : 'Selecciona método de pago', 'err')
+      return
+    }
     setGuardando(true)
     try {
       const { error } = await supabase.from('ventas').insert({
         numero: ordenNum, mesa, mesero: mesero || 'Caja', personas,
-        metodo_pago: metodoPago, total,
+        metodo_pago: detalleMetodoPago, total,
         items: items.map(i => ({ nombre: i.producto.nombre, cantidad: i.cantidad, precio_unit: i.producto.precio, nota: i.nota })),
         estado: 'pendiente', created_at: new Date().toISOString()
       })
@@ -120,6 +142,7 @@ export default function CajaPage() {
     setItems([])
     setBusqueda('')
     setMetodoPago('')
+    setPagosMixtos({ Efectivo: '', Débito: '', Transferencia: '', Crédito: '' })
     setTabMovil('menu')
   }
 
@@ -214,16 +237,31 @@ export default function CajaPage() {
             {metodoPago ? '💳 Método de pago' : '⚠️ Selecciona método de pago'}
           </label>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {METODOS_PAGO.map(m => (
-              <button key={m} onClick={() => setMetodoPago(m)} style={{ padding: '7px 14px', borderRadius: 20, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
+            {[...METODOS_PAGO, 'Mixto'].map(m => (
+              <button key={m} onClick={() => seleccionarMetodoPago(m)} style={{ padding: '7px 14px', borderRadius: 20, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
             ))}
           </div>
+          {esPagoMixto && (
+            <div style={{ marginTop: 10, padding: 10, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {(['Débito', 'Efectivo', 'Transferencia', 'Crédito'] as const).map(tipo => (
+                  <div key={tipo}>
+                    <label style={{ fontSize: 10, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>{tipo}</label>
+                    <input inputMode="numeric" value={pagosMixtos[tipo]} onChange={e => cambiarPagoMixto(tipo, e.target.value)} placeholder="0" style={inp} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12, fontFamily: 'var(--mono)', color: restanteMixto === 0 ? 'var(--green)' : restanteMixto < 0 ? 'var(--red)' : 'var(--gold)' }}>
+                Pagado: {fmt(montoMixto)} · {restanteMixto === 0 ? 'Pago completo ✓' : restanteMixto > 0 ? `Falta: ${fmt(restanteMixto)}` : `Sobra: ${fmt(Math.abs(restanteMixto))}`}
+              </div>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={registrarVenta} disabled={guardando || items.length === 0 || !metodoPago} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: (!metodoPago || items.length === 0) ? 'var(--muted)' : 'var(--green)', fontSize: 14, fontWeight: 700, cursor: (!metodoPago || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!metodoPago || items.length === 0) ? 0.4 : 1 }}>
+          <button onClick={registrarVenta} disabled={guardando || items.length === 0 || !pagoValido} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: (!pagoValido || items.length === 0) ? 'var(--muted)' : 'var(--green)', fontSize: 14, fontWeight: 700, cursor: (!pagoValido || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!pagoValido || items.length === 0) ? 0.4 : 1 }}>
             {guardando ? '...' : '💾 Guardar'}
           </button>
-          <button onClick={registrarEImprimir} disabled={guardando || items.length === 0 || !metodoPago} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: (!metodoPago || items.length === 0) ? 'var(--surface2)' : 'var(--gold)', color: (!metodoPago || items.length === 0) ? 'var(--muted)' : '#000', fontSize: 14, fontWeight: 700, cursor: (!metodoPago || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!metodoPago || items.length === 0) ? 0.4 : 1 }}>
+          <button onClick={registrarEImprimir} disabled={guardando || items.length === 0 || !pagoValido} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: (!pagoValido || items.length === 0) ? 'var(--surface2)' : 'var(--gold)', color: (!pagoValido || items.length === 0) ? 'var(--muted)' : '#000', fontSize: 14, fontWeight: 700, cursor: (!pagoValido || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!pagoValido || items.length === 0) ? 0.4 : 1 }}>
             🖨 Imprimir
           </button>
         </div>
@@ -298,7 +336,7 @@ export default function CajaPage() {
         </table>
         <div className="t-totales">
           <div className="t-fila grand"><span>TOTAL</span><span>{fmt(total)}</span></div>
-          <div className="t-fila"><span>Pago:</span><span>{metodoPago}</span></div>
+          <div className="t-fila"><span>Pago:</span><span>{detalleMetodoPago}</span></div>
         </div>
         <hr className="t-divider" />
         <div className="t-footer">¡Gracias por su visita! ❤️</div>
