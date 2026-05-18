@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, type Producto } from '@/lib/menu'
 import AuthGuard from '@/components/AuthGuard'
@@ -26,7 +26,11 @@ export default function CajaPage() {
   const [hora, setHora] = useState('')
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
   const [tabMovil, setTabMovil] = useState<'menu'|'comanda'>('menu')
-  const [cajaAbierta, setCajaAbierta] = useState<boolean | null>(null) // null = cargando
+  const [cajaAbierta, setCajaAbierta] = useState<boolean | null>(null)
+  const [esAdmin, setEsAdmin] = useState(false)
+
+  // FIX DUPLICACIÓN: ref para saber si la comanda actual ya fue guardada en Supabase
+  const yaGuardada = useRef(false)
 
   useEffect(() => {
     const n = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
@@ -39,13 +43,11 @@ export default function CajaPage() {
   }, [])
 
   async function verificarApertura() {
-    // Admins siempre pueden entrar
     const { getSesion } = await import('@/lib/auth')
     const sesion = getSesion()
-    if (sesion?.rol === 'admin') { setCajaAbierta(true); return }
-
-    const hoy = new Date()
-    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+    const admin = sesion?.rol === 'admin'
+    setEsAdmin(admin)
+    if (admin) { setCajaAbierta(true); return }
     const { data } = await supabase
       .from('aperturas_caja')
       .select('id')
@@ -82,6 +84,8 @@ export default function CajaPage() {
   }
 
   function agregarProducto(p: Producto) {
+    // Si ya estaba guardada y agrega más productos, resetear el flag
+    // para que se pueda guardar de nuevo como nueva comanda
     setItems(prev => {
       const existe = prev.find(i => i.producto.id === p.id && i.nota === '')
       if (existe) return prev.map(i => i.producto.id === p.id && i.nota === '' ? { ...i, cantidad: i.cantidad + 1 } : i)
@@ -90,11 +94,20 @@ export default function CajaPage() {
     setTabMovil('comanda')
   }
 
+  // FIX ADMIN: solo admin puede cambiar cantidad o eliminar items ya guardados
   function cambiarCantidad(id: number, delta: number) {
+    if (yaGuardada.current && !esAdmin) {
+      mostrarMensaje('Solo el admin puede modificar una comanda guardada', 'err')
+      return
+    }
     setItems(prev => prev.map(i => i.id === id ? { ...i, cantidad: Math.max(1, i.cantidad + delta) } : i))
   }
 
   function eliminarItem(id: number) {
+    if (yaGuardada.current && !esAdmin) {
+      mostrarMensaje('Solo el admin puede eliminar productos de una comanda guardada', 'err')
+      return
+    }
     setItems(prev => prev.filter(i => i.id !== id))
   }
 
@@ -104,14 +117,19 @@ export default function CajaPage() {
 
   function mostrarMensaje(txt: string, tipo: 'ok' | 'err') {
     setMensaje({ txt, tipo })
-    setTimeout(() => setMensaje(null), 3000)
+    setTimeout(() => setMensaje(null), 3500)
   }
 
-  async function registrarVenta() {
-    if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return }
+  // FIX DUPLICACIÓN: la función central de guardar verifica yaGuardada antes de insertar
+  async function guardarEnSupabase(): Promise<boolean> {
+    if (yaGuardada.current) {
+      // Ya fue guardada — no insertar de nuevo
+      return true
+    }
+    if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return false }
     if (!pagoValido) {
       mostrarMensaje(esPagoMixto ? `Pago mixto incompleto. Falta ${fmt(Math.max(restanteMixto, 0))}` : 'Selecciona método de pago', 'err')
-      return
+      return false
     }
     setGuardando(true)
     try {
@@ -122,19 +140,30 @@ export default function CajaPage() {
         estado: 'pendiente', created_at: new Date().toISOString()
       })
       if (error) throw error
+      yaGuardada.current = true  // marcar como guardada para evitar duplicado
       mostrarMensaje(`Venta #${ordenNum} registrada ✓`, 'ok')
       const nuevoNum = ordenNum + 1
       setOrdenNum(nuevoNum)
       if (typeof window !== 'undefined') localStorage.setItem('lf_orden_num', String(nuevoNum))
+      setGuardando(false)
+      return true
     } catch (e: unknown) {
       mostrarMensaje('Error: ' + (e as Error).message, 'err')
+      setGuardando(false)
+      return false
     }
-    setGuardando(false)
+  }
+
+  async function registrarVenta() {
+    await guardarEnSupabase()
   }
 
   async function registrarEImprimir() {
-    await registrarVenta()
-    setTimeout(() => window.print(), 400)
+    // Guarda solo si no estaba guardada, luego imprime sin importar el resultado anterior
+    const ok = await guardarEnSupabase()
+    if (ok) {
+      setTimeout(() => window.print(), 400)
+    }
   }
 
   function nuevaComanda() {
@@ -143,6 +172,7 @@ export default function CajaPage() {
     setBusqueda('')
     setMetodoPago('')
     setPagosMixtos({ Efectivo: '', Débito: '', Transferencia: '', Crédito: '' })
+    yaGuardada.current = false  // resetear flag al limpiar
     setTabMovil('menu')
   }
 
@@ -190,7 +220,15 @@ export default function CajaPage() {
   const panelComandaJSX = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <span style={{ fontFamily: 'var(--display)', fontSize: 14, letterSpacing: 2, color: 'var(--muted)' }}>COMANDA #{String(ordenNum).padStart(3,'0')}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontFamily: 'var(--display)', fontSize: 14, letterSpacing: 2, color: 'var(--muted)' }}>COMANDA #{String(ordenNum).padStart(3,'0')}</span>
+          {/* Indicador visual cuando la comanda ya fue guardada */}
+          {yaGuardada.current && (
+            <span style={{ fontSize: 11, background: 'var(--green)', color: '#000', borderRadius: 8, padding: '2px 8px', fontWeight: 700 }}>
+              ✓ GUARDADA
+            </span>
+          )}
+        </div>
         <button onClick={nuevaComanda} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 12, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--font)' }}>🗑 Nueva</button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
@@ -202,17 +240,27 @@ export default function CajaPage() {
             </div>
           )
           : items.map(item => (
-            <div key={item.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+            <div key={item.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', opacity: yaGuardada.current && !esAdmin ? 0.85 : 1 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{item.producto.nombre}</div>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', marginTop: 2 }}>{fmt(item.producto.precio * item.cantidad)}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button onClick={() => cambiarCantidad(item.id, -1)} style={qtyBtn}>−</button>
+                  {/* Botones de modificar — visibles siempre pero bloqueados para no-admin si ya guardada */}
+                  <button
+                    onClick={() => cambiarCantidad(item.id, -1)}
+                    style={{ ...qtyBtn, opacity: yaGuardada.current && !esAdmin ? 0.35 : 1, cursor: yaGuardada.current && !esAdmin ? 'not-allowed' : 'pointer' }}
+                  >−</button>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 14, width: 24, textAlign: 'center', fontWeight: 700 }}>{item.cantidad}</span>
-                  <button onClick={() => cambiarCantidad(item.id, +1)} style={qtyBtn}>+</button>
-                  <button onClick={() => eliminarItem(item.id)} style={{ ...qtyBtn, color: 'var(--red)', background: 'transparent', border: 'none' }}>✕</button>
+                  <button
+                    onClick={() => cambiarCantidad(item.id, +1)}
+                    style={{ ...qtyBtn, opacity: yaGuardada.current && !esAdmin ? 0.35 : 1, cursor: yaGuardada.current && !esAdmin ? 'not-allowed' : 'pointer' }}
+                  >+</button>
+                  <button
+                    onClick={() => eliminarItem(item.id)}
+                    style={{ ...qtyBtn, color: 'var(--red)', background: 'transparent', border: 'none', opacity: yaGuardada.current && !esAdmin ? 0.35 : 1, cursor: yaGuardada.current && !esAdmin ? 'not-allowed' : 'pointer' }}
+                  >✕</button>
                 </div>
               </div>
               <input
@@ -225,6 +273,19 @@ export default function CajaPage() {
           ))
         }
       </div>
+
+      {/* Aviso admin cuando comanda guardada */}
+      {yaGuardada.current && !esAdmin && (
+        <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', textAlign: 'center' }}>
+          🔒 Comanda guardada — solo el admin puede modificarla
+        </div>
+      )}
+      {yaGuardada.current && esAdmin && (
+        <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(0,200,100,0.08)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>
+          🔑 Modo admin — puedes modificar la comanda guardada
+        </div>
+      )}
+
       <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', marginBottom: 4, fontSize: 13, color: 'var(--muted)' }}>
           <span>{totalItems} productos</span><span>{fmt(total)}</span>
@@ -258,10 +319,16 @@ export default function CajaPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={registrarVenta} disabled={guardando || items.length === 0 || !pagoValido} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: (!pagoValido || items.length === 0) ? 'var(--muted)' : 'var(--green)', fontSize: 14, fontWeight: 700, cursor: (!pagoValido || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!pagoValido || items.length === 0) ? 0.4 : 1 }}>
-            {guardando ? '...' : '💾 Guardar'}
+          <button
+            onClick={registrarVenta}
+            disabled={guardando || items.length === 0 || !pagoValido || yaGuardada.current}
+            style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: (!pagoValido || items.length === 0 || yaGuardada.current) ? 'var(--muted)' : 'var(--green)', fontSize: 14, fontWeight: 700, cursor: (!pagoValido || items.length === 0 || yaGuardada.current) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!pagoValido || items.length === 0 || yaGuardada.current) ? 0.4 : 1 }}>
+            {guardando ? '...' : yaGuardada.current ? '✓ Guardada' : '💾 Guardar'}
           </button>
-          <button onClick={registrarEImprimir} disabled={guardando || items.length === 0 || !pagoValido} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: (!pagoValido || items.length === 0) ? 'var(--surface2)' : 'var(--gold)', color: (!pagoValido || items.length === 0) ? 'var(--muted)' : '#000', fontSize: 14, fontWeight: 700, cursor: (!pagoValido || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!pagoValido || items.length === 0) ? 0.4 : 1 }}>
+          <button
+            onClick={registrarEImprimir}
+            disabled={guardando || items.length === 0 || !pagoValido}
+            style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: (!pagoValido || items.length === 0) ? 'var(--surface2)' : 'var(--gold)', color: (!pagoValido || items.length === 0) ? 'var(--muted)' : '#000', fontSize: 14, fontWeight: 700, cursor: (!pagoValido || items.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!pagoValido || items.length === 0) ? 0.4 : 1 }}>
             🖨 Imprimir
           </button>
         </div>
@@ -272,7 +339,6 @@ export default function CajaPage() {
   return (
     <AuthGuard>
       <>
-      {/* CAJA CERRADA */}
       {cajaAbierta === false && (
         <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font)', padding: 24 }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🔴</div>
@@ -294,16 +360,13 @@ export default function CajaPage() {
         </div>
       )}
 
-      {/* CARGANDO */}
       {cajaAbierta === null && (
         <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontFamily: 'var(--font)', fontSize: 14 }}>
           Verificando caja...
         </div>
       )}
 
-      {/* CAJA ABIERTA - sistema normal */}
       {cajaAbierta === true && <>
-      {/* TICKET IMPRIMIR */}
       <div id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
         <div className="t-logo">LA FELICITTA</div>
         <div className="t-sub">@lafelicittacl</div>
@@ -342,14 +405,13 @@ export default function CajaPage() {
         <div className="t-footer">¡Gracias por su visita! ❤️</div>
       </div>
 
-      {/* HEADER */}
       <header className="no-print" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 14px', height: 52, position: 'sticky', top: 0, zIndex: 100 }}>
         <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 3, color: 'var(--gold)' }}>LA FELICITTA</span>
         <nav style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
           {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/reportes', '📊']].map(([href, icon]) => (
             <a key={href} href={href} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? '#000' : 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
           ))}
-          {typeof window !== 'undefined' && (() => { try { const s = JSON.parse(localStorage.getItem('lf_sesion') || '{}'); return s.rol === 'admin' } catch { return false } })() && (
+          {esAdmin && (
             <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--green)', fontSize: 18, textDecoration: 'none' }}>🔓</a>
           )}
         </nav>
@@ -364,7 +426,6 @@ export default function CajaPage() {
         </div>
       </header>
 
-      {/* DESKTOP */}
       <div className="no-print desktop-layout" style={{ display: 'none' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', height: 'calc(100vh - 52px)', overflow: 'hidden' }}>
           <div style={{ borderRight: '1px solid var(--border)', overflow: 'hidden' }}>{panelMenuJSX}</div>
@@ -372,7 +433,6 @@ export default function CajaPage() {
         </div>
       </div>
 
-      {/* MOBILE */}
       <div className="no-print mobile-layout" style={{ display: 'none' }}>
         <div style={{ display: 'flex', background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 52, zIndex: 99 }}>
           <button onClick={() => setTabMovil('menu')} style={{ flex: 1, padding: '12px', border: 'none', background: 'transparent', color: tabMovil === 'menu' ? 'var(--gold)' : 'var(--muted)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', borderBottom: tabMovil === 'menu' ? '2px solid var(--gold)' : '2px solid transparent' }}>
