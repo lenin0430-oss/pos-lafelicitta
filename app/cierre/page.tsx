@@ -13,6 +13,15 @@ interface ResumenVentas {
   cantidad: number
 }
 
+interface AperturaCaja {
+  id: string
+  monto_inicial: number
+  cajero: string
+  estado: string
+  created_at: string
+  cerrada_at: string | null
+}
+
 interface CierreCaja {
   id: string
   fecha: string
@@ -25,10 +34,12 @@ interface CierreCaja {
   diferencia: number
   notas: string
   created_at: string
+  apertura_id: string | null
 }
 
 export default function CierrePage() {
   const [resumen, setResumen] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
+  const [resumenTurno, setResumenTurno] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
   const [efectivoFisico, setEfectivoFisico] = useState('')
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -36,45 +47,68 @@ export default function CierrePage() {
   const [mensaje, setMensaje] = useState<{ txt: string; tipo: 'ok' | 'err' } | null>(null)
   const [tab, setTab] = useState<'nuevo' | 'historial'>('nuevo')
   const [montoApertura, setMontoApertura] = useState('')
-  const [aperturaHoy, setAperturaHoy] = useState<{ id: string; monto_inicial: number; created_at: string } | null>(null)
+  const [aperturaActiva, setAperturaActiva] = useState<AperturaCaja | null>(null)
+  const [todasAperturasHoy, setTodasAperturasHoy] = useState<AperturaCaja[]>([])
   const [guardandoApertura, setGuardandoApertura] = useState(false)
+  const [cerrando, setCerrando] = useState(false)
 
   useEffect(() => {
-    cargarVentasHoy()
-    cargarCierres()
-    cargarAperturaHoy()
+    cargarDatos()
   }, [])
 
-  async function cargarAperturaHoy() {
+  async function cargarDatos() {
+    await Promise.all([
+      cargarAperturaActiva(),
+      cargarVentasHoy(),
+      cargarCierres()
+    ])
+  }
+
+  async function cargarAperturaActiva() {
     const hoy = new Date()
     const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+
+    // Traer todas las aperturas de hoy
     const { data } = await supabase
       .from('aperturas_caja')
       .select('*')
       .gte('created_at', desde)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-    if (data) setAperturaHoy(data)
+
+    if (data) {
+      setTodasAperturasHoy(data)
+      // La activa es la primera con estado 'abierta'
+      const activa = data.find(a => a.estado === 'abierta') || null
+      setAperturaActiva(activa)
+
+      // Si hay apertura activa, cargar ventas del turno
+      if (activa) {
+        await cargarVentasTurno(activa.id, activa.created_at)
+      }
+    }
   }
 
-  async function registrarApertura() {
-    const monto = parseInt(montoApertura) || 0
-    setGuardandoApertura(true)
-    const { error } = await supabase.from('aperturas_caja').insert({
-      monto_inicial: monto,
-      cajero: 'Lenin',
-      fecha: new Date().toISOString().split('T')[0],
-      created_at: new Date().toISOString()
+  async function cargarVentasTurno(aperturaId: string, desde: string) {
+    // Ventas desde la apertura hasta ahora (o hasta el cierre del turno)
+    const { data } = await supabase
+      .from('ventas')
+      .select('*')
+      .gte('created_at', desde)
+      .order('created_at', { ascending: true })
+
+    if (!data) return
+
+    const res: ResumenVentas = { total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: data.length }
+    data.forEach(v => {
+      res.total += v.total
+      const mp = (v.metodo_pago || '').toLowerCase()
+      if (mp.includes('efectivo')) res.efectivo += v.total
+      else if (mp.includes('débito') || mp.includes('debito')) res.debito += v.total
+      else if (mp.includes('qr') || mp.includes('mercado')) res.qr += v.total
+      else if (mp.includes('transfer')) res.transferencia += v.total
+      else res.efectivo += v.total
     })
-    if (error) {
-      mostrarMensaje('Error al abrir caja: ' + error.message, 'err')
-    } else {
-      mostrarMensaje('✅ Caja abierta — Adriana ya puede tomar pedidos', 'ok')
-      cargarAperturaHoy()
-      setMontoApertura('')
-    }
-    setGuardandoApertura(false)
+    setResumenTurno(res)
   }
 
   async function cargarVentasHoy() {
@@ -108,38 +142,85 @@ export default function CierrePage() {
       .from('cierres_caja')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(10)
+      .limit(20)
     if (data) setCierres(data)
   }
 
-  async function registrarCierre() {
-    const fisico = parseInt(efectivoFisico) || 0
-    const diferencia = fisico - resumen.efectivo
-    setGuardando(true)
-    const { error } = await supabase.from('cierres_caja').insert({
+  async function registrarApertura() {
+    const monto = parseInt(montoApertura) || 0
+    setGuardandoApertura(true)
+
+    // Obtener nombre del cajero de la sesión
+    let cajero = 'Admin'
+    try {
+      const { getSesion } = await import('@/lib/auth')
+      const sesion = getSesion()
+      cajero = sesion?.nombre || sesion?.usuario || 'Admin'
+    } catch { /* sin sesión */ }
+
+    const turnoNum = todasAperturasHoy.length + 1
+
+    const { error } = await supabase.from('aperturas_caja').insert({
+      monto_inicial: monto,
+      cajero,
+      estado: 'abierta',
       fecha: new Date().toISOString().split('T')[0],
-      ventas_total: resumen.total,
-      ventas_efectivo: resumen.efectivo,
-      ventas_debito: resumen.debito,
-      ventas_qr: resumen.qr,
-      ventas_transferencia: resumen.transferencia,
-      efectivo_fisico: fisico,
-      diferencia,
-      notas,
       created_at: new Date().toISOString()
     })
+
     if (error) {
-      mostrarMensaje('Error: ' + error.message, 'err')
+      mostrarMensaje('Error al abrir caja: ' + error.message, 'err')
     } else {
-      mostrarMensaje('Cierre registrado ✓', 'ok')
-      cargarCierres()
-      setTimeout(() => {
-        window.print()
-        setEfectivoFisico('')
-        setNotas('')
-      }, 400)
+      mostrarMensaje(`✅ Turno ${turnoNum} abierto — caja lista para vender`, 'ok')
+      setMontoApertura('')
+      await cargarDatos()
     }
-    setGuardando(false)
+    setGuardandoApertura(false)
+  }
+
+  async function cerrarTurnoActual() {
+    if (!aperturaActiva) return
+    if (!efectivoFisico) { mostrarMensaje('Ingresa el efectivo físico', 'err'); return }
+
+    const fisico = parseInt(efectivoFisico) || 0
+    const diferencia = fisico - resumenTurno.efectivo
+    setCerrando(true)
+
+    try {
+      // 1. Registrar cierre
+      const { error: errCierre } = await supabase.from('cierres_caja').insert({
+        fecha: new Date().toISOString().split('T')[0],
+        ventas_total: resumenTurno.total,
+        ventas_efectivo: resumenTurno.efectivo,
+        ventas_debito: resumenTurno.debito,
+        ventas_qr: resumenTurno.qr,
+        ventas_transferencia: resumenTurno.transferencia,
+        efectivo_fisico: fisico,
+        diferencia,
+        notas,
+        apertura_id: aperturaActiva.id,
+        created_at: new Date().toISOString()
+      })
+      if (errCierre) throw errCierre
+
+      // 2. Marcar apertura como cerrada
+      const { error: errAp } = await supabase
+        .from('aperturas_caja')
+        .update({ estado: 'cerrada', cerrada_at: new Date().toISOString() })
+        .eq('id', aperturaActiva.id)
+      if (errAp) throw errAp
+
+      mostrarMensaje('✅ Turno cerrado correctamente', 'ok')
+      setEfectivoFisico('')
+      setNotas('')
+      await cargarDatos()
+      await cargarCierres()
+      setTimeout(() => window.print(), 400)
+
+    } catch (e: unknown) {
+      mostrarMensaje('Error: ' + (e as Error).message, 'err')
+    }
+    setCerrando(false)
   }
 
   function mostrarMensaje(txt: string, tipo: 'ok' | 'err') {
@@ -148,42 +229,54 @@ export default function CierrePage() {
   }
 
   const fisico = parseInt(efectivoFisico) || 0
-  const diferencia = fisico - resumen.efectivo
+  const diferencia = fisico - resumenTurno.efectivo
   const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
   const fechaHoy = new Date().toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const horaActual = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+  const turnoActualNum = todasAperturasHoy.findIndex(a => a.id === aperturaActiva?.id) + 1 || todasAperturasHoy.length + 1
+
+  const inp = { width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '10px 12px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }
 
   return (
     <AuthGuard rolRequerido="admin">
       <>
-        {/* PRINT */}
+        {/* PRINT CIERRE */}
         <div id="cierre-print" style={{ display: 'none' }}>
           <div className="t-logo">LA FELICITTA</div>
           <div className="t-sub">@lafelicittacl</div>
           <hr className="t-divider" />
           <div className="t-meta">
-            <span><strong>CIERRE DE CAJA</strong></span>
+            <span><strong>CIERRE DE TURNO {turnoActualNum}</strong></span>
             <span>{fechaHoy}</span>
             <span>Hora: {horaActual}</span>
           </div>
           <hr className="t-divider" />
           <div className="t-meta">
-            <span>Comandas del día: {resumen.cantidad}</span>
-            <span>Efectivo: {fmt(resumen.efectivo)}</span>
-            <span>Débito: {fmt(resumen.debito)}</span>
-            <span>QR MercadoPago: {fmt(resumen.qr)}</span>
-            <span>Transferencia: {fmt(resumen.transferencia)}</span>
+            <span>Comandas del turno: {resumenTurno.cantidad}</span>
+            <span>Efectivo: {fmt(resumenTurno.efectivo)}</span>
+            <span>Débito: {fmt(resumenTurno.debito)}</span>
+            <span>QR MercadoPago: {fmt(resumenTurno.qr)}</span>
+            <span>Transferencia: {fmt(resumenTurno.transferencia)}</span>
           </div>
           <hr className="t-divider" />
           <div className="t-meta">
-            <span><strong>TOTAL VENTAS: {fmt(resumen.total)}</strong></span>
-            <span>Efectivo esperado: {fmt(resumen.efectivo)}</span>
+            <span><strong>TOTAL TURNO: {fmt(resumenTurno.total)}</strong></span>
+            <span>Efectivo esperado: {fmt(resumenTurno.efectivo)}</span>
             <span>Efectivo físico: {fmt(fisico)}</span>
             <span><strong>DIFERENCIA: {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}</strong></span>
           </div>
+          {todasAperturasHoy.length > 0 && (
+            <>
+              <hr className="t-divider" />
+              <div className="t-meta">
+                <span><strong>TOTAL ACUMULADO DÍA: {fmt(resumen.total)}</strong></span>
+                <span>Turnos completados hoy: {todasAperturasHoy.filter(a => a.estado === 'cerrada').length + 1}</span>
+              </div>
+            </>
+          )}
           {notas && <><hr className="t-divider" /><div className="t-meta"><span>Notas: {notas}</span></div></>}
           <hr className="t-divider" />
-          <div className="t-footer">Firma: _______________<br />¡Gracias por tu trabajo hoy!</div>
+          <div className="t-footer">Firma: _______________<br />¡Gracias por tu trabajo!</div>
         </div>
 
         <div className="no-print" style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font)', paddingBottom: 80 }}>
@@ -196,115 +289,163 @@ export default function CierrePage() {
               </div>
             )}
 
-            {/* APERTURA DE CAJA */}
-            <div style={{ background: aperturaHoy ? 'rgba(76,175,125,.08)' : 'rgba(217,79,61,.08)', border: `1px solid ${aperturaHoy ? 'var(--green)' : 'var(--red)'}`, borderRadius: 14, padding: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>
-                {aperturaHoy ? '✅ Caja Abierta' : '🔴 Caja Cerrada — Abre la caja primero'}
+            {/* RESUMEN DÍA si hay múltiples turnos */}
+            {todasAperturasHoy.length > 0 && (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 16px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const }}>Acumulado del día</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--gold)' }}>{fmt(resumen.total)}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{resumen.cantidad} comandas</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                    {todasAperturasHoy.filter(a => a.estado === 'cerrada').length} turno(s) cerrado(s)
+                    {aperturaActiva ? ' · 1 activo' : ''}
+                  </div>
+                </div>
               </div>
-              {aperturaHoy ? (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: 'var(--green)' }}>{fmt(aperturaHoy.monto_inicial)}</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                      Apertura: {new Date(aperturaHoy.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+            )}
+
+            {/* ESTADO CAJA ACTUAL */}
+            <div style={{ background: aperturaActiva ? 'rgba(76,175,125,.08)' : 'rgba(217,79,61,.08)', border: `1px solid ${aperturaActiva ? 'var(--green)' : 'var(--red)'}`, borderRadius: 14, padding: 16, marginBottom: 16 }}>
+              {aperturaActiva ? (
+                <>
+                  <div style={{ fontSize: 11, color: 'var(--green)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10, fontWeight: 600 }}>
+                    ✅ Turno {turnoActualNum} en curso
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: 'var(--green)' }}>{fmt(aperturaActiva.monto_inicial)}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                        Apertura: {new Date(aperturaActiva.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                        {' · '}{resumenTurno.cantidad} ventas · {fmt(resumenTurno.total)}
+                      </div>
                     </div>
+                    <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>Abierta ✓</span>
                   </div>
-                  <span style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600 }}>Adriana puede vender ✓</span>
-                </div>
+                </>
               ) : (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>Efectivo inicial en caja</label>
-                    <input
-                      type="number"
-                      value={montoApertura}
-                      onChange={e => setMontoApertura(e.target.value)}
-                      placeholder="Ej: 30000"
-                      style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '10px 12px', fontFamily: 'var(--mono)', fontSize: 18, outline: 'none', boxSizing: 'border-box' as const }}
-                    />
+                <>
+                  <div style={{ fontSize: 11, color: 'var(--red)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10, fontWeight: 600 }}>
+                    🔴 Sin turno activo
+                    {todasAperturasHoy.length > 0 ? ` — ${todasAperturasHoy.length} turno(s) completado(s) hoy` : ''}
                   </div>
-                  <button
-                    onClick={registrarApertura}
-                    disabled={guardandoApertura || !montoApertura}
-                    style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'var(--green)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}
-                  >
-                    {guardandoApertura ? '...' : '🔓 Abrir Caja'}
-                  </button>
-                </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
+                        Efectivo inicial — Turno {todasAperturasHoy.length + 1}
+                      </label>
+                      <input
+                        type="number"
+                        value={montoApertura}
+                        onChange={e => setMontoApertura(e.target.value)}
+                        placeholder="Ej: 30000"
+                        style={{ ...inp, fontFamily: 'var(--mono)', fontSize: 18 }}
+                      />
+                    </div>
+                    <button
+                      onClick={registrarApertura}
+                      disabled={guardandoApertura}
+                      style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'var(--green)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}
+                    >
+                      {guardandoApertura ? '...' : '🔓 Abrir Turno'}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: 'var(--surface)', borderRadius: 10, padding: 4, border: '1px solid var(--border)' }}>
-              {[['nuevo', '🔒 Nuevo Cierre'], ['historial', '📋 Historial']].map(([val, label]) => (
-                <button key={val} onClick={() => setTab(val as 'nuevo' | 'historial')} style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: tab === val ? 'var(--gold)' : 'transparent', color: tab === val ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{label}</button>
+              {[['nuevo', '🔒 Cerrar Turno'], ['historial', '📋 Historial']].map(([val, label]) => (
+                <button key={val} onClick={() => setTab(val as 'nuevo' | 'historial')}
+                  style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: tab === val ? 'var(--gold)' : 'transparent', color: tab === val ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                  {label}
+                </button>
               ))}
             </div>
 
             {tab === 'nuevo' && (
               <>
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 4 }}>Fecha del cierre</div>
-                  <div style={{ fontSize: 15, fontWeight: 600 }}>{fechaHoy}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{resumen.cantidad} comandas registradas hoy</div>
-                </div>
-
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ventas del día</div>
-                  {[
-                    { label: '💵 Efectivo', valor: resumen.efectivo, color: '#4caf7d' },
-                    { label: '💳 Débito', valor: resumen.debito, color: '#4a9fd4' },
-                    { label: '📱 QR MercadoPago', valor: resumen.qr, color: '#9b59b6' },
-                    { label: '🏦 Transferencia', valor: resumen.transferencia, color: '#e8a32c' },
-                  ].map(item => (
-                    <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
-                      <span style={{ fontSize: 14, color: item.color }}>{item.label}</span>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600, color: item.valor > 0 ? 'var(--text)' : 'var(--muted)' }}>{fmt(item.valor)}</span>
-                    </div>
-                  ))}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', alignItems: 'center' }}>
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>TOTAL VENTAS</span>
-                    <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: 'var(--gold)' }}>{fmt(resumen.total)}</span>
+                {!aperturaActiva ? (
+                  <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)', fontSize: 14 }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>🔴</div>
+                    No hay un turno activo.<br />Abre un turno arriba para poder cerrar.
                   </div>
-                </div>
-
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Arqueo de caja</div>
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>¿Cuánto efectivo hay físicamente en caja?</label>
-                    <input
-                      type="number"
-                      value={efectivoFisico}
-                      onChange={e => setEfectivoFisico(e.target.value)}
-                      placeholder="0"
-                      style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '12px', fontFamily: 'var(--mono)', fontSize: 22, outline: 'none', boxSizing: 'border-box' as const }}
-                    />
-                  </div>
-                  {efectivoFisico && (
-                    <div style={{ background: diferencia === 0 ? 'rgba(76,175,125,.1)' : diferencia > 0 ? 'rgba(74,159,212,.1)' : 'rgba(217,79,61,.1)', border: `1px solid ${diferencia === 0 ? 'var(--green)' : diferencia > 0 ? 'var(--blue)' : 'var(--red)'}`, borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                          {diferencia === 0 ? '✅ Cuadra perfecto' : diferencia > 0 ? '📈 Sobrante en caja' : '📉 Faltante en caja'}
-                        </span>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: diferencia === 0 ? 'var(--green)' : diferencia > 0 ? 'var(--blue)' : 'var(--red)' }}>
-                          {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
-                        Esperado: {fmt(resumen.efectivo)} · Físico: {fmt(fisico)}
+                ) : (
+                  <>
+                    {/* Info turno actual */}
+                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 4 }}>Turno {turnoActualNum}</div>
+                      <div style={{ fontSize: 15, fontWeight: 600 }}>{fechaHoy}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                        Desde: {new Date(aperturaActiva.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · {resumenTurno.cantidad} comandas
                       </div>
                     </div>
-                  )}
-                </div>
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 6 }}>Notas (opcional)</label>
-                  <input value={notas} onChange={e => setNotas(e.target.value)} placeholder="Observaciones del cierre..." style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '10px 12px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }} />
-                </div>
+                    {/* Ventas del turno */}
+                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ventas del turno</div>
+                      {[
+                        { label: '💵 Efectivo', valor: resumenTurno.efectivo, color: '#4caf7d' },
+                        { label: '💳 Débito', valor: resumenTurno.debito, color: '#4a9fd4' },
+                        { label: '📱 QR MercadoPago', valor: resumenTurno.qr, color: '#9b59b6' },
+                        { label: '🏦 Transferencia', valor: resumenTurno.transferencia, color: '#e8a32c' },
+                      ].map(item => (
+                        <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+                          <span style={{ fontSize: 14, color: item.color }}>{item.label}</span>
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600, color: item.valor > 0 ? 'var(--text)' : 'var(--muted)' }}>{fmt(item.valor)}</span>
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', alignItems: 'center' }}>
+                        <span style={{ fontSize: 15, fontWeight: 700 }}>TOTAL TURNO</span>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: 'var(--gold)' }}>{fmt(resumenTurno.total)}</span>
+                      </div>
+                    </div>
 
-                <button onClick={registrarCierre} disabled={guardando || !efectivoFisico} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: !efectivoFisico ? 'var(--surface2)' : 'var(--gold)', color: !efectivoFisico ? 'var(--muted)' : '#000', fontSize: 16, fontWeight: 700, cursor: !efectivoFisico ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: !efectivoFisico ? 0.5 : 1 }}>
-                  {guardando ? 'Guardando...' : '🔒 Cerrar Caja e Imprimir'}
-                </button>
+                    {/* Arqueo */}
+                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Arqueo de caja</div>
+                      <div style={{ marginBottom: 10 }}>
+                        <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>¿Cuánto efectivo hay físicamente?</label>
+                        <input
+                          type="number"
+                          value={efectivoFisico}
+                          onChange={e => setEfectivoFisico(e.target.value)}
+                          placeholder="0"
+                          style={{ ...inp, fontFamily: 'var(--mono)', fontSize: 22 }}
+                        />
+                      </div>
+                      {efectivoFisico && (
+                        <div style={{ background: diferencia === 0 ? 'rgba(76,175,125,.1)' : diferencia > 0 ? 'rgba(74,159,212,.1)' : 'rgba(217,79,61,.1)', border: `1px solid ${diferencia === 0 ? 'var(--green)' : diferencia > 0 ? '#4a9fd4' : 'var(--red)'}`, borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                              {diferencia === 0 ? '✅ Cuadra perfecto' : diferencia > 0 ? '📈 Sobrante' : '📉 Faltante'}
+                            </span>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: diferencia === 0 ? 'var(--green)' : diferencia > 0 ? '#4a9fd4' : 'var(--red)' }}>
+                              {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+                            Esperado: {fmt(resumenTurno.efectivo)} · Físico: {fmt(fisico)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 6 }}>Notas (opcional)</label>
+                      <input value={notas} onChange={e => setNotas(e.target.value)} placeholder="Observaciones del turno..." style={inp} />
+                    </div>
+
+                    <button
+                      onClick={cerrarTurnoActual}
+                      disabled={cerrando || !efectivoFisico}
+                      style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: !efectivoFisico ? 'var(--surface2)' : 'var(--gold)', color: !efectivoFisico ? 'var(--muted)' : '#000', fontSize: 16, fontWeight: 700, cursor: !efectivoFisico ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: !efectivoFisico ? 0.5 : 1 }}>
+                      {cerrando ? 'Cerrando...' : `🔒 Cerrar Turno ${turnoActualNum} e Imprimir`}
+                    </button>
+                  </>
+                )}
               </>
             )}
 
@@ -312,16 +453,19 @@ export default function CierrePage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {cierres.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)', fontSize: 13 }}>No hay cierres registrados</div>
-                ) : cierres.map(c => (
+                ) : cierres.map((c, idx) => (
                   <div key={c.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>{new Date(c.fecha + 'T12:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>
+                          {new Date(c.fecha + 'T12:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6 }}>Turno</span>
+                        </div>
                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>{new Date(c.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--gold)' }}>{fmt(c.ventas_total)}</div>
-                        <div style={{ fontSize: 11, color: c.diferencia === 0 ? 'var(--green)' : c.diferencia > 0 ? 'var(--blue)' : 'var(--red)', fontFamily: 'var(--mono)' }}>
+                        <div style={{ fontSize: 11, color: c.diferencia === 0 ? 'var(--green)' : c.diferencia > 0 ? '#4a9fd4' : 'var(--red)', fontFamily: 'var(--mono)' }}>
                           {c.diferencia >= 0 ? '+' : ''}{fmt(c.diferencia)}
                         </div>
                       </div>
@@ -339,6 +483,14 @@ export default function CierrePage() {
             )}
           </div>
         </div>
+
+        <style>{`
+          @media print {
+            body * { visibility: hidden; }
+            #cierre-print, #cierre-print * { visibility: visible; }
+            #cierre-print { position: fixed; top: 0; left: 0; width: 100%; background: white; }
+          }
+        `}</style>
       </>
     </AuthGuard>
   )
