@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, type Producto } from '@/lib/menu'
+import { getSesion } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
 
@@ -27,7 +28,9 @@ export default function CajaPage() {
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
   const [tabMovil, setTabMovil] = useState<'menu'|'comanda'>('menu')
   const [cajaAbierta, setCajaAbierta] = useState<boolean | null>(null)
-  const [esAdmin, setEsAdmin] = useState(false)
+
+  // Leer el rol directamente desde localStorage en cada render — sin estado intermedio
+  const esAdmin = getSesion()?.rol === 'admin'
 
   // FIX DUPLICACIÓN: ref para saber si la comanda actual ya fue guardada en Supabase
   const yaGuardada = useRef(false)
@@ -43,10 +46,8 @@ export default function CajaPage() {
   }, [])
 
   async function verificarApertura() {
-    const { getSesion } = await import('@/lib/auth')
     const sesion = getSesion()
     const admin = sesion?.rol === 'admin'
-    setEsAdmin(admin)
     if (admin) { setCajaAbierta(true); return }
     const { data } = await supabase
       .from('aperturas_caja')
@@ -413,8 +414,7 @@ export default function CajaPage() {
           ))}
           {esAdmin && (
             <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--green)', fontSize: 18, textDecoration: 'none' }}>🔓</a>
-          )}
-        </nav>
+          )}        </nav>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 12 }}>
           {mensaje && (
             <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>
