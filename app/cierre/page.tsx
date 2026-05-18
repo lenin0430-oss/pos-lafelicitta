@@ -155,7 +155,7 @@ export default function CierrePage() {
     try {
       const { getSesion } = await import('@/lib/auth')
       const sesion = getSesion()
-      cajero = sesion?.nombre || sesion?.usuario || 'Admin'
+      cajero = sesion?.nombre || 'Admin'
     } catch { /* sin sesión */ }
 
     const turnoNum = todasAperturasHoy.length + 1
