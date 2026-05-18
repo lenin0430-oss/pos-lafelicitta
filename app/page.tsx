@@ -49,7 +49,7 @@ export default function CajaPage() {
     const { data } = await supabase
       .from('aperturas_caja')
       .select('id')
-      .gte('created_at', desde)
+      .eq('estado', 'abierta')
       .limit(1)
     setCajaAbierta(!!(data && data.length > 0))
   }
