@@ -132,6 +132,9 @@ export default function CocinaPage() {
 
                     {/* Acciones */}
                     <div style={{ display: 'flex', gap: 6 }}>
+                      <a href={`/?editar=${venta.id}`} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid var(--gold)', background: 'transparent', color: 'var(--gold)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', textAlign: 'center', textDecoration: 'none' }}>
+                        ✏️ Editar
+                      </a>
                       {venta.estado === 'pendiente' && (
                         <button onClick={() => cambiarEstado(venta.id, 'en_proceso')} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: '#e8a32c', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                           🍳 En proceso

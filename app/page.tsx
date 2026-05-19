@@ -47,6 +47,12 @@ export default function CajaPage() {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
     }, 1000)
     verificarApertura()
+
+    if (typeof window !== 'undefined') {
+      const editarId = new URLSearchParams(window.location.search).get('editar')
+      if (editarId) cargarComandaParaEditar(editarId)
+    }
+
     return () => clearInterval(tick)
   }, [])
 
@@ -79,6 +85,44 @@ export default function CajaPage() {
     setTimeout(() => setMensaje(null), 3500)
   }
 
+  async function cargarComandaParaEditar(id: string) {
+    try {
+      const { data, error } = await supabase.from('ventas').select('*').eq('id', id).single()
+      if (error) throw error
+      if (!data) return
+
+      setVentaId(data.id)
+      setMesa(data.mesa || 'Mesa 1')
+      setMesero(data.mesero || '')
+      setPersonas(data.personas || 2)
+      setOrdenNum((data.numero || 1) + 1)
+
+      const itemsEditados = (data.items || []).map((it: any, idx: number) => {
+        const prod = MENU.find(p => p.nombre === it.nombre) || {
+          id: 'editado-' + idx + '-' + Date.now(),
+          nombre: it.nombre,
+          precio: it.precio_unit || 0,
+          categoria: 'Editado'
+        }
+
+        return {
+          id: Date.now() + idx,
+          producto: prod,
+          cantidad: it.cantidad || 1,
+          nota: it.nota || ''
+        }
+      })
+
+      setItems(itemsEditados)
+      setEnviada(true)
+      setCobrada(data.estado === 'listo')
+      setTabMovil('comanda')
+      mostrarMensaje('Comanda abierta para editar ✓', 'ok')
+    } catch (e: unknown) {
+      mostrarMensaje('Error al abrir comanda: ' + (e as Error).message, 'err')
+    }
+  }
+
   function agregarProducto(p: Producto) {
     setItems(prev => {
       const existe = prev.find(i => i.producto.id === p.id && i.nota === '')
@@ -89,12 +133,12 @@ export default function CajaPage() {
   }
 
   function cambiarCantidad(id: number, delta: number) {
-    if (enviada && !esAdmin) { mostrarMensaje('Solo el admin puede modificar una comanda enviada', 'err'); return }
+    if (cobrada) { mostrarMensaje('No se puede modificar una comanda cobrada', 'err'); return }
     setItems(prev => prev.map(i => i.id === id ? { ...i, cantidad: Math.max(1, i.cantidad + delta) } : i))
   }
 
   function eliminarItem(id: number) {
-    if (enviada && !esAdmin) { mostrarMensaje('Solo el admin puede eliminar productos', 'err'); return }
+    if (cobrada) { mostrarMensaje('No se puede eliminar productos de una comanda cobrada', 'err'); return }
     setItems(prev => prev.filter(i => i.id !== id))
   }
 
@@ -114,7 +158,36 @@ export default function CajaPage() {
   // PASO 1: Enviar a cocina — guarda sin pago, imprime comanda
   async function enviarACocina() {
     if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return }
-    if (enviada) { setTimeout(() => window.print(), 200); return } // reimprimir
+
+    if (enviada && ventaId) {
+      setGuardando(true)
+      try {
+        const { error } = await supabase.from('ventas')
+          .update({
+            mesa,
+            mesero: mesero || 'Caja',
+            personas,
+            total,
+            items: items.map(i => ({
+              nombre: i.producto.nombre,
+              cantidad: i.cantidad,
+              precio_unit: i.producto.precio,
+              nota: i.nota
+            }))
+          })
+          .eq('id', ventaId)
+
+        if (error) throw error
+
+        mostrarMensaje('Comanda actualizada en cocina ✓', 'ok')
+        setTimeout(() => window.print(), 400)
+      } catch (e: unknown) {
+        mostrarMensaje('Error al actualizar: ' + (e as Error).message, 'err')
+      }
+      setGuardando(false)
+      return
+    }
+
     setGuardando(true)
     try {
       const { data, error } = await supabase.from('ventas').insert({
@@ -258,8 +331,8 @@ export default function CajaPage() {
         ))}
       </div>
 
-      {enviada && !cobrada && !esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(212,168,67,0.08)', border: '1px solid var(--gold)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', textAlign: 'center' }}>🍳 En cocina — solo el admin puede modificar productos</div>}
-      {enviada && !cobrada && esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(0,200,100,0.08)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>🔑 Admin — puedes modificar la comanda enviada</div>}
+      {enviada && !cobrada && !esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(212,168,67,0.08)', border: '1px solid var(--gold)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', textAlign: 'center' }}>🍳 En cocina — puedes editar y presionar Actualizar cocina</div>}
+      {enviada && !cobrada && esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(0,200,100,0.08)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>🔄 Edita la comanda y actualiza cocina</div>}
       {cobrada && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(76,175,125,0.08)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>✅ Cobrada — haz clic en "Nueva" para la siguiente</div>}
 
       <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
@@ -273,7 +346,7 @@ export default function CajaPage() {
           {/* PASO 1: Enviar a cocina */}
           <button onClick={enviarACocina} disabled={guardando || items.length === 0 || cobrada}
             style={{ flex: 1, padding: '13px', borderRadius: 10, border: 'none', background: cobrada || items.length === 0 ? 'var(--surface2)' : 'var(--gold)', color: cobrada || items.length === 0 ? 'var(--muted)' : '#000', fontSize: 14, fontWeight: 700, cursor: cobrada || items.length === 0 ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: cobrada || items.length === 0 ? 0.4 : 1 }}>
-            {guardando ? '...' : enviada ? '🖨 Reimprimir' : '🖨 Enviar a cocina'}
+            {guardando ? '...' : enviada ? '🔄 Actualizar cocina' : '🖨 Enviar a cocina'}
           </button>
           {/* PASO 2: Cobrar */}
           <button onClick={abrirCobro} disabled={!enviada || cobrada}
