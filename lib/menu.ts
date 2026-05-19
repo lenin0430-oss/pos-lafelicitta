@@ -118,6 +118,26 @@ export const MENU: Producto[] = [
   { id: 'churros-14-salsas', nombre: '14 Churros + 2 Salsas', precio: 6500, categoria: 'Churros', ingredientes: 'Manjar · Chocolate · L. Condensada · Azúcar' },
   { id: 'churros-20-salsas', nombre: '20 Churros + 2 Salsas', precio: 7500, categoria: 'Churros', ingredientes: 'Manjar · Chocolate · L. Condensada · Azúcar' },
 
+
+  // ── PANADERÍA ─────────────────────────────────────────────────
+  { id: 'pan-completon', nombre: 'Completón', precio: 400, categoria: 'Panadería', ingredientes: 'Pan para completón' },
+  { id: 'pan-completo', nombre: 'Completo', precio: 320, categoria: 'Panadería', ingredientes: 'Pan para completo' },
+  { id: 'pan-hot-dog', nombre: 'Hot Dog', precio: 250, categoria: 'Panadería', ingredientes: 'Pan hot dog clásico' },
+  { id: 'pan-perro-caliente', nombre: 'Perro Caliente', precio: 280, categoria: 'Panadería', ingredientes: 'Pan para perro caliente' },
+  { id: 'pan-churrasco-grande', nombre: 'Churrasco Grande', precio: 660, categoria: 'Panadería', ingredientes: 'Pan para churrasco grande' },
+  { id: 'pan-churrasco-normal', nombre: 'Churrasco Normal', precio: 400, categoria: 'Panadería', ingredientes: 'Pan para churrasco normal' },
+  { id: 'pan-churrasco-pequeno', nombre: 'Churrasco Pequeño', precio: 350, categoria: 'Panadería', ingredientes: 'Pan para churrasco pequeño' },
+  { id: 'pan-hot-dog-brioche', nombre: 'Hot Dog Brioche', precio: 400, categoria: 'Panadería', ingredientes: 'Pan brioche para hot dog' },
+  { id: 'pan-hamburguesa-brioche', nombre: 'Hamburguesa Brioche', precio: 400, categoria: 'Panadería', ingredientes: 'Pan brioche para hamburguesa' },
+  { id: 'pan-pepito-xl', nombre: 'Pan de Pepito XL', precio: 800, categoria: 'Panadería', ingredientes: 'Pan especial para pepito XL' },
+  { id: 'pan-pinita', nombre: 'Pan Piñita', precio: 2500, categoria: 'Panadería', ingredientes: 'Pan fresco de la casa' },
+  { id: 'pan-guayaba', nombre: 'Pan de Guayaba', precio: 3000, categoria: 'Panadería', ingredientes: 'Pan dulce con guayaba' },
+
+  // ── CHICHARRÓN ────────────────────────────────────────────────
+  { id: 'chicharron-pequeno', nombre: 'Chicharrón Pequeño', precio: 1000, categoria: 'Chicharrón', ingredientes: 'Porción pequeña' },
+  { id: 'chicharron-mediano', nombre: 'Chicharrón Mediano', precio: 2000, categoria: 'Chicharrón', ingredientes: 'Porción mediana' },
+  { id: 'chicharron-grande', nombre: 'Chicharrón Grande', precio: 2500, categoria: 'Chicharrón', ingredientes: 'Porción grande' },
+
   // ── BEBIDAS ──────────────────────────────────────────────────
   { id: 'coca-500', nombre: 'Coca-Cola 500cc', precio: 1500, categoria: 'Bebidas' },
   { id: 'coca-lata', nombre: 'Coca-Cola Lata', precio: 1300, categoria: 'Bebidas' },
