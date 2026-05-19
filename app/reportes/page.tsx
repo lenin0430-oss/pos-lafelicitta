@@ -71,16 +71,10 @@ export default function ReportesPage() {
       return
     }
 
-    const motivo = prompt('Motivo de la corrección:', 'Cajero registró mal el método de pago')
-    if (motivo === null) return
-
     const { error } = await supabase
       .from('ventas')
       .update({
-        metodo_pago: nuevoPago,
-        correccion_pago: motivo,
-        corregido_por: getSesion()?.nombre || 'Admin',
-        corregido_at: new Date().toISOString()
+        metodo_pago: nuevoPago
       })
       .eq('id', id)
 
@@ -422,7 +416,7 @@ export default function ReportesPage() {
                           <td style={{ padding: '9px 12px' }}>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button onClick={() => { setEditandoPago(v.id); setNuevoPago(v.metodo_pago || '') }} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--gold)', background: 'transparent', color: 'var(--gold)', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>
-                                ✏️ Pago
+                                ✏️ Editar pago
                               </button>
                               <button onClick={() => eliminarVenta(v.id, v.numero)} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--red)', background: 'transparent', color: 'var(--red)', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>
                                 🗑 Eliminar
