@@ -304,13 +304,13 @@ export default function CajaPage() {
           </span>
           {estadoBadge && <span style={{ fontSize: 11, background: estadoBadge.bg, color: estadoBadge.color, borderRadius: 8, padding: '2px 8px', fontWeight: 700 }}>{estadoBadge.label}</span>}
         </div>
-        <button onClick={nuevaComanda} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 12, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--font)' }}>🗑 Nueva</button>
+        <button onClick={nuevaComanda} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 14, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--font)' }}>🗑 Nueva</button>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
         {items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--muted)', fontSize: 14 }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>Toca un producto para agregar
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>Selecciona productos para agregarlos a la comanda
           </div>
         ) : items.map(item => (
           <div key={item.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', opacity: enviada && !esAdmin ? 0.85 : 1 }}>
@@ -411,7 +411,27 @@ export default function CajaPage() {
 
       {/* HEADER */}
       <header className="no-print" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 14px', height: 52, position: 'sticky', top: 0, zIndex: 100 }}>
-        <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 3, color: 'var(--gold)' }}>LA FELICITTA</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+  <img
+    src="/logo-lafelicitta.png"
+    alt="La Felicitta"
+    style={{
+      width: 48,
+      height: 48,
+      objectFit: 'contain',
+      borderRadius: 999,
+      boxShadow: '0 0 16px rgba(212,168,67,.18)'
+    }}
+  />
+  <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
+    <span style={{ fontFamily: 'var(--display)', fontSize: 22, letterSpacing: 3, color: 'var(--gold)', fontWeight: 900 }}>
+      LA FELICITTA
+    </span>
+    <span style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', letterSpacing: 2, marginTop: 4 }}>
+      POS · CAJA
+    </span>
+  </div>
+</div>
         <nav style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
           {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/reportes', '📊']].map(([href, icon]) => (
             <a key={href} href={href} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? '#000' : 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
