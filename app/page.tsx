@@ -299,9 +299,12 @@ export default function CajaPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontFamily: 'var(--display)', fontSize: 14, letterSpacing: 2, color: 'var(--muted)' }}>
-            COMANDA #{String(enviada ? ordenNum - 1 : ordenNum).padStart(3,'0')}
-          </span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: 'linear-gradient(180deg, rgba(212,168,67,.28), rgba(212,168,67,.10))', border: '1px solid rgba(255,214,107,.50)', boxShadow: '0 0 18px rgba(212,168,67,.18)' }}>
+            <span style={{ fontSize: 20 }}>🧾</span>
+            <span style={{ fontFamily: 'var(--display)', fontSize: 21, letterSpacing: 2.4, color: '#FFD66B', fontWeight: 900, textShadow: '0 0 12px rgba(255,214,107,.25)' }}>
+              COMANDA #{String(enviada ? ordenNum - 1 : ordenNum).padStart(3,'0')}
+            </span>
+          </div>
           {estadoBadge && <span style={{ fontSize: 11, background: estadoBadge.bg, color: estadoBadge.color, borderRadius: 8, padding: '2px 8px', fontWeight: 700 }}>{estadoBadge.label}</span>}
         </div>
         <button onClick={nuevaComanda} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 14, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--font)' }}>🗑 Nueva</button>
