@@ -353,12 +353,12 @@ export default function CajaPage() {
         <div style={{ display: 'flex', gap: 8 }}>
           {/* PASO 1: Enviar a cocina */}
           <button onClick={enviarACocina} disabled={guardando || items.length === 0 || cobrada}
-            style={{ flex: 1, padding: '13px', borderRadius: 10, border: 'none', background: cobrada || items.length === 0 ? 'var(--surface2)' : 'var(--gold)', color: cobrada || items.length === 0 ? 'var(--muted)' : '#000', fontSize: 14, fontWeight: 700, cursor: cobrada || items.length === 0 ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: cobrada || items.length === 0 ? 0.4 : 1 }}>
+            style={{ flex: 1, minHeight: 58, padding: '14px 12px', borderRadius: 14, border: items.length === 0 || cobrada ? '1px solid rgba(255,255,255,.08)' : '1px solid #FFD66B', background: items.length === 0 || cobrada ? 'rgba(255,255,255,.03)' : 'linear-gradient(180deg, #FFD66B, #D4A843)', color: items.length === 0 || cobrada ? 'rgba(255,255,255,.25)' : '#111', fontSize: 17, fontWeight: 900, cursor: items.length === 0 || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', boxShadow: items.length === 0 || cobrada ? 'none' : '0 0 18px rgba(212,168,67,.24)', letterSpacing: .2 }}>
             {guardando ? '...' : enviada ? '🔄 Actualizar cocina' : '🖨 Enviar a cocina'}
           </button>
           {/* PASO 2: Cobrar */}
           <button onClick={abrirCobro} disabled={!enviada || cobrada}
-            style={{ flex: 1, padding: '13px', borderRadius: 10, border: '1px solid ' + (!enviada || cobrada ? 'var(--border)' : 'var(--green)'), background: cobrada ? 'var(--green)' : 'transparent', color: cobrada ? '#000' : !enviada ? 'var(--muted)' : 'var(--green)', fontSize: 14, fontWeight: 700, cursor: !enviada || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: !enviada ? 0.35 : 1 }}>
+            style={{ flex: 1, minHeight: 58, padding: '14px 12px', borderRadius: 14, border: !enviada ? '1px solid rgba(255,255,255,.08)' : cobrada ? '1px solid var(--green)' : '1px solid #4CAF7D', background: cobrada ? 'linear-gradient(180deg, #65d89a, #4CAF7D)' : !enviada ? 'rgba(255,255,255,.03)' : 'linear-gradient(180deg, #65d89a, #4CAF7D)', color: !enviada ? 'rgba(255,255,255,.25)' : '#06140b', fontSize: 17, fontWeight: 900, cursor: !enviada || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', boxShadow: !enviada ? 'none' : '0 0 18px rgba(76,175,125,.24)', letterSpacing: .2 }}>
             {cobrada ? '✓ Cobrada' : '💳 Cobrar'}
           </button>
         </div>
