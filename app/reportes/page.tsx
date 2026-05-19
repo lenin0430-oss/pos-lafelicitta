@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getSesion } from '@/lib/auth'
 
 interface Venta {
   id: string
@@ -30,6 +31,9 @@ export default function ReportesPage() {
   const [aperturas, setAperturas] = useState<AperturaCaja[]>([])
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
   const [cargando, setCargando] = useState(true)
+  const [editandoPago, setEditandoPago] = useState<string | null>(null)
+  const [nuevoPago, setNuevoPago] = useState('')
+  const esAdmin = getSesion()?.rol === 'admin'
 
   useEffect(() => { cargarDatos() }, [periodo])
 
@@ -54,6 +58,67 @@ export default function ReportesPage() {
     if (ventasData) setVentas(ventasData)
     if (aperturasData) setAperturas(aperturasData)
     setCargando(false)
+  }
+
+  async function corregirPago(id: string) {
+    if (!esAdmin) {
+      alert('Solo el administrador puede corregir pagos.')
+      return
+    }
+
+    if (!nuevoPago) {
+      alert('Selecciona el método de pago correcto.')
+      return
+    }
+
+    const motivo = prompt('Motivo de la corrección:', 'Cajero registró mal el método de pago')
+    if (motivo === null) return
+
+    const { error } = await supabase
+      .from('ventas')
+      .update({
+        metodo_pago: nuevoPago,
+        correccion_pago: motivo,
+        corregido_por: getSesion()?.nombre || 'Admin',
+        corregido_at: new Date().toISOString()
+      })
+      .eq('id', id)
+
+    if (error) {
+      alert('Error al corregir pago: ' + error.message)
+      return
+    }
+
+    setEditandoPago(null)
+    setNuevoPago('')
+    cargarDatos()
+    alert('Método de pago corregido correctamente.')
+  }
+
+  async function eliminarVenta(id: string, numero: number) {
+    if (!esAdmin) {
+      alert('Solo el administrador puede eliminar ventas.')
+      return
+    }
+
+    const motivo = prompt(`Motivo para eliminar/anular la venta #${String(numero).padStart(3, '0')}:`)
+    if (!motivo) return
+
+    const ok = confirm(`¿Seguro que deseas eliminar/anular la venta #${String(numero).padStart(3, '0')}? Esta acción afecta los reportes.`)
+    if (!ok) return
+
+    const { error } = await supabase
+      .from('ventas')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      alert('Error al eliminar venta: ' + error.message)
+      return
+    }
+
+    cargarDatos()
+    alert('Venta eliminada correctamente.')
   }
 
   function exportarCSV() {
@@ -315,7 +380,7 @@ export default function ReportesPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      {['#', 'Mesa', 'Tipo', 'Productos', 'Método', 'Total', 'Fecha', 'Estado'].map(h => (
+                      {['#', 'Mesa', 'Tipo', 'Productos', 'Método', 'Total', 'Fecha', 'Estado', ...(esAdmin ? ['Acciones'] : [])].map(h => (
                         <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', fontWeight: 500 }}>{h}</th>
                       ))}
                     </tr>
@@ -330,8 +395,21 @@ export default function ReportesPage() {
                         </td>
                         <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--muted)', maxWidth: 200 }}>{(v.items || []).map(i => `${i.cantidad}× ${i.nombre}`).join(', ').substring(0, 50)}{(v.items||[]).length > 2 ? '...' : ''}</td>
                         <td style={{ padding: '9px 12px', fontSize: 12 }}>
-                          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: METODO_COLOR[v.metodo_pago] || 'var(--muted)', marginRight: 6 }} />
-                          {v.metodo_pago}
+                          {editandoPago === v.id ? (
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <select value={nuevoPago} onChange={e => setNuevoPago(e.target.value)} style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px', fontSize: 12 }}>
+                                <option value="">Seleccionar</option>
+                                {['Efectivo', 'Débito', 'Crédito', 'Transferencia', 'Mixto', 'Cortesía'].map(m => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                              <button onClick={() => corregirPago(v.id)} style={{ padding: '5px 8px', borderRadius: 6, border: 'none', background: 'var(--green)', color: '#000', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Guardar</button>
+                              <button onClick={() => { setEditandoPago(null); setNuevoPago('') }} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 11, cursor: 'pointer' }}>Cancelar</button>
+                            </div>
+                          ) : (
+                            <>
+                              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: METODO_COLOR[v.metodo_pago] || 'var(--muted)', marginRight: 6 }} />
+                              {v.metodo_pago}
+                            </>
+                          )}
                         </td>
                         <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', fontWeight: 600 }}>{fmt(v.total)}</td>
                         <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{new Date(v.created_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
@@ -340,6 +418,18 @@ export default function ReportesPage() {
                             {v.estado}
                           </span>
                         </td>
+                        {esAdmin && (
+                          <td style={{ padding: '9px 12px' }}>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button onClick={() => { setEditandoPago(v.id); setNuevoPago(v.metodo_pago || '') }} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--gold)', background: 'transparent', color: 'var(--gold)', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>
+                                ✏️ Pago
+                              </button>
+                              <button onClick={() => eliminarVenta(v.id, v.numero)} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--red)', background: 'transparent', color: 'var(--red)', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>
+                                🗑 Eliminar
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
