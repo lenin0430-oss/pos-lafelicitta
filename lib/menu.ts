@@ -8,6 +8,7 @@ export interface Producto {
 
 export const MENU: Producto[] = [
   // ── COMBOS A LA BRASA ────────────────────────────────────────
+  { id: 'cuarto-pollo-brasa', nombre: '1/4 Pollo a la Brasa', precio: 4000, categoria: 'Combos a la Brasa', ingredientes: 'Pechuga o truto a elección' },
   { id: 'pollo-entero-brasa', nombre: '1 Pollo Entero a la Brasa', precio: 13000, categoria: 'Combos a la Brasa', ingredientes: '1 pollo entero a la brasa' },
   { id: 'medio-pollo-brasa-solo', nombre: '1/2 Pollo a la Brasa', precio: 7000, categoria: 'Combos a la Brasa', ingredientes: 'Medio pollo a la brasa' },
   { id: 'combo-clasico-brasa', nombre: 'Combo Clásico Brasa', precio: 22500, categoria: 'Combos a la Brasa', ingredientes: '1 pollo a la brasa entero + papas fritas + ensalada + bebida 1.5 Lt.' },
