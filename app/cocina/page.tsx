@@ -7,7 +7,7 @@ interface Venta {
   numero: number
   mesa: string
   mesero: string
-  items: { nombre: string; cantidad: number; nota?: string }[]
+  items: { nombre: string; cantidad: number; nota?: string; ingredientes?: string }[]
   estado: 'pendiente' | 'en_proceso' | 'listo'
   created_at: string
   total: number
@@ -123,8 +123,9 @@ export default function CocinaPage() {
                         <div key={idx} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                           <span style={{ fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: 'var(--gold)', minWidth: 24 }}>{item.cantidad}×</span>
                           <div>
-                            <div style={{ fontSize: 14, fontWeight: 500 }}>{item.nombre}</div>
-                            {item.nota && <div style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic' }}>↳ {item.nota}</div>}
+                            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', lineHeight: 1.25 }}>{item.nombre}</div>
+                            {item.ingredientes && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.35, marginTop: 3 }}>↳ {item.ingredientes}</div>}
+                            {item.nota && <div style={{ fontSize: 12, color: 'var(--gold)', fontStyle: 'italic', marginTop: 3 }}>📝 {item.nota}</div>}
                           </div>
                         </div>
                       ))}

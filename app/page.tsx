@@ -102,7 +102,8 @@ export default function CajaPage() {
           id: 'editado-' + idx + '-' + Date.now(),
           nombre: it.nombre,
           precio: it.precio_unit || 0,
-          categoria: 'Editado'
+          categoria: 'Editado',
+          ingredientes: it.ingredientes || ''
         }
 
         return {
@@ -172,7 +173,8 @@ export default function CajaPage() {
               nombre: i.producto.nombre,
               cantidad: i.cantidad,
               precio_unit: i.producto.precio,
-              nota: i.nota
+              nota: i.nota,
+              ingredientes: i.producto.ingredientes || ''
             }))
           })
           .eq('id', ventaId)
@@ -193,7 +195,7 @@ export default function CajaPage() {
       const { data, error } = await supabase.from('ventas').insert({
         numero: ordenNum, mesa, mesero: mesero || 'Caja', personas,
         metodo_pago: '', total,
-        items: items.map(i => ({ nombre: i.producto.nombre, cantidad: i.cantidad, precio_unit: i.producto.precio, nota: i.nota })),
+        items: items.map(i => ({ nombre: i.producto.nombre, cantidad: i.cantidad, precio_unit: i.producto.precio, nota: i.nota, ingredientes: i.producto.ingredientes || '' })),
         estado: 'pendiente', created_at: new Date().toISOString()
       }).select().single()
       if (error) throw error
@@ -324,8 +326,13 @@ export default function CajaPage() {
           <div key={item.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', opacity: enviada && !esAdmin ? 0.85 : 1 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{item.producto.nombre}</div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', marginTop: 2 }}>{fmt(item.producto.precio * item.cantidad)}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', lineHeight: 1.25 }}>{item.producto.nombre}</div>
+                {item.producto.ingredientes && (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, lineHeight: 1.35, whiteSpace: 'normal' }}>
+                    {item.producto.ingredientes}
+                  </div>
+                )}
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', marginTop: 5 }}>{fmt(item.producto.precio * item.cantidad)}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <button onClick={() => cambiarCantidad(item.id, -1)} style={{ ...qtyBtn, opacity: enviada && !esAdmin ? 0.35 : 1, cursor: enviada && !esAdmin ? 'not-allowed' : 'pointer' }}>−</button>
@@ -403,7 +410,11 @@ export default function CajaPage() {
           <tbody>
             {items.map(i => (
               <tr key={i.id}>
-                <td>{i.producto.nombre.length > 13 ? i.producto.nombre.substring(0, 13) + '…' : i.producto.nombre}{i.nota && <span className="nota">↳ {i.nota}</span>}</td>
+                <td>
+                  <strong>{i.producto.nombre}</strong>
+                  {i.producto.ingredientes && <span className="nota">↳ {i.producto.ingredientes}</span>}
+                  {i.nota && <span className="nota">↳ Nota: {i.nota}</span>}
+                </td>
                 <td>{i.cantidad}</td>
                 <td>{fmt(i.cantidad * i.producto.precio)}</td>
               </tr>
