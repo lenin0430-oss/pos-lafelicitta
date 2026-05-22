@@ -7,6 +7,7 @@ export interface Producto {
 }
 
 export const MENU: Producto[] = [
+  { id: 'envase-para-llevar', nombre: 'Envase para llevar', precio: 300, categoria: 'Extras', ingredientes: 'Envase para pedido para llevar' },
   // ── COMBOS A LA BRASA ────────────────────────────────────────
   { id: 'cuarto-pollo-brasa', nombre: '1/4 Pollo a la Brasa Solo', precio: 4000, categoria: 'Combos a la Brasa', ingredientes: 'Pechuga o truto' },
   { id: 'medio-pollo-brasa-solo', nombre: '1/2 Pollo a la Brasa Solo', precio: 7000, categoria: 'Combos a la Brasa', ingredientes: 'Medio pollo a la brasa solo' },
