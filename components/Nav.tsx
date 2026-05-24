@@ -6,6 +6,7 @@ const LINKS = [
   { href: '/gastos', label: '💸 Gastos' },
   { href: '/reportes', label: '📊 Reportes' },
   { href: '/costeo', label: '💰 Costeo' },
+  { href: '/stock', label: '📦 Stock' },
   { href: '/cierre', label: '🔒 Cierre' },
 ]
 export default function Nav({ active }: { active: string }) {
