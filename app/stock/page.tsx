@@ -55,6 +55,7 @@ export default function StockPage() {
   const [formPrecio, setFormPrecio] = useState('')
   const [formStockInicial, setFormStockInicial] = useState('0')
   const [mostrarFormNuevo, setMostrarFormNuevo] = useState(false)
+  const [editandoId, setEditandoId] = useState<string|null>(null)
 
   // Form compra diaria
   const [compraItem, setCompraItem] = useState('')
@@ -92,22 +93,41 @@ export default function StockPage() {
   const ok = items.filter(i => i.stock_actual > i.stock_minimo)
 
   // ── CREAR INSUMO ────────────────────────────────────
+  function abrirEdicion(item: StockItem) {
+    setEditandoId(item.id)
+    setFormNombre(item.nombre)
+    setFormUnidad(item.unidad)
+    setFormMinimo(String(item.stock_minimo))
+    setFormCategoria(item.categoria)
+    setFormPrecio(String(item.precio_ultimo))
+    setFormStockInicial(String(item.stock_actual))
+    setMostrarFormNuevo(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   async function crearInsumo() {
     if (!formNombre || !formPrecio) { mostrarMensaje('Nombre y precio son obligatorios', 'err'); return }
     setGuardando(true)
-    const { error } = await supabase.from('stock_insumos').insert({
+    const datos = {
       nombre: formNombre.trim(),
       unidad: formUnidad,
       stock_actual: parseFloat(formStockInicial) || 0,
       stock_minimo: parseFloat(formMinimo) || 1,
       precio_ultimo: parseFloat(formPrecio),
       categoria: formCategoria,
-    })
-    if (error) { mostrarMensaje('Error: ' + error.message, 'err') }
-    else {
-      mostrarMensaje('Insumo creado ✓', 'ok')
-      setFormNombre(''); setFormPrecio(''); setFormStockInicial('0'); setMostrarFormNuevo(false)
+      updated_at: new Date().toISOString(),
     }
+    if (editandoId) {
+      const { error } = await supabase.from('stock_insumos').update(datos).eq('id', editandoId)
+      if (error) { mostrarMensaje('Error: ' + error.message, 'err') }
+      else { mostrarMensaje('Insumo actualizado ✓', 'ok') }
+    } else {
+      const { error } = await supabase.from('stock_insumos').insert(datos)
+      if (error) { mostrarMensaje('Error: ' + error.message, 'err') }
+      else { mostrarMensaje('Insumo creado ✓', 'ok') }
+    }
+    setFormNombre(''); setFormPrecio(''); setFormStockInicial('0')
+    setMostrarFormNuevo(false); setEditandoId(null)
     setGuardando(false); cargar()
   }
 
@@ -245,7 +265,7 @@ export default function StockPage() {
               {/* Form nuevo insumo */}
               {mostrarFormNuevo && (
                 <div style={{ background: 'var(--surface)', border: '1px solid var(--gold)', borderRadius: 12, padding: 16, marginBottom: 20 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)', marginBottom: 12 }}>➕ Nuevo insumo</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)', marginBottom: 12 }}>{editandoId ? '✏️ Editar insumo' : '➕ Nuevo insumo'}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                     <div>
                       <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Nombre</label>
@@ -278,9 +298,9 @@ export default function StockPage() {
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={crearInsumo} disabled={guardando} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                      {guardando ? '...' : '✓ Crear insumo'}
+                      {guardando ? '...' : editandoId ? '✓ Guardar cambios' : '✓ Crear insumo'}
                     </button>
-                    <button onClick={() => setMostrarFormNuevo(false)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)' }}>Cancelar</button>
+                    <button onClick={() => { setMostrarFormNuevo(false); setEditandoId(null); setFormNombre(''); setFormPrecio('') }} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)' }}>Cancelar</button>
                   </div>
                 </div>
               )}
@@ -318,6 +338,7 @@ export default function StockPage() {
                             </div>
                             <div style={{ fontSize: 10, color: 'var(--muted)' }}>mín: {item.stock_minimo} {item.unidad}</div>
                           </div>
+                          <button onClick={() => abrirEdicion(item)} style={{ background: 'transparent', border: 'none', color: 'var(--gold)', cursor: 'pointer', fontSize: 14, padding: 4 }}>✏️</button>
                           <button onClick={() => eliminarInsumo(item.id, item.nombre)} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 14, padding: 4 }}>🗑</button>
                         </div>
                       </div>
