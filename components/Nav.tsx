@@ -1,24 +1,21 @@
 'use client'
 import { useEffect, useState } from 'react'
-
 const LINKS = [
   { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
   { href: '/gastos', label: '💸 Gastos' },
   { href: '/reportes', label: '📊 Reportes' },
+  { href: '/costeo', label: '💰 Costeo' },
   { href: '/cierre', label: '🔒 Cierre' },
 ]
-
 export default function Nav({ active }: { active: string }) {
   const [hora, setHora] = useState('')
-
   useEffect(() => {
     const tick = setInterval(() => {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
     }, 1000)
     return () => clearInterval(tick)
   }, [])
-
   return (
     <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 100 }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', justifyContent: 'space-between' }}>
