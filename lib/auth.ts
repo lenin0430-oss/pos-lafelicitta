@@ -1,12 +1,10 @@
-// Gestión de sesión simple con localStorage
-// Roles: 'admin' | 'garzon'
-
 export type Rol = 'admin' | 'garzon'
 
 export interface Sesion {
   rol: Rol
   nombre: string
-  expira: number // timestamp
+  empresa_id: string
+  expira: number
 }
 
 const CLAVE = 'lf_sesion'
@@ -28,8 +26,8 @@ export function getSesion(): Sesion | null {
   }
 }
 
-export function setSesion(rol: Rol, nombre: string) {
-  const sesion: Sesion = { rol, nombre, expira: Date.now() + DURACION }
+export function setSesion(rol: Rol, nombre: string, empresa_id: string) {
+  const sesion: Sesion = { rol, nombre, empresa_id, expira: Date.now() + DURACION }
   localStorage.setItem(CLAVE, JSON.stringify(sesion))
 }
 
@@ -40,4 +38,8 @@ export function cerrarSesion() {
 
 export function esAdmin(): boolean {
   return getSesion()?.rol === 'admin'
+}
+
+export function getEmpresaId(): string | null {
+  return getSesion()?.empresa_id || null
 }
