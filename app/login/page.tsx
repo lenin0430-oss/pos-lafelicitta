@@ -43,7 +43,7 @@ export default function LoginPage() {
         setError('PIN incorrecto')
         setPin('')
       } else {
-        setSesion('garzon', data.nombre)
+        setSesion('garzon', data.nombre, 'lafelicitta')
         window.location.href = '/'
       }
     } catch {
@@ -84,7 +84,7 @@ export default function LoginPage() {
         return
       }
 
-      setSesion('admin', 'Lenin')
+      setSesion('admin', 'Admin', 'lafelicitta')
       window.location.href = '/'
     } catch {
       setError('Error de conexión')
