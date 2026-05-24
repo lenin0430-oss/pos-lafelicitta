@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { setSesion, getSesion } from '@/lib/auth'
+import { setSesion } from '@/lib/auth'
 
 export default function LoginPage() {
   const [modo, setModo] = useState<'pin'|'admin'>('pin')
@@ -12,7 +12,6 @@ export default function LoginPage() {
   const [cargando, setCargando] = useState(false)
 
   useEffect(() => {
-    // Limpiar sesión anterior al entrar al login
     localStorage.removeItem('lf_sesion')
   }, [])
 
@@ -43,7 +42,7 @@ export default function LoginPage() {
         setError('PIN incorrecto')
         setPin('')
       } else {
-        setSesion('garzon', data.nombre)
+        setSesion('garzon', data.nombre, data.empresa_id)
         window.location.href = '/'
       }
     } catch {
@@ -57,19 +56,13 @@ export default function LoginPage() {
     setCargando(true)
     setError('')
 
-    // Solo este email puede ser admin
-    if (email.toLowerCase().trim() !== 'lenin0430@gmail.com') {
-      setError('Acceso denegado')
-      setCargando(false)
-      return
-    }
-
     try {
       const { data, error } = await supabase
         .from('usuarios_pos')
         .select('*')
-        .eq('email', 'lenin0430@gmail.com')
+        .eq('email', email.toLowerCase().trim())
         .eq('rol', 'admin')
+        .eq('activo', true)
         .single()
 
       if (error || !data) {
@@ -84,7 +77,7 @@ export default function LoginPage() {
         return
       }
 
-      setSesion('admin', 'Lenin')
+      setSesion('admin', data.nombre, data.empresa_id)
       window.location.href = '/'
     } catch {
       setError('Error de conexión')
@@ -92,7 +85,6 @@ export default function LoginPage() {
     setCargando(false)
   }
 
-  // Cuando el PIN llega a 4 dígitos, verificar automáticamente
   useEffect(() => {
     if (pin.length === 4) verificarPin(pin)
   }, [pin])
@@ -120,15 +112,13 @@ export default function LoginPage() {
       flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'var(--font)', padding: 20
     }}>
-      {/* Logo */}
       <div style={{ fontFamily: 'var(--display)', fontSize: 32, letterSpacing: 4, color: 'var(--gold)', marginBottom: 4 }}>
-        LA FELICITTA
+        MESAPOS
       </div>
       <div style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: 2, marginBottom: 32 }}>
         SISTEMA DE CAJA
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', background: 'var(--surface)', borderRadius: 12, padding: 4, gap: 4, marginBottom: 28, border: '1px solid var(--border)' }}>
         <button onClick={() => { setModo('pin'); setError('') }} style={{ padding: '8px 24px', borderRadius: 10, border: 'none', background: modo === 'pin' ? 'var(--gold)' : 'transparent', color: modo === 'pin' ? '#000' : 'var(--muted)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
           👤 Garzón
@@ -141,7 +131,6 @@ export default function LoginPage() {
       <div style={{ width: '100%', maxWidth: 320 }}>
         {modo === 'pin' ? (
           <>
-            {/* Indicador PIN */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 28 }}>
               {[0,1,2,3].map(i => (
                 <div key={i} style={{
@@ -153,33 +142,23 @@ export default function LoginPage() {
               ))}
             </div>
 
-            {/* Error */}
             {error && (
               <div style={{ textAlign: 'center', color: 'var(--red)', fontSize: 13, marginBottom: 16, padding: '8px', background: 'rgba(217,79,61,.1)', borderRadius: 8, border: '1px solid var(--red)' }}>
                 {error}
               </div>
             )}
 
-            {/* Teclado PIN */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
               {['1','2','3','4','5','6','7','8','9'].map(n => btnPin(n))}
-              <div /> {/* espacio vacío */}
+              <div />
               {btnPin('0')}
-              <button
-                onClick={borrarPin}
-                style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--muted)', fontSize: 20, cursor: 'pointer', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                ⌫
-              </button>
+              <button onClick={borrarPin} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--muted)', fontSize: 20, cursor: 'pointer', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⌫</button>
             </div>
 
-            {cargando && (
-              <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 13, marginTop: 20 }}>Verificando...</div>
-            )}
+            {cargando && <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 13, marginTop: 20 }}>Verificando...</div>}
           </>
         ) : (
           <>
-            {/* Login Admin */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Email</label>
@@ -187,7 +166,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={e => { setEmail(e.target.value); setError('') }}
-                  placeholder="admin@lafelicitta.cl"
+                  placeholder="admin@mirestaurante.com"
                   style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '12px 14px', fontFamily: 'var(--font)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
