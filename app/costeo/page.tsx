@@ -26,7 +26,7 @@ export default function CosteoPage() {
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)', paddingBottom: 40 }}>
-      <Nav />
+      <Nav active="costeo" />
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '24px 16px' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>💰 Costeo de platos</h1>
         <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Precio sugerido y margen real por plato</p>

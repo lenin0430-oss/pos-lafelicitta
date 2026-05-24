@@ -71,7 +71,7 @@ export default function RecetasPage() {
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)', paddingBottom: 40 }}>
-      <Nav />
+      <Nav active="recetas" />
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>📋 Recetas</h1>
         <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Costo de producción por plato</p>
