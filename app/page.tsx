@@ -133,7 +133,7 @@ export default function CajaPage() {
   const productosFiltradosPorCategoria = productosPorBusqueda.filter(p => {
     return normalizarTexto(p.categoria) === normalizarTexto(categoriaActiva)
   })
-  const productosFiltrados = productosFiltradosPorCategoria.length > 0 || busqueda
+  const productosFiltrados = categoriaActiva
     ? productosFiltradosPorCategoria
     : productosPorBusqueda
 
@@ -328,7 +328,12 @@ export default function CajaPage() {
   }
 
   function normalizarTexto(valor: string) {
-    return valor.trim().toLowerCase()
+    return valor
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
   }
 
   function unirCategorias(base: string[], extras: string[]) {
@@ -379,7 +384,15 @@ export default function CajaPage() {
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, alignContent: 'start' as const }}>
-        {productosFiltrados.map(p => (
+        {cargandoCatalogo ? (
+          <div style={{ gridColumn: '1 / -1', color: 'var(--muted)', padding: 20, textAlign: 'center' }}>
+            Cargando productos...
+          </div>
+        ) : productosFiltrados.length === 0 ? (
+          <div style={{ gridColumn: '1 / -1', color: 'var(--muted)', padding: 20, textAlign: 'center' }}>
+            No hay productos en esta categoria.
+          </div>
+        ) : productosFiltrados.map(p => (
           <button key={p.id} onClick={() => agregarProducto(p)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px', color: 'var(--text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', minHeight: 80 }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, lineHeight: 1.3 }}>{p.nombre}</div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 15, color: 'var(--gold)', fontWeight: 700 }}>{fmt(p.precio)}</div>

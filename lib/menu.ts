@@ -406,7 +406,12 @@ function esUuid(valor: string) {
 }
 
 function normalizarTexto(valor: string) {
-  return valor.trim().toLowerCase()
+  return valor
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
 }
 
 function unirCategorias(base: string[], extras: string[]) {
