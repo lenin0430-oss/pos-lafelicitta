@@ -81,7 +81,11 @@ export default function CajaPage() {
 
     try {
       const datos = await cargarDatosEmpresa(empresaId)
-      const categoriasConProductos = Array.from(new Set(datos.menu.map(producto => producto.categoria)))
+      const categoriasConProductos = Array.from(new Set(
+        datos.menu
+          .map(producto => producto.categoria)
+          .filter(categoria => !esCategoriaSinCategoria(categoria))
+      ))
       const categoriasFinales = datos.categorias.length > 0
         ? unirCategorias(datos.categorias, categoriasConProductos)
         : categoriasConProductos
@@ -345,6 +349,7 @@ export default function CajaPage() {
     const resultado: string[] = []
 
     for (const categoria of [...base, ...extras]) {
+      if (esCategoriaSinCategoria(categoria)) continue
       const clave = normalizarTexto(categoria)
       if (vistas.has(clave)) continue
       vistas.add(clave)
@@ -352,6 +357,11 @@ export default function CajaPage() {
     }
 
     return resultado
+  }
+
+  function esCategoriaSinCategoria(categoria?: string | null) {
+    if (!categoria) return false
+    return normalizarTexto(categoria) === 'sin categoria'
   }
 
   const inp: React.CSSProperties = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }

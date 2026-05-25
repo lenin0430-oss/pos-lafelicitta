@@ -451,7 +451,7 @@ function inferirCategoriaProducto(nombre: string) {
   if (clave.includes('churro')) return 'Churros'
   if (clave.includes('pan') || clave.includes('completon') || clave.includes('hot dog')) return 'Panadería'
   if (clave.includes('chicharron')) return 'Chicharrón'
-  if (clave.includes('bebida') || clave.includes('coca') || clave.includes('sprite') || clave.includes('fanta') || clave.includes('agua') || clave.includes('jugo') || clave.includes('cafe') || clave.includes('chocolate') || clave.includes('infusion') || clave.includes(' kr')) return 'Bebidas'
+  if (clave.includes('bebida') || clave.includes('coca') || clave.includes('sprite') || clave.includes('fanta') || clave.includes('agua') || clave.includes('jugo') || clave.includes('cafe') || clave.includes('chocolate') || clave.includes('infusion') || clave.includes(' kr') || clave.includes('fuze') || clave.includes('tea') || clave.includes('inca') || clave.includes('kola') || clave.includes('jumex') || clave.includes('malta') || clave.includes('nectar') || clave.includes('soprole') || clave.includes('pony')) return 'Bebidas'
 
   return null
 }
