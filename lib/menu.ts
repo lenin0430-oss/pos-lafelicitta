@@ -247,11 +247,16 @@ export async function cargarDatosEmpresa(empresaIdOSlug: string): Promise<{
     getMetodosPagoEmpresa(empresa.id),
   ])
 
-  const esLaFelicitta = normalizarTexto(empresa.nombre) === 'la felicitta'
+  const esLaFelicitta = normalizarTexto(empresa.nombre).includes('felicitta')
+  const menuFinal = menu.length > 0 ? menu : esLaFelicitta ? MENU : []
+  const categoriasDesdeMenu = Array.from(new Set(menuFinal.map(producto => producto.categoria)))
+  const categoriasFinal = categorias.length > 0
+    ? unirCategorias(categorias, categoriasDesdeMenu)
+    : esLaFelicitta ? CATEGORIAS : categoriasDesdeMenu
 
   return {
-    menu: menu.length > 0 ? menu : esLaFelicitta ? MENU : [],
-    categorias: categorias.length > 0 ? categorias : esLaFelicitta ? CATEGORIAS : [],
+    menu: menuFinal,
+    categorias: categoriasFinal,
     mesas: mesas.length > 0 ? mesas : esLaFelicitta ? MESAS : [],
     metodosPago: metodosPago.length > 0 ? metodosPago : METODOS_PAGO,
   }
@@ -402,4 +407,18 @@ function esUuid(valor: string) {
 
 function normalizarTexto(valor: string) {
   return valor.trim().toLowerCase()
+}
+
+function unirCategorias(base: string[], extras: string[]) {
+  const vistas = new Set<string>()
+  const resultado: string[] = []
+
+  for (const categoria of [...base, ...extras]) {
+    const clave = normalizarTexto(categoria)
+    if (vistas.has(clave)) continue
+    vistas.add(clave)
+    resultado.push(categoria)
+  }
+
+  return resultado
 }

@@ -77,11 +77,21 @@ export default function CajaPage() {
 
     try {
       const datos = await cargarDatosEmpresa(empresaId)
+      const categoriasConProductos = Array.from(new Set(datos.menu.map(producto => producto.categoria)))
+      const categoriasFinales = datos.categorias.length > 0
+        ? unirCategorias(datos.categorias, categoriasConProductos)
+        : categoriasConProductos
+
       setMenu(datos.menu)
-      setCategorias(datos.categorias)
+      setCategorias(categoriasFinales)
       setMesas(datos.mesas)
       setMetodosPago(datos.metodosPago)
-      setCategoriaActiva(prev => datos.categorias.includes(prev) ? prev : datos.categorias[0] || '')
+      setCategoriaActiva(prev => {
+        const existe = categoriasFinales.some(categoria => normalizarTexto(categoria) === normalizarTexto(prev))
+        const tieneProductos = datos.menu.some(producto => normalizarTexto(producto.categoria) === normalizarTexto(prev))
+        if (existe && tieneProductos) return prev
+        return categoriasConProductos[0] || categoriasFinales[0] || ''
+      })
       setMesa(prev => datos.mesas.includes(prev) ? prev : datos.mesas[0] || 'Mesa 1')
       return datos
     } catch {
@@ -116,11 +126,16 @@ export default function CajaPage() {
     : metodoPago
   const pagoValido = !esPagoMixto ? !!metodoPago : total > 0 && montoMixto === total
 
-  const productosFiltrados = menu.filter(p => {
-    const enCat = p.categoria === categoriaActiva
+  const productosPorBusqueda = menu.filter(p => {
     const enBusq = busqueda === '' || p.nombre.toLowerCase().includes(busqueda.toLowerCase())
-    return enCat && enBusq
+    return enBusq
   })
+  const productosFiltradosPorCategoria = productosPorBusqueda.filter(p => {
+    return normalizarTexto(p.categoria) === normalizarTexto(categoriaActiva)
+  })
+  const productosFiltrados = productosFiltradosPorCategoria.length > 0 || busqueda
+    ? productosFiltradosPorCategoria
+    : productosPorBusqueda
 
   function mostrarMensaje(txt: string, tipo: 'ok' | 'err') {
     setMensaje({ txt, tipo })
@@ -310,6 +325,24 @@ export default function CajaPage() {
     setVentaId(null)
     setModalCobro(false)
     setTabMovil('menu')
+  }
+
+  function normalizarTexto(valor: string) {
+    return valor.trim().toLowerCase()
+  }
+
+  function unirCategorias(base: string[], extras: string[]) {
+    const vistas = new Set<string>()
+    const resultado: string[] = []
+
+    for (const categoria of [...base, ...extras]) {
+      const clave = normalizarTexto(categoria)
+      if (vistas.has(clave)) continue
+      vistas.add(clave)
+      resultado.push(categoria)
+    }
+
+    return resultado
   }
 
   const inp: React.CSSProperties = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }
