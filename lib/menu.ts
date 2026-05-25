@@ -258,9 +258,10 @@ export async function cargarDatosEmpresa(empresaIdOSlug: string): Promise<{
 
   const esLaFelicitta = normalizarTexto(empresa.nombre).includes('felicitta')
   const menuFinal = menu.length > 0 ? menu : esLaFelicitta ? MENU : []
-  const categoriasDesdeMenu = Array.from(new Set(menuFinal.map(producto => producto.categoria)))
-  const categoriasFinal = categorias.length > 0
-    ? unirCategorias(categorias, categoriasDesdeMenu)
+  const categoriasDesdeMenu = Array.from(new Set(menuFinal.map(producto => producto.categoria).filter(categoria => !esCategoriaSinCategoria(categoria))))
+  const categoriasBase = categorias.filter(categoria => !esCategoriaSinCategoria(categoria))
+  const categoriasFinal = categoriasBase.length > 0
+    ? unirCategorias(categoriasBase, categoriasDesdeMenu)
     : esLaFelicitta ? CATEGORIAS : categoriasDesdeMenu
 
   return {
@@ -406,14 +407,16 @@ function normalizarProductoDb(producto: ProductoDb): Producto {
     ? producto.categorias[0]
     : producto.categorias
   const categoriaFallback = inferirCategoriaProducto(producto.nombre)
+  const categoriaDbNombre = categoria?.nombre || ''
+  const usarCategoriaDb = !!categoriaDbNombre && !esCategoriaSinCategoria(categoriaDbNombre)
 
   return {
     id: producto.id,
     nombre: producto.nombre,
     precio: producto.precio,
-    categoria: categoria?.nombre || categoriaFallback || 'Sin categoria',
+    categoria: usarCategoriaDb ? categoriaDbNombre : categoriaFallback || 'Sin categoria',
     categoria_id: producto.categoria_id,
-    categoria_orden: categoria?.orden ?? ordenCategoria(categoriaFallback),
+    categoria_orden: usarCategoriaDb ? categoria?.orden ?? null : ordenCategoria(categoriaFallback),
     ingredientes: producto.descripcion || undefined,
     descripcion: producto.descripcion,
     imagen_url: producto.imagen_url,
@@ -432,9 +435,10 @@ function inferirCategoriaProducto(nombre: string) {
   if (categoriaExacta) return categoriaExacta
 
   if (clave.includes('pollo') && (clave.includes('brasa') || clave.includes('broaster'))) return 'Combos a la Brasa'
-  if (clave.includes('hamburguesa') || clave.includes('burger')) return 'Burgers'
+  if (clave.includes('hamburguesa') || clave.includes('burger') || clave.includes('chuleta') || clave.includes('mechada') || clave.includes('club house')) return 'Burgers'
   if (clave.includes('perro')) return 'Perros'
   if (clave.includes('churrasco') || clave.includes('barros') || clave.includes('chacarero') || clave.startsWith('as ') || clave.includes('italiano')) return 'Completos'
+  if (clave === 'has' || clave === 'hass' || clave.includes('pizzarola')) return 'Completos'
   if (clave.includes('arepa')) return 'Arepas'
   if (clave.includes('cachapa')) return 'Cachapas'
   if (clave.includes('arroz')) return 'Arroz chino'
@@ -456,6 +460,12 @@ function ordenCategoria(categoria: string | null) {
   if (!categoria) return null
   const indice = CATEGORIAS.findIndex(c => normalizarTexto(c) === normalizarTexto(categoria))
   return indice >= 0 ? indice + 1 : null
+}
+
+function esCategoriaSinCategoria(categoria?: string | null) {
+  if (!categoria) return false
+  const clave = normalizarTexto(categoria)
+  return clave === 'sin categoria' || clave === 'sin categorÃ­a'
 }
 
 function normalizarTexto(valor: string) {
