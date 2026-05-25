@@ -1,9 +1,17 @@
+import { supabase } from './supabase'
+
 export interface Producto {
   id: string
   nombre: string
   precio: number
   categoria: string
+  categoria_id?: string | null
+  categoria_orden?: number | null
   ingredientes?: string
+  descripcion?: string | null
+  imagen_url?: string | null
+  disponible?: boolean | null
+  destacado?: boolean | null
 }
 
 export const MENU: Producto[] = [
@@ -180,3 +188,210 @@ export const MESAS = [
 export const METODOS_PAGO = ['Efectivo', 'Débito', 'Transferencia', 'Crédito', 'Cortesía']
 
 export type TipoServicio = 'Servir en mesa' | 'Para llevar' | 'Delivery'
+
+interface EmpresaCatalogo {
+  id: string
+  nombre: string
+  slug?: string | null
+}
+
+interface CategoriaDb {
+  id: string
+  nombre: string
+  orden: number | null
+  activo?: boolean | null
+  activa?: boolean | null
+}
+
+interface MesaDb {
+  id: string
+  nombre: string
+  numero: number | null
+  activo?: boolean | null
+  activa?: boolean | null
+}
+
+interface ProductoDb {
+  id: string
+  nombre: string
+  precio: number
+  descripcion: string | null
+  imagen_url: string | null
+  disponible: boolean | null
+  destacado: boolean | null
+  categoria_id: string | null
+  categorias?: CategoriaDb | CategoriaDb[] | null
+}
+
+export async function cargarDatosEmpresa(empresaIdOSlug: string): Promise<{
+  menu: Producto[]
+  categorias: string[]
+  mesas: string[]
+  metodosPago: string[]
+}> {
+  const empresa = await getEmpresaCatalogo(empresaIdOSlug)
+
+  if (!empresa) {
+    return {
+      menu: MENU,
+      categorias: CATEGORIAS,
+      mesas: MESAS,
+      metodosPago: METODOS_PAGO,
+    }
+  }
+
+  const [menu, categorias, mesas, metodosPago] = await Promise.all([
+    getMenuEmpresa(empresa.id),
+    getCategoriasEmpresa(empresa.id),
+    getMesasEmpresa(empresa.id),
+    getMetodosPagoEmpresa(empresa.id),
+  ])
+
+  const esLaFelicitta = normalizarTexto(empresa.nombre) === 'la felicitta'
+
+  return {
+    menu: menu.length > 0 ? menu : esLaFelicitta ? MENU : [],
+    categorias: categorias.length > 0 ? categorias : esLaFelicitta ? CATEGORIAS : [],
+    mesas: mesas.length > 0 ? mesas : esLaFelicitta ? MESAS : [],
+    metodosPago: metodosPago.length > 0 ? metodosPago : METODOS_PAGO,
+  }
+}
+
+export async function getMenu(empresaIdOSlug: string): Promise<Producto[]> {
+  const empresa = await getEmpresaCatalogo(empresaIdOSlug)
+  if (!empresa) return MENU
+
+  const menu = await getMenuEmpresa(empresa.id)
+  return menu.length > 0 ? menu : normalizarTexto(empresa.nombre) === 'la felicitta' ? MENU : []
+}
+
+export async function getCategorias(empresaIdOSlug: string): Promise<string[]> {
+  const empresa = await getEmpresaCatalogo(empresaIdOSlug)
+  if (!empresa) return CATEGORIAS
+
+  const categorias = await getCategoriasEmpresa(empresa.id)
+  return categorias.length > 0 ? categorias : normalizarTexto(empresa.nombre) === 'la felicitta' ? CATEGORIAS : []
+}
+
+export async function getMesas(empresaIdOSlug: string): Promise<string[]> {
+  const empresa = await getEmpresaCatalogo(empresaIdOSlug)
+  if (!empresa) return MESAS
+
+  const mesas = await getMesasEmpresa(empresa.id)
+  return mesas.length > 0 ? mesas : normalizarTexto(empresa.nombre) === 'la felicitta' ? MESAS : []
+}
+
+async function getEmpresaCatalogo(empresaIdOSlug: string): Promise<EmpresaCatalogo | null> {
+  const valor = empresaIdOSlug.trim()
+  const columna = esUuid(valor) ? 'id' : 'slug'
+
+  const { data, error } = await supabase
+    .from('empresas')
+    .select('id, nombre, slug')
+    .eq(columna, valor)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data as EmpresaCatalogo
+}
+
+async function getMenuEmpresa(empresaId: string): Promise<Producto[]> {
+  const { data, error } = await supabase
+    .from('productos')
+    .select(`
+      id,
+      nombre,
+      precio,
+      descripcion,
+      imagen_url,
+      disponible,
+      destacado,
+      categoria_id,
+      categorias:categoria_id (
+        id,
+        nombre,
+        orden
+      )
+    `)
+    .eq('empresa_id', empresaId)
+    .eq('disponible', true)
+    .order('nombre', { ascending: true })
+
+  if (error || !data) return []
+
+  return (data as ProductoDb[])
+    .map(normalizarProductoDb)
+    .sort((a, b) => {
+      const ordenCat = (a.categoria_orden ?? 999) - (b.categoria_orden ?? 999)
+      return ordenCat !== 0 ? ordenCat : a.nombre.localeCompare(b.nombre, 'es')
+    })
+}
+
+async function getCategoriasEmpresa(empresaId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('categorias')
+    .select('id, nombre, orden, activo, activa')
+    .eq('empresa_id', empresaId)
+    .order('orden', { ascending: true })
+    .order('nombre', { ascending: true })
+
+  if (error || !data) return []
+
+  return (data as CategoriaDb[])
+    .filter(categoria => categoria.activo !== false && categoria.activa !== false)
+    .map(categoria => categoria.nombre)
+}
+
+async function getMesasEmpresa(empresaId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('mesas')
+    .select('id, nombre, numero, activo, activa')
+    .eq('empresa_id', empresaId)
+    .order('numero', { ascending: true })
+    .order('nombre', { ascending: true })
+
+  if (error || !data) return []
+
+  return (data as MesaDb[])
+    .filter(mesa => mesa.activo !== false && mesa.activa !== false)
+    .map(mesa => mesa.nombre)
+}
+
+async function getMetodosPagoEmpresa(empresaId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('configuracion_empresa')
+    .select('metodos_pago')
+    .eq('empresa_id', empresaId)
+    .maybeSingle()
+
+  if (error || !data?.metodos_pago) return METODOS_PAGO
+  return data.metodos_pago as string[]
+}
+
+function normalizarProductoDb(producto: ProductoDb): Producto {
+  const categoria = Array.isArray(producto.categorias)
+    ? producto.categorias[0]
+    : producto.categorias
+
+  return {
+    id: producto.id,
+    nombre: producto.nombre,
+    precio: producto.precio,
+    categoria: categoria?.nombre || 'Sin categoria',
+    categoria_id: producto.categoria_id,
+    categoria_orden: categoria?.orden ?? null,
+    ingredientes: producto.descripcion || undefined,
+    descripcion: producto.descripcion,
+    imagen_url: producto.imagen_url,
+    disponible: producto.disponible,
+    destacado: producto.destacado,
+  }
+}
+
+function esUuid(valor: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(valor)
+}
+
+function normalizarTexto(valor: string) {
+  return valor.trim().toLowerCase()
+}

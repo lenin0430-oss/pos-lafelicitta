@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaIdActual } from '@/lib/auth'
+import AuthGuard from '@/components/AuthGuard'
 
 interface Venta {
   id: string
@@ -44,16 +46,23 @@ export default function CocinaPage() {
   }, [])
 
   async function cargarVentas() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { setVentas([]); return }
+
     const { data } = await supabase
       .from('ventas')
       .select('*')
+      .eq('empresa_id', empresaId)
       .in('estado', ['pendiente', 'en_proceso'])
       .order('created_at', { ascending: true })
     if (data) setVentas(data)
   }
 
   async function cambiarEstado(id: string, estado: string) {
-    await supabase.from('ventas').update({ estado }).eq('id', id)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
+    await supabase.from('ventas').update({ estado }).eq('empresa_id', empresaId).eq('id', id)
     cargarVentas()
   }
 
@@ -65,6 +74,7 @@ export default function CocinaPage() {
   }
 
   return (
+    <AuthGuard>
     <div style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font)' }}>
       {/* Header */}
       <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 20px', height: 56, display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -160,5 +170,6 @@ export default function CocinaPage() {
         )}
       </div>
     </div>
+    </AuthGuard>
   )
 }

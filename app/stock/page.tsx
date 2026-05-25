@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaIdActual } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
 
@@ -72,9 +73,16 @@ export default function StockPage() {
   useEffect(() => { cargar() }, [])
 
   async function cargar() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) {
+      setItems([])
+      setCompras([])
+      return
+    }
+
     const [{ data: s }, { data: c }] = await Promise.all([
-      supabase.from('stock_insumos').select('*').order('nombre'),
-      supabase.from('stock_compras').select('*').order('fecha', { ascending: false }).limit(50),
+      supabase.from('stock_insumos').select('*').eq('empresa_id', empresaId).order('nombre'),
+      supabase.from('stock_compras').select('*').eq('empresa_id', empresaId).order('fecha', { ascending: false }).limit(50),
     ])
     if (s) setItems(s)
     if (c) setCompras(c)
@@ -107,6 +115,9 @@ export default function StockPage() {
 
   async function crearInsumo() {
     if (!formNombre || !formPrecio) { mostrarMensaje('Nombre y precio son obligatorios', 'err'); return }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     setGuardando(true)
     const datos = {
       nombre: formNombre.trim(),
@@ -118,11 +129,11 @@ export default function StockPage() {
       updated_at: new Date().toISOString(),
     }
     if (editandoId) {
-      const { error } = await supabase.from('stock_insumos').update(datos).eq('id', editandoId)
+      const { error } = await supabase.from('stock_insumos').update(datos).eq('empresa_id', empresaId).eq('id', editandoId)
       if (error) { mostrarMensaje('Error: ' + error.message, 'err') }
       else { mostrarMensaje('Insumo actualizado ✓', 'ok') }
     } else {
-      const { error } = await supabase.from('stock_insumos').insert(datos)
+      const { error } = await supabase.from('stock_insumos').insert({ ...datos, empresa_id: empresaId })
       if (error) { mostrarMensaje('Error: ' + error.message, 'err') }
       else { mostrarMensaje('Insumo creado ✓', 'ok') }
     }
@@ -136,6 +147,9 @@ export default function StockPage() {
     if (!compraItem || !compraCantidad || !compraPrecio) {
       mostrarMensaje('Completa todos los campos', 'err'); return
     }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     setGuardando(true)
     const item = items.find(i => i.id === compraItem)
     if (!item) return
@@ -145,6 +159,7 @@ export default function StockPage() {
 
     // Registrar compra
     await supabase.from('stock_compras').insert({
+      empresa_id: empresaId,
       insumo_id: item.id,
       insumo_nombre: item.nombre,
       cantidad,
@@ -159,7 +174,7 @@ export default function StockPage() {
       stock_actual: item.stock_actual + cantidad,
       precio_ultimo: precioUnitario,
       updated_at: new Date().toISOString(),
-    }).eq('id', item.id)
+    }).eq('empresa_id', empresaId).eq('id', item.id)
 
     mostrarMensaje(`+${cantidad} ${item.unidad} de ${item.nombre} registrado ✓`, 'ok')
     setCompraItem(''); setCompraCantidad(''); setCompraPrecio(''); setCompraNota('')
@@ -169,6 +184,9 @@ export default function StockPage() {
   // ── REGISTRAR MERMA / CONSUMO ───────────────────────
   async function registrarMerma() {
     if (!mermaItem || !mermaCantidad) { mostrarMensaje('Selecciona insumo y cantidad', 'err'); return }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     setGuardando(true)
     const item = items.find(i => i.id === mermaItem)
     if (!item) return
@@ -176,6 +194,7 @@ export default function StockPage() {
     if (cantidad > item.stock_actual) { mostrarMensaje('No hay suficiente stock', 'err'); setGuardando(false); return }
 
     await supabase.from('stock_movimientos').insert({
+      empresa_id: empresaId,
       insumo_id: item.id,
       insumo_nombre: item.nombre,
       tipo: mermaTipo,
@@ -187,7 +206,7 @@ export default function StockPage() {
     await supabase.from('stock_insumos').update({
       stock_actual: item.stock_actual - cantidad,
       updated_at: new Date().toISOString(),
-    }).eq('id', item.id)
+    }).eq('empresa_id', empresaId).eq('id', item.id)
 
     const label = mermaTipo === 'merma' ? 'Merma' : mermaTipo === 'consumo_interno' ? 'Consumo interno' : 'Ajuste'
     mostrarMensaje(`${label} registrado: -${cantidad} ${item.unidad} de ${item.nombre}`, 'ok')
@@ -197,7 +216,9 @@ export default function StockPage() {
 
   async function eliminarInsumo(id: string, nombre: string) {
     if (!confirm(`¿Eliminar "${nombre}" del stock?`)) return
-    await supabase.from('stock_insumos').delete().eq('id', id)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+    await supabase.from('stock_insumos').delete().eq('empresa_id', empresaId).eq('id', id)
     mostrarMensaje('Eliminado', 'ok'); cargar()
   }
 

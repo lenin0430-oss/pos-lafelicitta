@@ -1,7 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaIdActual } from '@/lib/auth'
 import Nav from '@/components/Nav'
+import AuthGuard from '@/components/AuthGuard'
 
 const CATEGORIAS = [
   { id: 'ingredientes', label: '🥩 Ingredientes / Insumos', color: '#e8a32c' },
@@ -31,6 +33,9 @@ export default function GastosPage() {
   useEffect(() => { cargarGastos() }, [filtro])
 
   async function cargarGastos() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { setGastos([]); return }
+
     const ahora = new Date()
     let desde: Date
     if (filtro === 'hoy') desde = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
@@ -40,6 +45,7 @@ export default function GastosPage() {
     const { data } = await supabase
       .from('gastos')
       .select('*')
+      .eq('empresa_id', empresaId)
       .gte('created_at', desde.toISOString())
       .order('created_at', { ascending: false })
     if (data) setGastos(data)
@@ -48,8 +54,12 @@ export default function GastosPage() {
   async function registrarGasto() {
     if (!descripcion.trim()) { mostrarMensaje('Ingresa una descripción', 'err'); return }
     if (!monto || parseFloat(monto) <= 0) { mostrarMensaje('Ingresa un monto válido', 'err'); return }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     setGuardando(true)
     const { error } = await supabase.from('gastos').insert({
+      empresa_id: empresaId,
       categoria,
       descripcion: descripcion.trim(),
       monto: parseFloat(monto),
@@ -67,7 +77,9 @@ export default function GastosPage() {
 
   async function eliminarGasto(id: string) {
     if (!confirm('¿Eliminar este gasto?')) return
-    await supabase.from('gastos').delete().eq('id', id)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+    await supabase.from('gastos').delete().eq('empresa_id', empresaId).eq('id', id)
     cargarGastos()
   }
 
@@ -88,6 +100,7 @@ export default function GastosPage() {
   const catActiva = CATEGORIAS.find(c => c.id === categoria)
 
   return (
+    <AuthGuard>
     <div style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font)', paddingBottom: 80 }}>
       <Nav active="/gastos" />
 
@@ -179,5 +192,6 @@ export default function GastosPage() {
         </div>
       </div>
     </div>
+    </AuthGuard>
   )
 }

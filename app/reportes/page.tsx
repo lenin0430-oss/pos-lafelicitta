@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getSesion } from '@/lib/auth'
+import { getEmpresaIdActual, getSesion } from '@/lib/auth'
+import AuthGuard from '@/components/AuthGuard'
 
 interface Venta {
   id: string
@@ -39,6 +40,14 @@ export default function ReportesPage() {
 
   async function cargarDatos() {
     setCargando(true)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) {
+      setVentas([])
+      setAperturas([])
+      setCargando(false)
+      return
+    }
+
     const ahora = new Date()
     let desde: Date
 
@@ -51,8 +60,8 @@ export default function ReportesPage() {
     }
 
     const [{ data: ventasData }, { data: aperturasData }] = await Promise.all([
-      supabase.from('ventas').select('*').gte('created_at', desde.toISOString()).order('created_at', { ascending: false }),
-      supabase.from('aperturas_caja').select('*').gte('created_at', desde.toISOString()).order('created_at', { ascending: false })
+      supabase.from('ventas').select('*').eq('empresa_id', empresaId).gte('created_at', desde.toISOString()).order('created_at', { ascending: false }),
+      supabase.from('aperturas_caja').select('*').eq('empresa_id', empresaId).gte('created_at', desde.toISOString()).order('created_at', { ascending: false })
     ])
 
     if (ventasData) setVentas(ventasData)
@@ -71,11 +80,15 @@ export default function ReportesPage() {
       return
     }
 
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
     const { error } = await supabase
       .from('ventas')
       .update({
         metodo_pago: nuevoPago
       })
+      .eq('empresa_id', empresaId)
       .eq('id', id)
 
     if (error) {
@@ -101,9 +114,13 @@ export default function ReportesPage() {
     const ok = confirm(`¿Seguro que deseas eliminar/anular la venta #${String(numero).padStart(3, '0')}? Esta acción afecta los reportes.`)
     if (!ok) return
 
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
     const { error } = await supabase
       .from('ventas')
       .delete()
+      .eq('empresa_id', empresaId)
       .eq('id', id)
 
     if (error) {
@@ -200,6 +217,7 @@ export default function ReportesPage() {
   )
 
   return (
+    <AuthGuard>
     <div style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font)' }}>
       {/* Header */}
       <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 20px', height: 56, display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -435,5 +453,6 @@ export default function ReportesPage() {
         )}
       </div>
     </div>
+    </AuthGuard>
   )
 }

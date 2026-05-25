@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, type Producto } from '@/lib/menu'
-import { getSesion } from '@/lib/auth'
+import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
+import { getEmpresaIdActual, getSesion } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
 
@@ -18,6 +18,11 @@ export default function CajaPage() {
   const [mesero, setMesero] = useState('')
   const [personas, setPersonas] = useState(2)
   const [items, setItems] = useState<ItemComanda[]>([])
+  const [menu, setMenu] = useState<Producto[]>(MENU)
+  const [categorias, setCategorias] = useState<string[]>(CATEGORIAS)
+  const [mesas, setMesas] = useState<string[]>(MESAS)
+  const [metodosPago, setMetodosPago] = useState<string[]>(METODOS_PAGO)
+  const [cargandoCatalogo, setCargandoCatalogo] = useState(true)
   const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0] || '')
   const [busqueda, setBusqueda] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -41,25 +46,62 @@ export default function CajaPage() {
   const esAdmin = getSesion()?.rol === 'admin'
 
   useEffect(() => {
-    const n = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
-    setOrdenNum(n)
+    inicializarCaja()
+
     const tick = setInterval(() => {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
     }, 1000)
-    verificarApertura()
-
-    if (typeof window !== 'undefined') {
-      const editarId = new URLSearchParams(window.location.search).get('editar')
-      if (editarId) cargarComandaParaEditar(editarId)
-    }
 
     return () => clearInterval(tick)
   }, [])
 
+  async function inicializarCaja() {
+    const n = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
+    setOrdenNum(n)
+    verificarApertura()
+
+    const catalogo = await cargarCatalogo()
+
+    if (typeof window !== 'undefined') {
+      const editarId = new URLSearchParams(window.location.search).get('editar')
+      if (editarId) cargarComandaParaEditar(editarId, catalogo.menu)
+    }
+  }
+
+  async function cargarCatalogo() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) {
+      setCargandoCatalogo(false)
+      return { menu: MENU, categorias: CATEGORIAS, mesas: MESAS, metodosPago: METODOS_PAGO }
+    }
+
+    try {
+      const datos = await cargarDatosEmpresa(empresaId)
+      setMenu(datos.menu)
+      setCategorias(datos.categorias)
+      setMesas(datos.mesas)
+      setMetodosPago(datos.metodosPago)
+      setCategoriaActiva(prev => datos.categorias.includes(prev) ? prev : datos.categorias[0] || '')
+      setMesa(prev => datos.mesas.includes(prev) ? prev : datos.mesas[0] || 'Mesa 1')
+      return datos
+    } catch {
+      return { menu: MENU, categorias: CATEGORIAS, mesas: MESAS, metodosPago: METODOS_PAGO }
+    } finally {
+      setCargandoCatalogo(false)
+    }
+  }
+
   async function verificarApertura() {
     const sesion = getSesion()
     if (sesion?.rol === 'admin') { setCajaAbierta(true); return }
-    const { data } = await supabase.from('aperturas_caja').select('id').eq('estado', 'abierta').limit(1)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { setCajaAbierta(false); return }
+    const { data } = await supabase
+      .from('aperturas_caja')
+      .select('id')
+      .eq('empresa_id', empresaId)
+      .eq('estado', 'abierta')
+      .limit(1)
     setCajaAbierta(!!(data && data.length > 0))
   }
 
@@ -74,7 +116,7 @@ export default function CajaPage() {
     : metodoPago
   const pagoValido = !esPagoMixto ? !!metodoPago : total > 0 && montoMixto === total
 
-  const productosFiltrados = MENU.filter(p => {
+  const productosFiltrados = menu.filter(p => {
     const enCat = p.categoria === categoriaActiva
     const enBusq = busqueda === '' || p.nombre.toLowerCase().includes(busqueda.toLowerCase())
     return enCat && enBusq
@@ -85,9 +127,17 @@ export default function CajaPage() {
     setTimeout(() => setMensaje(null), 3500)
   }
 
-  async function cargarComandaParaEditar(id: string) {
+  async function cargarComandaParaEditar(id: string, menuActual: Producto[] = menu) {
     try {
-      const { data, error } = await supabase.from('ventas').select('*').eq('id', id).single()
+      const empresaId = await getEmpresaIdActual()
+      if (!empresaId) throw new Error('No hay empresa activa en la sesión')
+
+      const { data, error } = await supabase
+        .from('ventas')
+        .select('*')
+        .eq('empresa_id', empresaId)
+        .eq('id', id)
+        .single()
       if (error) throw error
       if (!data) return
 
@@ -98,7 +148,7 @@ export default function CajaPage() {
       setOrdenNum((data.numero || 1) + 1)
 
       const itemsEditados = (data.items || []).map((it: any, idx: number) => {
-        const prod = MENU.find(p => p.nombre === it.nombre) || {
+        const prod = menuActual.find(p => p.nombre === it.nombre) || {
           id: 'editado-' + idx + '-' + Date.now(),
           nombre: it.nombre,
           precio: it.precio_unit || 0,
@@ -160,6 +210,9 @@ export default function CajaPage() {
   async function enviarACocina() {
     if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return }
 
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     if (enviada && ventaId) {
       setGuardando(true)
       try {
@@ -177,6 +230,7 @@ export default function CajaPage() {
               ingredientes: i.producto.ingredientes || ''
             }))
           })
+          .eq('empresa_id', empresaId)
           .eq('id', ventaId)
 
         if (error) throw error
@@ -193,6 +247,7 @@ export default function CajaPage() {
     setGuardando(true)
     try {
       const { data, error } = await supabase.from('ventas').insert({
+        empresa_id: empresaId,
         numero: ordenNum, mesa, mesero: mesero || 'Caja', personas,
         metodo_pago: '', total,
         items: items.map(i => ({ nombre: i.producto.nombre, cantidad: i.cantidad, precio_unit: i.producto.precio, nota: i.nota, ingredientes: i.producto.ingredientes || '' })),
@@ -225,10 +280,14 @@ export default function CajaPage() {
       mostrarMensaje(esPagoMixto ? `Falta ${fmt(Math.max(restanteMixto, 0))}` : 'Selecciona método de pago', 'err')
       return
     }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     setCobrando(true)
     try {
       const { error } = await supabase.from('ventas')
         .update({ metodo_pago: detalleMetodoPago, estado: 'listo' })
+        .eq('empresa_id', empresaId)
         .eq('id', ventaId)
       if (error) throw error
       setCobrada(true)
@@ -268,7 +327,7 @@ export default function CajaPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: 8, marginBottom: 8 }}>
           <div>
             <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Mesa</label>
-            <select value={mesa} onChange={e => setMesa(e.target.value)} style={sel}>{MESAS.map(m => <option key={m}>{m}</option>)}</select>
+            <select value={mesa} onChange={e => setMesa(e.target.value)} style={sel}>{mesas.map(m => <option key={m}>{m}</option>)}</select>
           </div>
           <div>
             <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Mesero</label>
@@ -282,7 +341,7 @@ export default function CajaPage() {
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar producto..." style={{ ...inp, background: 'var(--surface)' }} />
       </div>
       <div style={{ display: 'flex', gap: 6, padding: '10px 14px', overflowX: 'auto', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        {CATEGORIAS.map(cat => (
+        {categorias.map(cat => (
           <button key={cat} onClick={() => setCategoriaActiva(cat)} style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva ? '#000' : 'var(--muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}>{cat}</button>
         ))}
       </div>
@@ -505,7 +564,7 @@ export default function CajaPage() {
                 {metodoPago ? '💳 Método de pago' : '⚠️ Selecciona método de pago'}
               </label>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {[...METODOS_PAGO, 'Mixto'].map(m => (
+                {[...metodosPago, 'Mixto'].map(m => (
                   <button key={m} onClick={() => seleccionarMetodoPago(m)} style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
                 ))}
               </div>

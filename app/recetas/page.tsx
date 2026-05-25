@@ -1,7 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaIdActual } from '@/lib/auth'
 import Nav from '@/components/Nav'
+import AuthGuard from '@/components/AuthGuard'
 
 interface Insumo { id: string; nombre: string; precio: number; cantidad: number; unidad: string }
 interface Ingrediente { insumoId: string; nombre: string; cantidad: number; unidad: string; costo: number }
@@ -20,11 +22,17 @@ export default function RecetasPage() {
   useEffect(() => { cargarInsumos(); cargarRecetas() }, [])
 
   async function cargarInsumos() {
-    const { data } = await supabase.from('insumos').select('*').order('nombre')
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { setInsumos([]); return }
+
+    const { data } = await supabase.from('insumos').select('*').eq('empresa_id', empresaId).order('nombre')
     if (data) setInsumos(data)
   }
   async function cargarRecetas() {
-    const { data } = await supabase.from('recetas').select('*').order('producto_nombre')
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { setRecetas([]); return }
+
+    const { data } = await supabase.from('recetas').select('*').eq('empresa_id', empresaId).order('producto_nombre')
     if (data) setRecetas(data)
   }
 
@@ -47,11 +55,14 @@ export default function RecetasPage() {
   async function guardar() {
     if (!nombre.trim()) { mostrarMensaje('Ingresa el nombre del plato', 'err'); return }
     if (ingredientes.length === 0) { mostrarMensaje('Agrega al menos un ingrediente', 'err'); return }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     const datos = { producto_nombre: nombre.trim(), ingredientes, costo_total: costoTotal }
     if (editandoId) {
-      await supabase.from('recetas').update(datos).eq('id', editandoId)
+      await supabase.from('recetas').update(datos).eq('empresa_id', empresaId).eq('id', editandoId)
     } else {
-      await supabase.from('recetas').insert(datos)
+      await supabase.from('recetas').insert({ ...datos, empresa_id: empresaId })
     }
     mostrarMensaje('Receta guardada ✓', 'ok')
     setNombre(''); setIngredientes([]); setEditandoId(null); cargarRecetas()
@@ -59,7 +70,9 @@ export default function RecetasPage() {
 
   async function eliminar(id: string) {
     if (!confirm('¿Eliminar esta receta?')) return
-    await supabase.from('recetas').delete().eq('id', id); cargarRecetas()
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+    await supabase.from('recetas').delete().eq('empresa_id', empresaId).eq('id', id); cargarRecetas()
   }
 
   function editar(r: Receta) {
@@ -70,6 +83,7 @@ export default function RecetasPage() {
   const inp = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text)', fontSize: 14, width: '100%' }
 
   return (
+    <AuthGuard>
     <main style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)', paddingBottom: 40 }}>
       <Nav active="recetas" />
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
@@ -147,5 +161,6 @@ export default function RecetasPage() {
         </div>
       </div>
     </main>
+    </AuthGuard>
   )
 }

@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { MENU, CATEGORIAS, type Producto } from '@/lib/menu'
+import { MENU, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
+import { getEmpresaIdActual } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
 
@@ -10,6 +11,8 @@ interface Ingrediente { insumoId: string; nombre: string; cantidad: number; unid
 interface Receta { id: string; producto_nombre: string; ingredientes: Ingrediente[]; costo_total: number }
 
 export default function CosteoPage() {
+  const [menu, setMenu] = useState<Producto[]>(MENU)
+  const [categorias, setCategorias] = useState<string[]>(CATEGORIAS)
   const [insumos, setInsumos]   = useState<Insumo[]>([])
   const [recetas, setRecetas]   = useState<Receta[]>([])
   const [margen,  setMargen]    = useState(65)
@@ -37,12 +40,20 @@ export default function CosteoPage() {
   useEffect(() => { cargar() }, [])
 
   async function cargar() {
-    const [{ data: ins }, { data: rec }] = await Promise.all([
-      supabase.from('insumos').select('*').order('nombre'),
-      supabase.from('recetas').select('*').order('producto_nombre'),
+    const empresaId = await getEmpresaIdActual()
+    const catalogoPromise = empresaId
+      ? cargarDatosEmpresa(empresaId)
+      : Promise.resolve({ menu: MENU, categorias: CATEGORIAS, mesas: [], metodosPago: [] })
+
+    const [{ data: ins }, { data: rec }, catalogo] = await Promise.all([
+      empresaId ? supabase.from('insumos').select('*').eq('empresa_id', empresaId).order('nombre') : Promise.resolve({ data: [] }),
+      empresaId ? supabase.from('recetas').select('*').eq('empresa_id', empresaId).order('producto_nombre') : Promise.resolve({ data: [] }),
+      catalogoPromise,
     ])
     if (ins) setInsumos(ins)
     if (rec) setRecetas(rec)
+    setMenu(catalogo.menu)
+    setCategorias(catalogo.categorias)
   }
 
   const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
@@ -57,12 +68,15 @@ export default function CosteoPage() {
   // ── INSUMOS ─────────────────────────────────────────
   async function guardarInsumo() {
     if (!insNombre || !insPrecio) { mostrarMensaje('Nombre y precio son obligatorios', 'err'); return }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     setGuardando(true)
     const datos = { nombre: insNombre.trim(), precio: parseFloat(insPrecio), cantidad: parseFloat(insCantidad), unidad: insUnidad, proveedor: insProveedor.trim() }
     if (editInsId) {
-      await supabase.from('insumos').update(datos).eq('id', editInsId)
+      await supabase.from('insumos').update(datos).eq('empresa_id', empresaId).eq('id', editInsId)
     } else {
-      await supabase.from('insumos').insert(datos)
+      await supabase.from('insumos').insert({ ...datos, empresa_id: empresaId })
     }
     setInsNombre(''); setInsPrecio(''); setInsCantidad('1'); setInsUnidad('kg'); setInsProveedor(''); setEditInsId(null)
     mostrarMensaje(editInsId ? 'Insumo actualizado ✓' : 'Insumo agregado ✓', 'ok')
@@ -78,7 +92,9 @@ export default function CosteoPage() {
 
   async function eliminarInsumo(id: string) {
     if (!confirm('¿Eliminar este insumo?')) return
-    await supabase.from('insumos').delete().eq('id', id)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+    await supabase.from('insumos').delete().eq('empresa_id', empresaId).eq('id', id)
     mostrarMensaje('Insumo eliminado', 'ok'); cargar()
   }
 
@@ -95,13 +111,16 @@ export default function CosteoPage() {
 
   async function guardarReceta() {
     if (!formNombre || formIngredientes.length === 0) { mostrarMensaje('Completa nombre e ingredientes', 'err'); return }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     setGuardando(true)
     const costo_total = formIngredientes.reduce((s, i) => s + i.costo, 0)
     const datos = { producto_nombre: formNombre.trim(), ingredientes: formIngredientes, costo_total }
     if (editandoId) {
-      await supabase.from('recetas').update(datos).eq('id', editandoId)
+      await supabase.from('recetas').update(datos).eq('empresa_id', empresaId).eq('id', editandoId)
     } else {
-      await supabase.from('recetas').insert(datos)
+      await supabase.from('recetas').insert({ ...datos, empresa_id: empresaId })
     }
     setFormNombre(''); setFormIngredientes([]); setEditandoId(null)
     mostrarMensaje(editandoId ? 'Receta actualizada ✓' : 'Receta guardada ✓', 'ok')
@@ -114,12 +133,14 @@ export default function CosteoPage() {
 
   async function eliminarReceta(id: string) {
     if (!confirm('¿Eliminar esta receta?')) return
-    await supabase.from('recetas').delete().eq('id', id)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+    await supabase.from('recetas').delete().eq('empresa_id', empresaId).eq('id', id)
     mostrarMensaje('Receta eliminada', 'ok'); cargar()
   }
 
   // ── CRUZAR RECETAS CON MENÚ ──────────────────────────
-  const productosConCosto = MENU.map(p => {
+  const productosConCosto = menu.map(p => {
     const receta = recetas.find(r => r.producto_nombre.toLowerCase() === p.nombre.toLowerCase())
     return { ...p, receta: receta || null }
   }).filter(p => {
@@ -179,7 +200,7 @@ export default function CosteoPage() {
                 <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar plato..." style={{ ...inp, width: 'auto', flex: 1, minWidth: 180 }} />
                 <select value={catFiltro} onChange={e => setCatFiltro(e.target.value)} style={{ ...sel, width: 'auto' }}>
                   <option value="Todas">Todas las categorías</option>
-                  {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+                  {categorias.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
 
@@ -285,7 +306,7 @@ export default function CosteoPage() {
                   <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 1 }}>Nombre del plato</label>
                   <input list="menu-productos" value={formNombre} onChange={e => setFormNombre(e.target.value)} placeholder="Ej: La Felicitta, Arepa con Queso..." style={inp} />
                   <datalist id="menu-productos">
-                    {MENU.map(p => <option key={p.id} value={p.nombre} />)}
+                    {menu.map(p => <option key={p.id} value={p.nombre} />)}
                   </datalist>
                 </div>
 

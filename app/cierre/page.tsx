@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaIdActual } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
 
@@ -65,6 +66,9 @@ export default function CierrePage() {
   }
 
   async function cargarAperturaActiva() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
     const hoy = new Date()
     const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
 
@@ -72,6 +76,7 @@ export default function CierrePage() {
     const { data } = await supabase
       .from('aperturas_caja')
       .select('*')
+      .eq('empresa_id', empresaId)
       .gte('created_at', desde)
       .order('created_at', { ascending: false })
 
@@ -89,10 +94,14 @@ export default function CierrePage() {
   }
 
   async function cargarVentasTurno(aperturaId: string, desde: string) {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
     // Ventas desde la apertura hasta ahora (o hasta el cierre del turno)
     const { data } = await supabase
       .from('ventas')
       .select('*')
+      .eq('empresa_id', empresaId)
       .gte('created_at', desde)
       .order('created_at', { ascending: true })
 
@@ -112,6 +121,9 @@ export default function CierrePage() {
   }
 
   async function cargarVentasHoy() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
     const hoy = new Date()
     const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
     const hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1).toISOString()
@@ -119,6 +131,7 @@ export default function CierrePage() {
     const { data } = await supabase
       .from('ventas')
       .select('*')
+      .eq('empresa_id', empresaId)
       .gte('created_at', desde)
       .lt('created_at', hasta)
 
@@ -138,15 +151,22 @@ export default function CierrePage() {
   }
 
   async function cargarCierres() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
     const { data } = await supabase
       .from('cierres_caja')
       .select('*')
+      .eq('empresa_id', empresaId)
       .order('created_at', { ascending: false })
       .limit(20)
     if (data) setCierres(data)
   }
 
   async function registrarApertura() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     const monto = parseInt(montoApertura) || 0
     setGuardandoApertura(true)
 
@@ -161,6 +181,7 @@ export default function CierrePage() {
     const turnoNum = todasAperturasHoy.length + 1
 
     const { error } = await supabase.from('aperturas_caja').insert({
+      empresa_id: empresaId,
       monto_inicial: monto,
       cajero,
       estado: 'abierta',
@@ -181,6 +202,8 @@ export default function CierrePage() {
   async function cerrarTurnoActual() {
     if (!aperturaActiva) return
     if (!efectivoFisico) { mostrarMensaje('Ingresa el efectivo físico', 'err'); return }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
 
     const fisico = parseInt(efectivoFisico) || 0
     const diferencia = fisico - resumenTurno.efectivo
@@ -189,6 +212,7 @@ export default function CierrePage() {
     try {
       // 1. Registrar cierre
       const { error: errCierre } = await supabase.from('cierres_caja').insert({
+        empresa_id: empresaId,
         fecha: new Date().toISOString().split('T')[0],
         ventas_total: resumenTurno.total,
         ventas_efectivo: resumenTurno.efectivo,
@@ -207,6 +231,7 @@ export default function CierrePage() {
       const { error: errAp } = await supabase
         .from('aperturas_caja')
         .update({ estado: 'cerrada', cerrada_at: new Date().toISOString() })
+        .eq('empresa_id', empresaId)
         .eq('id', aperturaActiva.id)
       if (errAp) throw errAp
 

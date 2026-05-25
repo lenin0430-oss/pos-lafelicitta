@@ -1,7 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { setSesion, getSesion } from '@/lib/auth'
+import { resolverEmpresaId, setSesion, getSesion } from '@/lib/auth'
+
+const EMPRESA_SLUG_DEFAULT = 'lafelicitta'
 
 export default function LoginPage() {
   const [modo, setModo] = useState<'pin'|'admin'>('pin')
@@ -33,17 +35,31 @@ export default function LoginPage() {
     setError('')
     try {
       const { data, error } = await supabase
+        .from('usuarios')
+        .select('nombre, rol, empresa_id, activo')
+        .eq('pin', pinCompleto)
+        .eq('activo', true)
+        .maybeSingle()
+
+      if (!error && data) {
+        setSesion(data.rol === 'admin' ? 'admin' : 'garzon', data.nombre, data.empresa_id)
+        window.location.href = '/'
+        return
+      }
+
+      const { data: usuarioLegacy, error: errorLegacy } = await supabase
         .from('usuarios_pos')
         .select('*')
         .eq('pin', pinCompleto)
         .eq('activo', true)
-        .single()
+        .maybeSingle()
 
-      if (error || !data) {
+      if (errorLegacy || !usuarioLegacy) {
         setError('PIN incorrecto')
         setPin('')
       } else {
-        setSesion('garzon', data.nombre, 'lafelicitta')
+        const empresaId = await obtenerEmpresaIdDefault()
+        setSesion('garzon', usuarioLegacy.nombre, empresaId)
         window.location.href = '/'
       }
     } catch {
@@ -84,12 +100,17 @@ export default function LoginPage() {
         return
       }
 
-      setSesion('admin', 'Admin', 'lafelicitta')
+      const empresaId = data.empresa_id || await obtenerEmpresaIdDefault()
+      setSesion('admin', 'Admin', empresaId)
       window.location.href = '/'
     } catch {
       setError('Error de conexión')
     }
     setCargando(false)
+  }
+
+  async function obtenerEmpresaIdDefault() {
+    return await resolverEmpresaId(EMPRESA_SLUG_DEFAULT) || EMPRESA_SLUG_DEFAULT
   }
 
   // Cuando el PIN llega a 4 dígitos, verificar automáticamente
