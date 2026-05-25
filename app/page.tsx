@@ -5,6 +5,8 @@ import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Product
 import { getEmpresaIdActual, getSesion } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
+import { useEmpresaNombre } from '@/lib/useEmpresaNombre'
+import { useEmpresaLogo } from '@/lib/useEmpresaLogo'
 
 interface ItemComanda {
   id: number
@@ -44,6 +46,8 @@ export default function CajaPage() {
   const [cobrando, setCobrando] = useState(false)
 
   const esAdmin = getSesion()?.rol === 'admin'
+  const empresaNombre = useEmpresaNombre('LA FELICITTA')
+  const empresaLogo = useEmpresaLogo('/logo-lafelicitta.png')
 
   useEffect(() => {
     inicializarCaja()
@@ -500,8 +504,8 @@ export default function CajaPage() {
 
       {/* TICKET — sin método de pago, se imprime antes de cobrar */}
       <div id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
-        <div className="t-logo">LA FELICITTA</div>
-        <div className="t-sub">@lafelicittacl</div>
+        <div className="t-logo">{empresaNombre}</div>
+        <div className="t-sub">MesaPOS</div>
         <div className="t-tipo">{mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA'}</div>
         <hr className="t-divider" />
         <div className="t-meta">
@@ -537,8 +541,8 @@ export default function CajaPage() {
       <header className="no-print" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 14px', height: 52, position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
   <img
-    src="/logo-lafelicitta.png"
-    alt="La Felicitta"
+    src={empresaLogo}
+    alt={empresaNombre}
     style={{
       width: 48,
       height: 48,
@@ -549,7 +553,7 @@ export default function CajaPage() {
   />
   <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
     <span style={{ fontFamily: 'var(--display)', fontSize: 22, letterSpacing: 3, color: 'var(--gold)', fontWeight: 900 }}>
-      LA FELICITTA
+      {empresaNombre}
     </span>
     <span style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', letterSpacing: 2, marginTop: 4 }}>
       POS · CAJA
