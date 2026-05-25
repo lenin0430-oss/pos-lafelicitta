@@ -296,38 +296,42 @@ async function getEmpresaCatalogo(empresaIdOSlug: string): Promise<EmpresaCatalo
 }
 
 async function getMenuEmpresa(empresaId: string): Promise<Producto[]> {
-  const { data, error } = await supabase
-    .from('productos')
-    .select(`
-      id,
-      nombre,
-      precio,
-      descripcion,
-      imagen_url,
-      disponible,
-      destacado,
-      categoria_id,
-      categorias:categoria_id (
+  const [productosResult, categorias] = await Promise.all([
+    supabase
+      .from('productos')
+      .select(`
         id,
         nombre,
-        orden
-      )
-    `)
-    .eq('empresa_id', empresaId)
-    .eq('disponible', true)
-    .order('nombre', { ascending: true })
+        precio,
+        descripcion,
+        imagen_url,
+        disponible,
+        destacado,
+        categoria_id
+      `)
+      .eq('empresa_id', empresaId)
+      .order('nombre', { ascending: true }),
+    getCategoriasDetalleEmpresa(empresaId),
+  ])
 
+  const { data, error } = productosResult
   if (error || !data) return []
 
+  const categoriasPorId = new Map(categorias.map(categoria => [categoria.id, categoria]))
+
   return (data as ProductoDb[])
-    .map(normalizarProductoDb)
+    .filter(producto => producto.disponible !== false)
+    .map(producto => normalizarProductoDb({
+      ...producto,
+      categorias: producto.categoria_id ? categoriasPorId.get(producto.categoria_id) || null : null,
+    }))
     .sort((a, b) => {
       const ordenCat = (a.categoria_orden ?? 999) - (b.categoria_orden ?? 999)
       return ordenCat !== 0 ? ordenCat : a.nombre.localeCompare(b.nombre, 'es')
     })
 }
 
-async function getCategoriasEmpresa(empresaId: string): Promise<string[]> {
+async function getCategoriasDetalleEmpresa(empresaId: string): Promise<CategoriaDb[]> {
   const { data, error } = await supabase
     .from('categorias')
     .select('id, nombre, orden, activo, activa')
@@ -339,7 +343,11 @@ async function getCategoriasEmpresa(empresaId: string): Promise<string[]> {
 
   return (data as CategoriaDb[])
     .filter(categoria => categoria.activo !== false && categoria.activa !== false)
-    .map(categoria => categoria.nombre)
+}
+
+async function getCategoriasEmpresa(empresaId: string): Promise<string[]> {
+  const categorias = await getCategoriasDetalleEmpresa(empresaId)
+  return categorias.map(categoria => categoria.nombre)
 }
 
 async function getMesasEmpresa(empresaId: string): Promise<string[]> {
