@@ -98,6 +98,28 @@ export default function NuevaEmpresaPage() {
       // ¡Éxito!
       mostrar('ok', `✅ Restaurante "${nombre}" creado correctamente. El admin puede entrar con su email y PIN.`)
 
+      const mesasBase = [
+        'Mesa 1', 'Mesa 2', 'Mesa 3', 'Mesa 4', 'Mesa 5', 'Mesa 6',
+        'Para llevar', 'Delivery'
+      ].map((mesa, index) => ({
+        empresa_id: empresa.id,
+        nombre: mesa,
+        numero: index + 1,
+        estado: 'libre',
+        activo: true,
+        activa: true,
+      }))
+
+      const { error: errMesas } = await supabase
+        .from('mesas')
+        .insert(mesasBase)
+
+      if (errMesas) {
+        mostrar('ok', `Restaurante "${nombre}" creado. Aviso: no se pudieron crear mesas automaticas (${errMesas.message}).`)
+        setGuardando(false)
+        return
+      }
+
       // Limpiar formulario
       setNombre('')
       setSlug('')

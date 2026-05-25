@@ -189,6 +189,11 @@ export const MESAS = [
   'Mesa 7', 'Mesa 8', 'Barra', 'Para llevar', 'Delivery'
 ]
 
+const MESAS_DEFAULT_RESTAURANTE = [
+  'Mesa 1', 'Mesa 2', 'Mesa 3', 'Mesa 4', 'Mesa 5', 'Mesa 6',
+  'Para llevar', 'Delivery'
+]
+
 export const METODOS_PAGO = ['Efectivo', 'Débito', 'Transferencia', 'Crédito', 'Cortesía']
 
 export type TipoServicio = 'Servir en mesa' | 'Para llevar' | 'Delivery'
@@ -261,7 +266,7 @@ export async function cargarDatosEmpresa(empresaIdOSlug: string): Promise<{
   return {
     menu: menuFinal,
     categorias: categoriasFinal,
-    mesas: mesas.length > 0 ? mesas : esLaFelicitta ? MESAS : [],
+    mesas: mesas.length > 0 ? mesas : esLaFelicitta ? MESAS : MESAS_DEFAULT_RESTAURANTE,
     metodosPago: metodosPago.length > 0 ? metodosPago : METODOS_PAGO,
   }
 }
@@ -287,7 +292,11 @@ export async function getMesas(empresaIdOSlug: string): Promise<string[]> {
   if (!empresa) return MESAS
 
   const mesas = await getMesasEmpresa(empresa.id)
-  return mesas.length > 0 ? mesas : normalizarTexto(empresa.nombre) === 'la felicitta' ? MESAS : []
+  return mesas.length > 0
+    ? mesas
+    : normalizarTexto(empresa.nombre) === 'la felicitta'
+      ? MESAS
+      : MESAS_DEFAULT_RESTAURANTE
 }
 
 async function getEmpresaCatalogo(empresaIdOSlug: string): Promise<EmpresaCatalogo | null> {
