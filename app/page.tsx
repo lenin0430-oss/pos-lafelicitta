@@ -6,9 +6,6 @@ import { getEmpresaIdActual, getSesion } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
 
-const CATEGORIA_TODOS = 'Todos'
-const CATEGORIAS_BASE_CAJA = [CATEGORIA_TODOS, ...CATEGORIAS]
-
 interface ItemComanda {
   id: number
   producto: Producto
@@ -22,11 +19,11 @@ export default function CajaPage() {
   const [personas, setPersonas] = useState(2)
   const [items, setItems] = useState<ItemComanda[]>([])
   const [menu, setMenu] = useState<Producto[]>(MENU)
-  const [categorias, setCategorias] = useState<string[]>(CATEGORIAS_BASE_CAJA)
+  const [categorias, setCategorias] = useState<string[]>(CATEGORIAS)
   const [mesas, setMesas] = useState<string[]>(MESAS)
   const [metodosPago, setMetodosPago] = useState<string[]>(METODOS_PAGO)
   const [cargandoCatalogo, setCargandoCatalogo] = useState(true)
-  const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIA_TODOS)
+  const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0] || '')
   const [busqueda, setBusqueda] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [ordenNum, setOrdenNum] = useState(1)
@@ -74,17 +71,16 @@ export default function CajaPage() {
   async function cargarCatalogo() {
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) {
-      setMenu(MENU)
-      setCategorias(CATEGORIAS_BASE_CAJA)
-      setCategoriaActiva(CATEGORIA_TODOS)
       setCargandoCatalogo(false)
-      return { menu: MENU, categorias: CATEGORIAS_BASE_CAJA, mesas: MESAS, metodosPago: METODOS_PAGO }
+      return { menu: MENU, categorias: CATEGORIAS, mesas: MESAS, metodosPago: METODOS_PAGO }
     }
 
     try {
       const datos = await cargarDatosEmpresa(empresaId)
-      const categoriasConProductos = Array.from(new Set(datos.menu.map(producto => producto.categoria).filter(Boolean)))
-      const categoriasFinales = [CATEGORIA_TODOS, ...categoriasConProductos]
+      const categoriasConProductos = Array.from(new Set(datos.menu.map(producto => producto.categoria)))
+      const categoriasFinales = datos.categorias.length > 0
+        ? unirCategorias(datos.categorias, categoriasConProductos)
+        : categoriasConProductos
 
       setMenu(datos.menu)
       setCategorias(categoriasFinales)
@@ -92,15 +88,14 @@ export default function CajaPage() {
       setMetodosPago(datos.metodosPago)
       setCategoriaActiva(prev => {
         const existe = categoriasFinales.some(categoria => normalizarTexto(categoria) === normalizarTexto(prev))
-        return existe ? prev : CATEGORIA_TODOS
+        const tieneProductos = datos.menu.some(producto => normalizarTexto(producto.categoria) === normalizarTexto(prev))
+        if (existe && tieneProductos) return prev
+        return categoriasConProductos[0] || categoriasFinales[0] || ''
       })
       setMesa(prev => datos.mesas.includes(prev) ? prev : datos.mesas[0] || 'Mesa 1')
       return datos
     } catch {
-      setMenu(MENU)
-      setCategorias(CATEGORIAS_BASE_CAJA)
-      setCategoriaActiva(CATEGORIA_TODOS)
-      return { menu: MENU, categorias: CATEGORIAS_BASE_CAJA, mesas: MESAS, metodosPago: METODOS_PAGO }
+      return { menu: MENU, categorias: CATEGORIAS, mesas: MESAS, metodosPago: METODOS_PAGO }
     } finally {
       setCargandoCatalogo(false)
     }
@@ -136,10 +131,9 @@ export default function CajaPage() {
     return enBusq
   })
   const productosFiltradosPorCategoria = productosPorBusqueda.filter(p => {
-    if (normalizarTexto(categoriaActiva) === normalizarTexto(CATEGORIA_TODOS)) return true
     return normalizarTexto(p.categoria) === normalizarTexto(categoriaActiva)
   })
-  const productosFiltrados = categoriaActiva
+  const productosFiltrados = productosFiltradosPorCategoria.length > 0 || busqueda
     ? productosFiltradosPorCategoria
     : productosPorBusqueda
 
