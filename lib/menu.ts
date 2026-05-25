@@ -180,6 +180,10 @@ export const MENU: Producto[] = [
 
 export const CATEGORIAS = Array.from(new Set(MENU.map(p => p.categoria)))
 
+const CATEGORIA_FALLBACK_POR_NOMBRE = new Map(
+  MENU.map(producto => [normalizarTexto(producto.nombre), producto.categoria])
+)
+
 export const MESAS = [
   'Mesa 1', 'Mesa 2', 'Mesa 3', 'Mesa 4', 'Mesa 5', 'Mesa 6',
   'Mesa 7', 'Mesa 8', 'Barra', 'Para llevar', 'Delivery'
@@ -312,7 +316,14 @@ async function getMenuEmpresa(empresaId: string): Promise<Producto[]> {
         imagen_url,
         disponible,
         destacado,
-        categoria_id
+        categoria_id,
+        categorias (
+          id,
+          nombre,
+          orden,
+          activo,
+          activa
+        )
       `)
       .eq('empresa_id', empresaId)
       .order('nombre', { ascending: true }),
@@ -385,14 +396,15 @@ function normalizarProductoDb(producto: ProductoDb): Producto {
   const categoria = Array.isArray(producto.categorias)
     ? producto.categorias[0]
     : producto.categorias
+  const categoriaFallback = inferirCategoriaProducto(producto.nombre)
 
   return {
     id: producto.id,
     nombre: producto.nombre,
     precio: producto.precio,
-    categoria: categoria?.nombre || 'Sin categoria',
+    categoria: categoria?.nombre || categoriaFallback || 'Sin categoria',
     categoria_id: producto.categoria_id,
-    categoria_orden: categoria?.orden ?? null,
+    categoria_orden: categoria?.orden ?? ordenCategoria(categoriaFallback),
     ingredientes: producto.descripcion || undefined,
     descripcion: producto.descripcion,
     imagen_url: producto.imagen_url,
@@ -403,6 +415,38 @@ function normalizarProductoDb(producto: ProductoDb): Producto {
 
 function esUuid(valor: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(valor)
+}
+
+function inferirCategoriaProducto(nombre: string) {
+  const clave = normalizarTexto(nombre)
+  const categoriaExacta = CATEGORIA_FALLBACK_POR_NOMBRE.get(clave)
+  if (categoriaExacta) return categoriaExacta
+
+  if (clave.includes('pollo') && (clave.includes('brasa') || clave.includes('broaster'))) return 'Combos a la Brasa'
+  if (clave.includes('hamburguesa') || clave.includes('burger')) return 'Burgers'
+  if (clave.includes('perro')) return 'Perros'
+  if (clave.includes('churrasco') || clave.includes('barros') || clave.includes('chacarero') || clave.startsWith('as ') || clave.includes('italiano')) return 'Completos'
+  if (clave.includes('arepa')) return 'Arepas'
+  if (clave.includes('cachapa')) return 'Cachapas'
+  if (clave.includes('arroz')) return 'Arroz chino'
+  if (clave.includes('pepito')) return 'Pepitos'
+  if (clave.includes('patacon')) return 'Patacones'
+  if (clave.includes('papa') || clave.includes('bacon') || clave.includes('salchipapa') || clave.includes('nugget')) return 'Papas'
+  if (clave.includes('empanada')) return 'Empanadas'
+  if (clave.includes('tequeno')) return 'Tequeños'
+  if (clave.includes('pasapalo') || clave.includes('mix ') || clave.includes('mini ')) return 'Pasapalos'
+  if (clave.includes('churro')) return 'Churros'
+  if (clave.includes('pan') || clave.includes('completon') || clave.includes('hot dog')) return 'Panadería'
+  if (clave.includes('chicharron')) return 'Chicharrón'
+  if (clave.includes('bebida') || clave.includes('coca') || clave.includes('sprite') || clave.includes('fanta') || clave.includes('agua') || clave.includes('jugo') || clave.includes('cafe') || clave.includes('chocolate') || clave.includes('infusion') || clave.includes(' kr')) return 'Bebidas'
+
+  return null
+}
+
+function ordenCategoria(categoria: string | null) {
+  if (!categoria) return null
+  const indice = CATEGORIAS.findIndex(c => normalizarTexto(c) === normalizarTexto(categoria))
+  return indice >= 0 ? indice + 1 : null
 }
 
 function normalizarTexto(valor: string) {
