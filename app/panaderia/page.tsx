@@ -30,6 +30,16 @@ const RECETA = [
   { nombre: 'Mantequilla', cantidad: 0.0085, unidad: 'kg' },
 ]
 
+const PRECIOS_PAN_BRIOCHE = [
+  { nombre: 'Harina de trigo', unidad: 'kg', categoria: 'Panadería', precio_ultimo: 620, stock_minimo: 5 },
+  { nombre: 'Azucar', unidad: 'kg', categoria: 'Panadería', precio_ultimo: 1000, stock_minimo: 2 },
+  { nombre: 'Sal', unidad: 'kg', categoria: 'Panadería', precio_ultimo: 800, stock_minimo: 1 },
+  { nombre: 'Huevos', unidad: 'unidad', categoria: 'Otros', precio_ultimo: 200, stock_minimo: 30 },
+  { nombre: 'Leche', unidad: 'L', categoria: 'Lácteos', precio_ultimo: 1250, stock_minimo: 2 },
+  { nombre: 'Levadura', unidad: 'kg', categoria: 'Panadería', precio_ultimo: 7700, stock_minimo: 0.2 },
+  { nombre: 'Mantequilla', unidad: 'kg', categoria: 'Lácteos', precio_ultimo: 3200, stock_minimo: 1 },
+]
+
 export default function PanaderiaPage() {
   const [insumos, setInsumos] = useState<Insumo[]>([])
   const [mensaje, setMensaje] = useState<{ txt: string; tipo: 'ok' | 'err' } | null>(null)
@@ -53,6 +63,56 @@ export default function PanaderiaPage() {
 
     if (error) { msg('Error cargando insumos: ' + error.message, 'err'); return }
     setInsumos((data || []) as Insumo[])
+  }
+
+  async function actualizarPreciosBase() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { msg('No hay empresa activa', 'err'); return }
+    setGuardando(true)
+
+    const { data: existentes, error: errorExistentes } = await supabase
+      .from('stock_insumos')
+      .select('id,nombre')
+      .eq('empresa_id', empresaId)
+      .in('nombre', PRECIOS_PAN_BRIOCHE.map(p => p.nombre))
+
+    if (errorExistentes) {
+      msg('Error revisando insumos: ' + errorExistentes.message, 'err')
+      setGuardando(false)
+      return
+    }
+
+    const existentesMap = new Map((existentes || []).map(i => [i.nombre.toLowerCase(), i.id]))
+
+    for (const p of PRECIOS_PAN_BRIOCHE) {
+      const id = existentesMap.get(p.nombre.toLowerCase())
+      const datos = {
+        unidad: p.unidad,
+        categoria: p.categoria,
+        precio_ultimo: p.precio_ultimo,
+        stock_minimo: p.stock_minimo,
+        updated_at: new Date().toISOString(),
+      }
+
+      const res = id
+        ? await supabase.from('stock_insumos').update(datos).eq('empresa_id', empresaId).eq('id', id)
+        : await supabase.from('stock_insumos').insert({
+            empresa_id: empresaId,
+            nombre: p.nombre,
+            stock_actual: 0,
+            ...datos,
+          })
+
+      if (res.error) {
+        msg('Error actualizando ' + p.nombre + ': ' + res.error.message, 'err')
+        setGuardando(false)
+        return
+      }
+    }
+
+    msg('Precios base del pan brioche actualizados', 'ok')
+    await cargar()
+    setGuardando(false)
   }
 
   const ingredientes = useMemo(() => {
@@ -128,6 +188,10 @@ export default function PanaderiaPage() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 18, marginTop: 14 }}>
             <h2 style={{ color: 'var(--gold)', fontSize: 18, margin: '0 0 8px' }}>Pan brioche 120g</h2>
             <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>Receta calculada por unidad según masa de 5.690g, corte de 120g y rendimiento aproximado de 47 panes.</p>
+
+            <button onClick={actualizarPreciosBase} disabled={guardando} style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1px solid var(--gold)', background: 'transparent', color: 'var(--gold)', fontWeight: 900, cursor: 'pointer', marginBottom: 12 }}>
+              {guardando ? 'Procesando...' : 'Actualizar precios base del pan brioche'}
+            </button>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
               {ingredientes.map(i => (
