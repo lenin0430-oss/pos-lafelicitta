@@ -301,15 +301,3 @@ export default function StockPage() {
     </AuthGuard>
   )
 }
-'use client'
-import Link from 'next/link'
-import Nav from '@/components/Nav'
-import AuthGuard from '@/components/AuthGuard'
-
-export default function StockPage() {
-  return (
-    <AuthGuard>
-      ...
-    </AuthGuard>
-  )
-}
