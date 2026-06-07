@@ -143,7 +143,7 @@ export default function CajaPage() {
   })
   const productosFiltrados = productosFiltradosPorCategoria.length > 0 || busqueda
     ? productosFiltradosPorCategoria
-    : productosPorBusqueda
+    : productosFiltradosPorCategoria
 
   function mostrarMensaje(txt: string, tipo: 'ok' | 'err') {
     setMensaje({ txt, tipo })
