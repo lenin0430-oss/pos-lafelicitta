@@ -43,7 +43,6 @@ export default function CierrePage() {
   const [esAdmin, setEsAdmin] = useState(false)
   useEffect(() => {
     try {
-      const { getSesion } = require('@/lib/auth')
       const sesion = getSesion()
       setEsAdmin(sesion?.rol === 'admin' || sesion?.rol === 'superadmin')
     } catch { setEsAdmin(false) }
