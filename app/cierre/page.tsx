@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getEmpresaIdActual, getSesion } from '@/lib/auth'
+import { getEmpresaIdActual, getSesion, esAdmin } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
 
@@ -40,12 +40,9 @@ interface CierreCaja {
 
 export default function CierrePage() {
   // Detectar si es admin
-  const [esAdmin, setEsAdmin] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
-    try {
-      const sesion = getSesion()
-      setEsAdmin(sesion?.rol !== 'garzon' && sesion?.rol !== undefined)
-    } catch { setEsAdmin(false) }
+    setIsAdmin(esAdmin())
   }, [])
   const [resumen, setResumen] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
   const [resumenTurno, setResumenTurno] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
@@ -349,7 +346,7 @@ export default function CierrePage() {
             )}
 
             {/* RESUMEN DÍA — solo admin */}
-            {esAdmin && todasAperturasHoy.length > 0 && (
+            {isAdmin && todasAperturasHoy.length > 0 && (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 16px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const }}>Acumulado del día</div>
@@ -416,7 +413,7 @@ export default function CierrePage() {
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: 'var(--surface)', borderRadius: 10, padding: 4, border: '1px solid var(--border)' }}>
-              {(esAdmin ? [['nuevo', '🔒 Cerrar Turno'], ['historial', '📋 Historial']] : [['nuevo', '🔒 Cerrar Turno']]).map(([val, label]) => (
+              {(isAdmin ? [['nuevo', '🔒 Cerrar Turno'], ['historial', '📋 Historial']] : [['nuevo', '🔒 Cerrar Turno']]).map(([val, label]) => (
                 <button key={val} onClick={() => setTab(val as 'nuevo' | 'historial')}
                   style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: tab === val ? 'var(--gold)' : 'transparent', color: tab === val ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                   {label}
@@ -443,7 +440,7 @@ export default function CierrePage() {
                     </div>
 
                     {/* Ventas del turno — solo admin */}
-                    {esAdmin && (
+                    {isAdmin && (
                     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
                       <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ventas del turno</div>
                       {[
@@ -477,7 +474,7 @@ export default function CierrePage() {
                           style={{ ...inp, fontFamily: 'var(--mono)', fontSize: 22 }}
                         />
                       </div>
-                      {efectivoFisico && esAdmin && (
+                      {efectivoFisico && isAdmin && (
                         <div style={{ background: diferencia === 0 ? 'rgba(76,175,125,.1)' : diferencia > 0 ? 'rgba(74,159,212,.1)' : 'rgba(217,79,61,.1)', border: `1px solid ${diferencia === 0 ? 'var(--green)' : diferencia > 0 ? '#4a9fd4' : 'var(--red)'}`, borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: 13, color: 'var(--muted)' }}>
