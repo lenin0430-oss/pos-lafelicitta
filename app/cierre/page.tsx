@@ -246,6 +246,34 @@ export default function CierrePage() {
         .eq('id', aperturaActiva.id)
       if (errAp) throw errAp
 
+      // Obtener gastos del turno
+      let gastosTurno: {categoria: string, monto: number}[] = []
+      let totalGastosTurno = 0
+      let totalGastosDia = 0
+      try {
+        const desde = aperturaActiva.created_at
+        const { data: gastosData } = await supabase
+          .from('gastos')
+          .select('categoria, monto, created_at')
+          .eq('empresa_id', empresaId)
+          .gte('created_at', desde)
+        if (gastosData) {
+          gastosTurno = gastosData.map(g => ({ categoria: g.categoria, monto: Number(g.monto) }))
+          totalGastosTurno = gastosData.reduce((s, g) => s + Number(g.monto), 0)
+        }
+        // Gastos totales del dia
+        const hoy = new Date()
+        const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+        const { data: gastosDiaData } = await supabase
+          .from('gastos')
+          .select('monto')
+          .eq('empresa_id', empresaId)
+          .gte('created_at', inicioDia)
+        if (gastosDiaData) {
+          totalGastosDia = gastosDiaData.reduce((s, g) => s + Number(g.monto), 0)
+        }
+      } catch (eg) { console.warn('Error gastos:', eg) }
+
       // Notificar al dueño por WhatsApp
       try {
         const turnosHoy = todasAperturasHoy.length
@@ -271,6 +299,11 @@ export default function CierrePage() {
             diferencia,
             cantidad_ventas: resumenTurno.cantidad,
             total_dia: resumen.total,
+            gastos_turno: gastosTurno,
+            total_gastos_turno: totalGastosTurno,
+            total_gastos_dia: totalGastosDia,
+            turno_num: turnoActualNum,
+            total_turnos_hoy: todasAperturasHoy.length,
             notas
           })
         })
