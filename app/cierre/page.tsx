@@ -232,9 +232,6 @@ export default function CierrePage() {
         ventas_transferencia: resumenTurno.transferencia,
         efectivo_fisico: fisico,
         diferencia,
-        ventas_debito: debitoF,
-        ventas_qr: qrF,
-        ventas_transferencia: transferF,
         notas,
         apertura_id: aperturaActiva.id,
         created_at: new Date().toISOString()
