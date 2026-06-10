@@ -311,7 +311,7 @@ export default function CierrePage() {
   const inp = { width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '10px 12px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }
 
   return (
-    <AuthGuard rolRequerido="admin">
+    <AuthGuard>
       <>
         {/* PRINT CIERRE */}
         <div id="cierre-print" style={{ display: 'none' }}>
