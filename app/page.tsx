@@ -391,6 +391,10 @@ export default function CajaPage() {
           </div>
         </div>
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar producto..." style={{ ...inp, background: 'var(--surface)' }} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔒 Cerrar Turno</button>
+          <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: 'var(--green)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔓 Abrir Turno</button>
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 6, padding: '10px 14px', overflowX: 'auto', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         {categorias.map(cat => (
