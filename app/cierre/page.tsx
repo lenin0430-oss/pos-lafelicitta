@@ -263,7 +263,7 @@ export default function CierrePage() {
             notas
           })
         })
-      } catch (e) { console.warn('WhatsApp cierre:', e.message) }
+      } catch (e) { console.warn('WhatsApp cierre:', (e as Error).message) }
 
       mostrarMensaje('✅ Turno cerrado — resumen enviado a WhatsApp', 'ok')
       setEfectivoFisico('')
