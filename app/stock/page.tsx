@@ -148,7 +148,7 @@ export default function StockPage() {
   const perdidaMermas = movimientos.filter(m => m.tipo==='merma').reduce((s,m) => { const item=items.find(i => i.id===m.insumo_id); return s+(item?item.precio_ultimo*m.cantidad:0) }, 0)
 
   return (
-    <AuthGuard>
+    <AuthGuard rolRequerido="admin">
       <main style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)', paddingBottom: 60 }}>
         <Nav active="/stock" />
         <div style={{ maxWidth: 800, margin: '0 auto', padding: '20px 14px' }}>
