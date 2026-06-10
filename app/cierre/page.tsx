@@ -235,7 +235,33 @@ export default function CierrePage() {
         .eq('id', aperturaActiva.id)
       if (errAp) throw errAp
 
-      mostrarMensaje('✅ Turno cerrado correctamente', 'ok')
+      // Notificar al dueño por WhatsApp
+      try {
+        const turnosHoy = todasAperturasHoy.length
+        await fetch('http://67.205.170.244:3001/cierre-turno', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-bot-secret': 'lafelicitta2026' },
+          body: JSON.stringify({
+            turno: turnoActualNum,
+            cajero: aperturaActiva.cajero,
+            fecha: new Date().toLocaleDateString('es-CL'),
+            hora_apertura: new Date(aperturaActiva.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+            hora_cierre: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+            ventas_total: resumenTurno.total,
+            ventas_efectivo: resumenTurno.efectivo,
+            ventas_debito: resumenTurno.debito,
+            ventas_qr: resumenTurno.qr,
+            ventas_transferencia: resumenTurno.transferencia,
+            efectivo_fisico: fisico,
+            diferencia,
+            cantidad_ventas: resumenTurno.cantidad,
+            total_dia: resumen.total,
+            notas
+          })
+        })
+      } catch (e) { console.warn('WhatsApp cierre:', e.message) }
+
+      mostrarMensaje('✅ Turno cerrado — resumen enviado a WhatsApp', 'ok')
       setEfectivoFisico('')
       setNotas('')
       await cargarDatos()
