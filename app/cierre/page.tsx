@@ -44,7 +44,7 @@ export default function CierrePage() {
   useEffect(() => {
     try {
       const sesion = getSesion()
-      setEsAdmin(sesion?.rol === 'admin' || sesion?.rol === 'superadmin')
+      setEsAdmin(sesion?.rol !== 'garzon' && sesion?.rol !== undefined)
     } catch { setEsAdmin(false) }
   }, [])
   const [resumen, setResumen] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
