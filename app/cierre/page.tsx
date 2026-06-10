@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getEmpresaIdActual, esAdmin } from '@/lib/auth'
+import { getEmpresaIdActual, esAdmin, getSesion } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
 
@@ -178,7 +178,6 @@ export default function CierrePage() {
     // Obtener nombre del cajero de la sesión
     let cajero = 'Admin'
     try {
-      const { getSesion } = await import('@/lib/auth')
       const sesion = getSesion()
       cajero = sesion?.nombre || 'Admin'
     } catch { /* sin sesión */ }
