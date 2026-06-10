@@ -170,7 +170,7 @@ export default function ReportesPage() {
   )
 
   return (
-    <AuthGuard>
+    <AuthGuard rolRequerido="admin">
       <div style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font)' }}>
         {/* Header */}
         <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 20px', height: 56, display: 'flex', alignItems: 'center', gap: 16 }}>
