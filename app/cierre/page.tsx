@@ -47,6 +47,9 @@ export default function CierrePage() {
   const [resumen, setResumen] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
   const [resumenTurno, setResumenTurno] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
   const [efectivoFisico, setEfectivoFisico] = useState('')
+  const [debitoFisico, setDebitoFisico] = useState('')
+  const [qrFisico, setQrFisico] = useState('')
+  const [transferFisico, setTransferFisico] = useState('')
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [cierres, setCierres] = useState<CierreCaja[]>([])
@@ -205,12 +208,16 @@ export default function CierrePage() {
 
   async function cerrarTurnoActual() {
     if (!aperturaActiva) return
-    if (!efectivoFisico) { mostrarMensaje('Ingresa el efectivo físico', 'err'); return }
+    if (!efectivoFisico) { mostrarMensaje('Ingresa al menos el efectivo físico', 'err'); return }
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
 
     const fisico = parseInt(efectivoFisico) || 0
-    const diferencia = fisico - resumenTurno.efectivo
+    const debitoF = parseInt(debitoFisico) || 0
+    const qrF = parseInt(qrFisico) || 0
+    const transferF = parseInt(transferFisico) || 0
+    const totalFisico = fisico + debitoF + qrF + transferF
+    const diferencia = totalFisico - resumenTurno.total
     setCerrando(true)
 
     try {
@@ -225,6 +232,9 @@ export default function CierrePage() {
         ventas_transferencia: resumenTurno.transferencia,
         efectivo_fisico: fisico,
         diferencia,
+        ventas_debito: debitoF,
+        ventas_qr: qrF,
+        ventas_transferencia: transferF,
         notas,
         apertura_id: aperturaActiva.id,
         created_at: new Date().toISOString()
@@ -257,6 +267,10 @@ export default function CierrePage() {
             ventas_qr: resumenTurno.qr,
             ventas_transferencia: resumenTurno.transferencia,
             efectivo_fisico: fisico,
+            debito_fisico: debitoF,
+            qr_fisico: qrF,
+            transfer_fisico: transferF,
+            total_fisico: totalFisico,
             diferencia,
             cantidad_ventas: resumenTurno.cantidad,
             total_dia: resumen.total,
@@ -267,6 +281,9 @@ export default function CierrePage() {
 
       mostrarMensaje('✅ Turno cerrado — resumen enviado a WhatsApp', 'ok')
       setEfectivoFisico('')
+      setDebitoFisico('')
+      setQrFisico('')
+      setTransferFisico('')
       setNotas('')
       await cargarDatos()
       await cargarCierres()
@@ -284,7 +301,11 @@ export default function CierrePage() {
   }
 
   const fisico = parseInt(efectivoFisico) || 0
-  const diferencia = fisico - resumenTurno.efectivo
+  const debitoF = parseInt(debitoFisico) || 0
+  const qrF = parseInt(qrFisico) || 0
+  const transferF = parseInt(transferFisico) || 0
+  const totalFisico = fisico + debitoF + qrF + transferF
+  const diferencia = totalFisico - resumenTurno.total
   const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
   const fechaHoy = new Date().toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const horaActual = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
@@ -462,18 +483,19 @@ export default function CierrePage() {
 
                     {/* Arqueo */}
                     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Arqueo de caja</div>
-                      <div style={{ marginBottom: 10 }}>
-                        <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>¿Cuánto efectivo hay físicamente?</label>
-                        <input
-                          type="number"
-                          value={efectivoFisico}
-                          onChange={e => setEfectivoFisico(e.target.value)}
-                          placeholder="0"
-                          style={{ ...inp, fontFamily: 'var(--mono)', fontSize: 22 }}
-                        />
-                      </div>
-                      {efectivoFisico && isAdmin && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ingresa los totales del turno</div>
+                      {[
+                        { label: '💵 Efectivo físico', value: efectivoFisico, set: setEfectivoFisico },
+                        { label: '💳 Débito (datáfono)', value: debitoFisico, set: setDebitoFisico },
+                        { label: '📱 Mercado Pago / QR', value: qrFisico, set: setQrFisico },
+                        { label: '🏦 Transferencia', value: transferFisico, set: setTransferFisico },
+                      ].map(({ label, value, set }) => (
+                        <div key={label} style={{ marginBottom: 10 }}>
+                          <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>{label}</label>
+                          <input type="number" value={value} onChange={e => set(e.target.value)} placeholder="0" style={{ ...inp, fontFamily: 'var(--mono)', fontSize: 18 }} />
+                        </div>
+                      ))}
+                      {isAdmin && totalFisico > 0 && (
                         <div style={{ background: diferencia === 0 ? 'rgba(76,175,125,.1)' : diferencia > 0 ? 'rgba(74,159,212,.1)' : 'rgba(217,79,61,.1)', border: `1px solid ${diferencia === 0 ? 'var(--green)' : diferencia > 0 ? '#4a9fd4' : 'var(--red)'}`, borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: 13, color: 'var(--muted)' }}>
@@ -484,7 +506,7 @@ export default function CierrePage() {
                             </span>
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
-                            Esperado: {fmt(resumenTurno.efectivo)} · Físico: {fmt(fisico)}
+                            Sistema: {fmt(resumenTurno.total)} · Ingresado: {fmt(totalFisico)}
                           </div>
                         </div>
                       )}
@@ -497,8 +519,8 @@ export default function CierrePage() {
 
                     <button
                       onClick={cerrarTurnoActual}
-                      disabled={cerrando || !efectivoFisico}
-                      style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: !efectivoFisico ? 'var(--surface2)' : 'var(--gold)', color: !efectivoFisico ? 'var(--muted)' : '#000', fontSize: 16, fontWeight: 700, cursor: !efectivoFisico ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: !efectivoFisico ? 0.5 : 1 }}>
+                      disabled={cerrando || (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico)}
+                      style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'var(--surface2)' : 'var(--gold)', color: !efectivoFisico ? 'var(--muted)' : '#000', fontSize: 16, fontWeight: 700, cursor: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 0.5 : 1 }}>
                       {cerrando ? 'Cerrando...' : `🔒 Cerrar Turno ${turnoActualNum} e Imprimir`}
                     </button>
                   </>
