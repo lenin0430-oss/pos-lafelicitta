@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getEmpresaIdActual, getSesion, esAdmin } from '@/lib/auth'
+import { getEmpresaIdActual, esAdmin } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
 
