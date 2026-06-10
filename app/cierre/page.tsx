@@ -247,7 +247,7 @@ export default function CierrePage() {
       // Notificar al dueño por WhatsApp
       try {
         const turnosHoy = todasAperturasHoy.length
-        await fetch('http://67.205.170.244:3001/cierre-turno', {
+        await fetch('/api/cierre-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-bot-secret': 'lafelicitta2026' },
           body: JSON.stringify({
