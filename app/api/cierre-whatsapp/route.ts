@@ -13,8 +13,8 @@ export async function POST(request: Request) {
     })
     const json = await res.json()
     return NextResponse.json(json)
-  } catch (e: unknown) {
-    console.error('Error enviando cierre WhatsApp:', e)
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error desconocido'
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }
 }
