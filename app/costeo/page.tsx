@@ -269,7 +269,7 @@ export default function CosteoPage() {
   const insumoActual = insumos.find(i => i.id === insumoSel)
 
   return (
-    <AuthGuard>
+    <AuthGuard rolRequerido="admin">
       <main
         style={{
           minHeight: '100vh',
