@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getEmpresaIdActual } from '@/lib/auth'
+import { getEmpresaIdActual, esAdmin } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
 
@@ -16,6 +16,8 @@ const CATEGORIAS = [
 ] as const
 
 export default function GastosPage() {
+  const [isAdmin, setIsAdmin] = useState(false)
+  useEffect(() => { setIsAdmin(esAdmin()) }, [])
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [categoria, setCategoria] = useState('ingredientes')
   const [descripcion, setDescripcion] = useState('')
@@ -92,15 +94,16 @@ export default function GastosPage() {
 
           <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--muted)' }}>Total</span>
-            <strong style={{ color: 'var(--red)', fontSize: 22 }}>{fmt(total)}</strong>
+            {isAdmin && <strong style={{ color: 'var(--red)', fontSize: 22 }}>{fmt(total)}</strong>}
+            {!isAdmin && <strong style={{ color: 'var(--muted)', fontSize: 14 }}>—</strong>}
           </div>
 
           <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {gastos.map(g => <div key={g.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            {isAdmin && gastos.map(g => <div key={g.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <div><b>{g.descripcion}</b><div style={{ color: 'var(--muted)', fontSize: 12 }}>{g.categoria} · {new Date(g.created_at).toLocaleString('es-CL')}</div></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><b style={{ color: 'var(--red)' }}>{fmt(g.monto)}</b><button onClick={() => eliminar(g.id)} style={{ background: 'transparent', border: 0, color: 'var(--muted)', cursor: 'pointer' }}>×</button></div>
             </div>)}
-            {gastos.length === 0 && <div style={{ color: 'var(--muted)', textAlign: 'center', padding: 30 }}>No hay gastos registrados</div>}
+            {isAdmin && gastos.length === 0 && <div style={{ color: 'var(--muted)', textAlign: 'center', padding: 30 }}>No hay gastos registrados</div>}
           </div>
         </div>
       </main>
