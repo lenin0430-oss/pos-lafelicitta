@@ -315,42 +315,33 @@ async function getEmpresaCatalogo(empresaIdOSlug: string): Promise<EmpresaCatalo
 }
 
 async function getMenuEmpresa(empresaId: string): Promise<Producto[]> {
-  const [productosResult, categorias] = await Promise.all([
-    supabase
-      .from('productos')
-      .select(`
+  const { data, error } = await supabase
+    .from('productos')
+    .select(`
+      id,
+      nombre,
+      precio,
+      descripcion,
+      imagen_url,
+      disponible,
+      destacado,
+      categoria_id,
+      categorias (
         id,
         nombre,
-        precio,
-        descripcion,
-        imagen_url,
-        disponible,
-        destacado,
-        categoria_id,
-        categorias (
-          id,
-          nombre,
-          orden,
-          activo,
-          activa
-        )
-      `)
-      .eq('empresa_id', empresaId)
-      .order('nombre', { ascending: true }),
-    getCategoriasDetalleEmpresa(empresaId),
-  ])
+        orden,
+        activo,
+        activa
+      )
+    `)
+    .eq('empresa_id', empresaId)
+    .order('nombre', { ascending: true })
 
-  const { data, error } = productosResult
   if (error || !data) return []
-
-  const categoriasPorId = new Map(categorias.map(categoria => [categoria.id, categoria]))
 
   return (data as ProductoDb[])
     .filter(producto => producto.disponible !== false)
-    .map(producto => normalizarProductoDb({
-      ...producto,
-      categorias: producto.categoria_id ? categoriasPorId.get(producto.categoria_id) || null : null,
-    }))
+    .map(producto => normalizarProductoDb(producto))
     .sort((a, b) => {
       const ordenCat = (a.categoria_orden ?? 999) - (b.categoria_orden ?? 999)
       return ordenCat !== 0 ? ordenCat : a.nombre.localeCompare(b.nombre, 'es')
