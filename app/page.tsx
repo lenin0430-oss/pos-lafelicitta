@@ -669,27 +669,15 @@ export default function CajaPage() {
             )}
             <div style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
               <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 8 }}>
-                💰 Propina (opcional)
+                Propina para {getSesion()?.nombre || 'cajera'} (opcional)
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Empleado</label>
-                  <select value={propinaEmpleado} onChange={e => setPropinaEmpleado(e.target.value)}
-                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }}>
-                    <option value="">Sin propina</option>
-                    {['Adri','Yoli','Gigi','Carlos','Marcos','Otro'].map(e => <option key={e} value={e}>{e}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Monto</label>
-                  <input type="number" value={propinaMonto} onChange={e => setPropinaMonto(e.target.value)}
-                    placeholder="0" disabled={!propinaEmpleado}
-                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%', opacity: propinaEmpleado ? 1 : 0.4 }} />
-                </div>
-              </div>
-              {propinaEmpleado && propinaMonto && parseInt(propinaMonto) > 0 && (
+              <input type="number" value={propinaMonto}
+                onChange={e => { setPropinaMonto(e.target.value); setPropinaEmpleado(getSesion()?.nombre || 'Cajera') }}
+                placeholder="Monto propina..."
+                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }} />
+              {propinaMonto && parseInt(propinaMonto) > 0 && (
                 <div style={{ marginTop: 8, fontSize: 12, color: 'var(--green)' }}>
-                  ✓ {propinaEmpleado} recibe ${parseInt(propinaMonto).toLocaleString('es-CL')} de propina
+                  Propina registrada: ${parseInt(propinaMonto).toLocaleString('es-CL')}
                 </div>
               )}
             </div>
