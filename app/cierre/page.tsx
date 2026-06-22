@@ -129,7 +129,7 @@ export default function CierrePage() {
       // Pago mixto: sumar parciales
       else if (mp.includes('mixto')) {
         const partes = mp.split('+')
-        partes.forEach(p => {
+        partes.forEach((p: string) => {
           const num = parseInt(p.replace(/[^0-9]/g, '')) || 0
           if (p.includes('efectivo')) res.efectivo += num
           else if (p.includes('débito') || p.includes('debito')) res.debito += num
@@ -170,7 +170,7 @@ export default function CierrePage() {
       else if (mp.includes('transfer')) res.transferencia += v.total
       else if (mp.includes('mixto')) {
         const partes = mp.split('+')
-        partes.forEach(p => {
+        partes.forEach((p: string) => {
           const num = parseInt(p.replace(/[^0-9]/g, '')) || 0
           if (p.includes('efectivo')) res.efectivo += num
           else if (p.includes('débito') || p.includes('debito')) res.debito += num
