@@ -29,8 +29,12 @@ export default function PropinasPage() {
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
   const [filtroFecha, setFiltroFecha] = useState(new Date().toISOString().split('T')[0])
 
+  const [isAdmin, setIsAdmin] = useState(false)
   const sesion = getSesion()
-  const isAdmin = sesion?.rol === 'admin'
+
+  useEffect(() => {
+    setIsAdmin(getSesion()?.rol === 'admin')
+  }, [])
 
   useEffect(() => { cargarPropinas() }, [filtroFecha])
 
