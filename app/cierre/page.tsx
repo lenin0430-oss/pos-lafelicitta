@@ -105,11 +105,12 @@ export default function CierrePage() {
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) return
 
-    // Ventas desde la apertura hasta ahora (o hasta el cierre del turno)
+    // Solo ventas COBRADAS (estado listo) desde la apertura
     const { data } = await supabase
       .from('ventas')
       .select('*')
       .eq('empresa_id', empresaId)
+      .eq('estado', 'listo')
       .gte('created_at', desde)
       .order('created_at', { ascending: true })
 
@@ -117,13 +118,25 @@ export default function CierrePage() {
 
     const res: ResumenVentas = { total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: data.length }
     data.forEach(v => {
-      res.total += v.total
       const mp = (v.metodo_pago || '').toLowerCase()
+      // Solo sumar al total si tiene método de pago registrado
+      if (!mp) return
+      res.total += v.total
       if (mp.includes('efectivo')) res.efectivo += v.total
       else if (mp.includes('débito') || mp.includes('debito')) res.debito += v.total
       else if (mp.includes('qr') || mp.includes('mercado')) res.qr += v.total
       else if (mp.includes('transfer')) res.transferencia += v.total
-      else res.efectivo += v.total
+      // Pago mixto: sumar parciales
+      else if (mp.includes('mixto')) {
+        const partes = mp.split('+')
+        partes.forEach(p => {
+          const num = parseInt(p.replace(/[^0-9]/g, '')) || 0
+          if (p.includes('efectivo')) res.efectivo += num
+          else if (p.includes('débito') || p.includes('debito')) res.debito += num
+          else if (p.includes('transfer')) res.transferencia += num
+          else if (p.includes('qr') || p.includes('mercado')) res.qr += num
+        })
+      }
     })
     setResumenTurno(res)
   }
@@ -140,6 +153,7 @@ export default function CierrePage() {
       .from('ventas')
       .select('*')
       .eq('empresa_id', empresaId)
+      .eq('estado', 'listo')
       .gte('created_at', desde)
       .lt('created_at', hasta)
 
@@ -147,13 +161,23 @@ export default function CierrePage() {
 
     const res: ResumenVentas = { total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: data.length }
     data.forEach(v => {
-      res.total += v.total
       const mp = (v.metodo_pago || '').toLowerCase()
+      if (!mp) return
+      res.total += v.total
       if (mp.includes('efectivo')) res.efectivo += v.total
       else if (mp.includes('débito') || mp.includes('debito')) res.debito += v.total
       else if (mp.includes('qr') || mp.includes('mercado')) res.qr += v.total
       else if (mp.includes('transfer')) res.transferencia += v.total
-      else res.efectivo += v.total
+      else if (mp.includes('mixto')) {
+        const partes = mp.split('+')
+        partes.forEach(p => {
+          const num = parseInt(p.replace(/[^0-9]/g, '')) || 0
+          if (p.includes('efectivo')) res.efectivo += num
+          else if (p.includes('débito') || p.includes('debito')) res.debito += num
+          else if (p.includes('transfer')) res.transferencia += num
+          else if (p.includes('qr') || p.includes('mercado')) res.qr += num
+        })
+      }
     })
     setResumen(res)
   }
