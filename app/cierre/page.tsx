@@ -333,6 +333,25 @@ export default function CierrePage() {
         })
       } catch (e) { console.warn('WhatsApp cierre:', (e as Error).message) }
 
+      // Alerta especial si diferencia mayor a 0.000
+      if (Math.abs(diferencia) > 10000) {
+        try {
+          await fetch('/api/cierre-whatsapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-bot-secret': 'lafelicitta2026' },
+            body: JSON.stringify({
+              alerta_diferencia: true,
+              cajero: aperturaActiva.cajero,
+              fecha: new Date().toLocaleDateString('es-CL'),
+              diferencia,
+              efectivo_fisico: fisico,
+              ventas_efectivo: resumenTurno.efectivo,
+              turno: turnoActualNum
+            })
+          })
+        } catch (e) { console.warn('Alerta diferencia:', (e as Error).message) }
+      }
+
       mostrarMensaje('✅ Turno cerrado — resumen enviado a WhatsApp', 'ok')
       setEfectivoFisico('')
       setDebitoFisico('')
