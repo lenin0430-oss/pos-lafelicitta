@@ -334,7 +334,7 @@ export default function CierrePage() {
       } catch (e) { console.warn('WhatsApp cierre:', (e as Error).message) }
 
       // Alerta especial si diferencia mayor a 0.000
-      if (Math.abs(diferencia) > 10000) {
+      if (Math.abs(diferencia) > 3000) {
         try {
           await fetch('/api/cierre-whatsapp', {
             method: 'POST',
