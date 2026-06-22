@@ -298,6 +298,23 @@ export default function CierrePage() {
         }
       } catch (eg) { console.warn('Error gastos:', eg) }
 
+      // Obtener propinas del turno
+      let totalPropinasTurno = 0
+      let propinasPorEmpleado: {empleado: string, monto: number}[] = []
+      try {
+        const { data: propinasData } = await supabase
+          .from('propinas')
+          .select('empleado, monto')
+          .eq('empresa_id', empresaId)
+          .gte('created_at', aperturaActiva.created_at)
+        if (propinasData) {
+          totalPropinasTurno = propinasData.reduce((s, p) => s + Number(p.monto), 0)
+          const mapa: Record<string, number> = {}
+          propinasData.forEach(p => { mapa[p.empleado] = (mapa[p.empleado] || 0) + Number(p.monto) })
+          propinasPorEmpleado = Object.entries(mapa).map(([empleado, monto]) => ({ empleado, monto }))
+        }
+      } catch (ep) { console.warn('Error propinas:', ep) }
+
       // Notificar al dueño por WhatsApp
       try {
         const turnosHoy = todasAperturasHoy.length
@@ -326,6 +343,8 @@ export default function CierrePage() {
             gastos_turno: gastosTurno,
             total_gastos_turno: totalGastosTurno,
             total_gastos_dia: totalGastosDia,
+            total_propinas_turno: totalPropinasTurno,
+            propinas_por_empleado: propinasPorEmpleado,
             turno_num: turnoActualNum,
             total_turnos_hoy: todasAperturasHoy.length,
             notas
