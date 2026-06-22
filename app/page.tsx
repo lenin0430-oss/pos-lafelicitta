@@ -575,7 +575,7 @@ export default function CajaPage() {
   </div>
 </div>
         <nav style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
-          {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/reportes', '📊']].map(([href, icon]) => (
+          {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/propinas', '💰'], ['/reportes', '📊']].map(([href, icon]) => (
             <a key={href} href={href} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? '#000' : 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
           ))}
           {esAdmin && <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--green)', fontSize: 18, textDecoration: 'none' }}>🔓</a>}
