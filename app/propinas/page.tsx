@@ -79,7 +79,8 @@ export default function PropinasPage() {
   }
 
   async function eliminarPropina(id: string) {
-    if (!isAdmin) { mostrarMensaje('Solo el admin puede eliminar', 'err'); return }
+    const adminCheck = getSesion()?.rol === 'admin'
+    if (!adminCheck) { mostrarMensaje('Solo el admin puede eliminar', 'err'); return }
     if (!confirm('Eliminar esta propina?')) return
     const { error } = await supabase.from('propinas').delete().eq('id', id)
     if (error) { mostrarMensaje('Error: ' + error.message, 'err') }
@@ -192,11 +193,9 @@ export default function PropinasPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontFamily: 'var(--mono)', color: 'var(--gold)', fontWeight: 700 }}>{fmt(p.monto)}</span>
-                {isAdmin && (
-                  <button onClick={() => eliminarPropina(p.id)} style={{
-                    background: 'transparent', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 16
+                <button onClick={() => eliminarPropina(p.id)} style={{
+                    background: 'transparent', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 16, opacity: getSesion()?.rol === 'admin' ? 1 : 0.2
                   }}>x</button>
-                )}
               </div>
             </div>
           ))}
