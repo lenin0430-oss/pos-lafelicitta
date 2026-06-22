@@ -44,6 +44,8 @@ export default function CajaPage() {
   const [metodoPago, setMetodoPago] = useState('')
   const [pagosMixtos, setPagosMixtos] = useState({ Efectivo: '', Débito: '', Transferencia: '', Crédito: '' })
   const [cobrando, setCobrando] = useState(false)
+  const [propinaMonto, setPropinaMonto] = useState('')
+  const [propinaEmpleado, setPropinaEmpleado] = useState('')
 
   const esAdmin = getSesion()?.rol === 'admin'
   const empresaNombre = useEmpresaNombre('LA FELICITTA')
@@ -316,6 +318,21 @@ export default function CajaPage() {
       setCobrada(true)
       setModalCobro(false)
       mostrarMensaje('¡Cobro registrado! Mesa lista ✓', 'ok')
+      // Guardar propina si se ingreso
+      if (propinaMonto && parseInt(propinaMonto) > 0 && propinaEmpleado) {
+        try {
+          await supabase.from('propinas').insert({
+            empresa_id: empresaId,
+            empleado: propinaEmpleado,
+            monto: parseInt(propinaMonto),
+            metodo_pago: metodoPago || 'Efectivo',
+            cajero: getSesion()?.nombre || 'Caja',
+            venta_id: ventaId,
+            notas: 'Cobro comanda #' + String(ordenNum - 1).padStart(3,'0'),
+            created_at: new Date().toISOString()
+          })
+        } catch(ep) { console.warn('Error propina:', ep) }
+      }
     } catch (e: unknown) {
       mostrarMensaje('Error al cobrar: ' + (e as Error).message, 'err')
     }
@@ -333,6 +350,8 @@ export default function CajaPage() {
     setVentaId(null)
     setModalCobro(false)
     setTabMovil('menu')
+    setPropinaMonto('')
+    setPropinaEmpleado('')
   }
 
   function normalizarTexto(valor: string) {
@@ -648,6 +667,32 @@ export default function CajaPage() {
                 </div>
               </div>
             )}
+            <div style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
+              <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 8 }}>
+                💰 Propina (opcional)
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Empleado</label>
+                  <select value={propinaEmpleado} onChange={e => setPropinaEmpleado(e.target.value)}
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }}>
+                    <option value="">Sin propina</option>
+                    {['Adri','Yoli','Gigi','Carlos','Marcos','Otro'].map(e => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Monto</label>
+                  <input type="number" value={propinaMonto} onChange={e => setPropinaMonto(e.target.value)}
+                    placeholder="0" disabled={!propinaEmpleado}
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%', opacity: propinaEmpleado ? 1 : 0.4 }} />
+                </div>
+              </div>
+              {propinaEmpleado && propinaMonto && parseInt(propinaMonto) > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--green)' }}>
+                  ✓ {propinaEmpleado} recibe ${parseInt(propinaMonto).toLocaleString('es-CL')} de propina
+                </div>
+              )}
+            </div>
             <button onClick={confirmarCobro} disabled={cobrando || !pagoValido}
               style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: pagoValido ? 'var(--green)' : 'var(--surface2)', color: pagoValido ? '#000' : 'var(--muted)', fontSize: 15, fontWeight: 700, cursor: pagoValido ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)', opacity: pagoValido ? 1 : 0.5 }}>
               {cobrando ? 'Registrando...' : `✓ Confirmar cobro ${fmt(total)}`}
