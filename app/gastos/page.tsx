@@ -153,7 +153,7 @@ export default function GastosPage() {
   }
 
   const totalFiltrado = gastos.reduce((s, g) => s + g.monto, 0)
-  const cajeros = [...new Set(gastos.map(g => g.cajero).filter(Boolean))]
+  const cajeros = gastos.map(g => g.cajero).filter((c, i, a) => c && a.indexOf(c) === i)
   const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
 
   const inp: React.CSSProperties = {
