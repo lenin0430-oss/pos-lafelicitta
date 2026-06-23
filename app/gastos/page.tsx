@@ -23,6 +23,7 @@ export default function GastosPage() {
   const [descripcion, setDescripcion] = useState('')
   const [monto, setMonto] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const [afectoCaja, setAfectoCaja] = useState(true)
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [cargando, setCargando] = useState(true)
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
@@ -91,6 +92,7 @@ export default function GastosPage() {
       monto: mon,
       cajero: sesion?.nombre || 'Caja',
       apertura_id: apertura?.id || null,
+      afecto_caja: afectoCaja,
       created_at: new Date().toISOString()
     })
 
@@ -202,7 +204,14 @@ export default function GastosPage() {
               </label>
               <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" style={inp} />
             </div>
-            <button onClick={intentarGuardar} disabled={guardando} style={{
+            <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 8 }}>Sale de caja</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setAfectoCaja(true)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (afectoCaja ? 'var(--gold)' : 'var(--border)'), background: afectoCaja ? 'var(--gold)' : 'transparent', color: afectoCaja ? '#000' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: afectoCaja ? 700 : 400 }}>Si - sale de caja</button>
+              <button onClick={() => setAfectoCaja(false)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (!afectoCaja ? 'var(--gold)' : 'var(--border)'), background: !afectoCaja ? 'var(--gold)' : 'transparent', color: !afectoCaja ? '#000' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: !afectoCaja ? 700 : 400 }}>No - solo registro</button>
+            </div>
+          </div>
+          <button onClick={intentarGuardar} disabled={guardando} style={{
               width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: 'pointer',
               background: 'var(--gold)', color: '#000', fontSize: 15, fontWeight: 700, fontFamily: 'var(--font)'
             }}>
@@ -274,7 +283,7 @@ export default function GastosPage() {
               <div>
                 <div style={{ fontSize: 14 }}>{g.descripcion}</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                  {g.categoria} · {g.cajero || 'sin cajera'} · {new Date(g.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                  {g.categoria} · {g.cajero || 'sin cajera'} · {new Date(g.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · {g.afecto_caja === false ? 'NO afecto caja' : 'Sale de caja'}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
