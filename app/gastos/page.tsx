@@ -119,7 +119,7 @@ export default function GastosPage() {
     const montoNum = parseInt(monto)
 
     // Si monto >= 10000 y no es admin, pedir PIN
-    if (montoNum >= 10000 && !isAdmin) {
+    if (montoNum >= 30000 && !isAdmin) {
       setGastoPendiente({ categoria, descripcion, monto: montoNum })
       setEsperandoPin(true)
       return
@@ -201,7 +201,7 @@ export default function GastosPage() {
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>
-                Monto {parseInt(monto) >= 10000 && !isAdmin && <span style={{ color: 'var(--warning)', fontSize: 11 }}> — requiere PIN admin</span>}
+                Monto {parseInt(monto) >= 30000 && !isAdmin && <span style={{ color: 'var(--warning)', fontSize: 11 }}> — requiere PIN admin</span>}
               </label>
               <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" style={inp} />
             </div>
