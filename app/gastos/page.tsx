@@ -12,6 +12,7 @@ type Gasto = {
   monto: number
   cajero: string
   apertura_id: string
+  afecto_caja: boolean
   created_at: string
 }
 
