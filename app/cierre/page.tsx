@@ -77,29 +77,34 @@ export default function CierrePage() {
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) return
 
-    const hoy = new Date()
-    // Usar medianoche hora Chile (UTC-3 / UTC-4 según DST) para no cortar turno al cambiar día UTC
-    const desdeLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0)
-    const desde = desdeLocal.toISOString()
-
-    // Traer todas las aperturas de hoy
+    // SIN filtro de fecha: buscar directamente la apertura abierta
+    // El turno puede haber empezado ayer y seguir abierto hoy (trabajo nocturno)
     const { data } = await supabase
       .from('aperturas_caja')
       .select('*')
       .eq('empresa_id', empresaId)
-      .gte('created_at', desde)
+      .eq('estado', 'abierta')
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    // Para el historial del día, traer todas las de hoy
+    const hoy = new Date()
+    const desdeLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0)
+    const { data: dataHoy } = await supabase
+      .from('aperturas_caja')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .gte('created_at', desdeLocal.toISOString())
       .order('created_at', { ascending: false })
 
-    if (data) {
-      setTodasAperturasHoy(data)
-      // La activa es la primera con estado 'abierta'
-      const activa = data.find(a => a.estado === 'abierta') || null
-      setAperturaActiva(activa)
+    if (dataHoy) setTodasAperturasHoy(dataHoy)
 
-      // Si hay apertura activa, cargar ventas del turno
-      if (activa) {
-        await cargarVentasTurno(activa.id, activa.created_at)
-      }
+    const activa = (data && data.length > 0) ? data[0] : null
+    setAperturaActiva(activa)
+
+    // Si hay apertura activa, cargar ventas del turno
+    if (activa) {
+      await cargarVentasTurno(activa.id, activa.created_at)
     }
   }
 
