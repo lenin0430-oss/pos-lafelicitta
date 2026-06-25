@@ -78,7 +78,9 @@ export default function CierrePage() {
     if (!empresaId) return
 
     const hoy = new Date()
-    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+    // Usar medianoche hora Chile (UTC-3 / UTC-4 según DST) para no cortar turno al cambiar día UTC
+    const desdeLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0)
+    const desde = desdeLocal.toISOString()
 
     // Traer todas las aperturas de hoy
     const { data } = await supabase
@@ -146,8 +148,11 @@ export default function CierrePage() {
     if (!empresaId) return
 
     const hoy = new Date()
-    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
-    const hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1).toISOString()
+    // Usar medianoche hora local para que las ventas después de las 12 UTC sigan en el mismo día
+    const desdeLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0)
+    const hastaLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1, 0, 0, 0)
+    const desde = desdeLocal.toISOString()
+    const hasta = hastaLocal.toISOString()
 
     const { data } = await supabase
       .from('ventas')
