@@ -255,14 +255,45 @@ export default function CierrePage() {
     const qrF = parseInt(qrFisico) || 0
     const transferF = parseInt(transferFisico) || 0
     const totalFisico = fisico + debitoF + qrF + transferF
-    // Restar gastos que salieron de caja fisica del efectivo esperado (se recalcula al cerrar)
-    const gastosAfectos = 0 // los gastos reales se obtienen al cerrar en el bloque try
-    const efectivoEsperado = resumenTurno.efectivo - gastosAfectos
-    const totalEsperado = efectivoEsperado + resumenTurno.debito + resumenTurno.qr + resumenTurno.transferencia
-    const diferencia = totalFisico - totalEsperado
     setCerrando(true)
 
     try {
+      // Obtener gastos del turno que salieron de caja física (afecto_caja = true)
+      // para calcular la diferencia correcta ANTES de registrar el cierre
+      let gastosAfectoCaja = 0
+      let gastosTurno: {categoria: string, monto: number}[] = []
+      let totalGastosTurno = 0
+      let totalGastosDia = 0
+      try {
+        const { data: gastosData } = await supabase
+          .from('gastos')
+          .select('categoria, monto, afecto_caja')
+          .eq('empresa_id', empresaId)
+          .gte('created_at', aperturaActiva.created_at)
+        if (gastosData) {
+          gastosTurno = gastosData.map(g => ({ categoria: g.categoria, monto: Number(g.monto) }))
+          totalGastosTurno = gastosData.reduce((s, g) => s + Number(g.monto), 0)
+          // Solo los que salieron físicamente de la caja afectan el efectivo esperado
+          gastosAfectoCaja = gastosData
+            .filter(g => g.afecto_caja === true)
+            .reduce((s, g) => s + Number(g.monto), 0)
+        }
+        const hoy = new Date()
+        const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+        const { data: gastosDiaData } = await supabase
+          .from('gastos').select('monto').eq('empresa_id', empresaId).gte('created_at', inicioDia)
+        if (gastosDiaData) {
+          totalGastosDia = gastosDiaData.reduce((s, g) => s + Number(g.monto), 0)
+        }
+      } catch (eg) { console.warn('Error gastos pre-cierre:', eg) }
+
+      // Fórmula correcta de arqueo:
+      // efectivo_esperado = fondo_inicial + ventas_efectivo - gastos_pagados_de_caja
+      const fondoInicial = aperturaActiva.monto_inicial || 0
+      const efectivoEsperado = fondoInicial + resumenTurno.efectivo - gastosAfectoCaja
+      // La diferencia es solo sobre efectivo (débito y transferencia cuadran solos con el datáfono)
+      const diferencia = fisico - efectivoEsperado
+
       // 1. Registrar cierre
       const { error: errCierre } = await supabase.from('cierres_caja').insert({
         empresa_id: empresaId,
@@ -288,33 +319,7 @@ export default function CierrePage() {
         .eq('id', aperturaActiva.id)
       if (errAp) throw errAp
 
-      // Obtener gastos del turno
-      let gastosTurno: {categoria: string, monto: number}[] = []
-      let totalGastosTurno = 0
-      let totalGastosDia = 0
-      try {
-        const desde = aperturaActiva.created_at
-        const { data: gastosData } = await supabase
-          .from('gastos')
-          .select('categoria, monto, created_at')
-          .eq('empresa_id', empresaId)
-          .gte('created_at', desde)
-        if (gastosData) {
-          gastosTurno = gastosData.map(g => ({ categoria: g.categoria, monto: Number(g.monto) }))
-          totalGastosTurno = gastosData.reduce((s, g) => s + Number(g.monto), 0)
-        }
-        // Gastos totales del dia
-        const hoy = new Date()
-        const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
-        const { data: gastosDiaData } = await supabase
-          .from('gastos')
-          .select('monto')
-          .eq('empresa_id', empresaId)
-          .gte('created_at', inicioDia)
-        if (gastosDiaData) {
-          totalGastosDia = gastosDiaData.reduce((s, g) => s + Number(g.monto), 0)
-        }
-      } catch (eg) { console.warn('Error gastos:', eg) }
+      // Gastos ya obtenidos antes del cierre (ver bloque superior)
 
       // Obtener propinas del turno
       let totalPropinasTurno = 0
@@ -382,6 +387,9 @@ export default function CierrePage() {
               fecha: new Date().toLocaleDateString('es-CL'),
               diferencia,
               efectivo_fisico: fisico,
+              efectivo_esperado: efectivoEsperado,
+              fondo_inicial: fondoInicial,
+              gastos_caja: gastosAfectoCaja,
               ventas_efectivo: resumenTurno.efectivo,
               turno: turnoActualNum
             })
@@ -415,7 +423,11 @@ export default function CierrePage() {
   const qrF = parseInt(qrFisico) || 0
   const transferF = parseInt(transferFisico) || 0
   const totalFisico = fisico + debitoF + qrF + transferF
-  const diferencia = totalFisico - resumenTurno.total
+  // Diferencia correcta: fondo_inicial + ventas_efectivo - gastos_de_caja vs efectivo_físico declarado
+  // Los gastos afecto_caja no están disponibles en tiempo real aquí (se calculan al cerrar)
+  // Para el display previo al cierre mostramos diferencia sobre solo efectivo
+  const fondoInicialDisplay = aperturaActiva?.monto_inicial || 0
+  const diferencia = fisico - (fondoInicialDisplay + resumenTurno.efectivo)
   const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
   const fechaHoy = new Date().toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const horaActual = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
