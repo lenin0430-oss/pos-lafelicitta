@@ -117,7 +117,7 @@ export const MENU: Producto[] = [
   // ── TEQUEÑOS ─────────────────────────────────────────────────
   { id: 'tequeno-25-queso', nombre: 'Tequeños 25cm — Queso', precio: 2500, categoria: 'Tequeños' },
   { id: 'tequeno-25-jamon-queso', nombre: 'Tequeños 25cm — Jamón Queso', precio: 2500, categoria: 'Tequeños' },
-  { id: 'tequeno-25-guayaba-queso', nombre: 'Tequeños 25cm — Guayaba / Queso', precio: 2500, categoria: 'Tequeños' },
+  { id: 'tequeno-25-guayaba-queso', nombre: 'Tequeños 25cm — Guayaba/Queso', precio: 2500, categoria: 'Tequeños' },
   { id: 'tequenos-8cm-4', nombre: 'Tequeños 8cm — 4 unidades', precio: 2500, categoria: 'Tequeños' },
   { id: 'tequenos-8cm-8', nombre: 'Tequeños 8cm — 8 unidades', precio: 4700, categoria: 'Tequeños' },
   { id: 'tequenos-8cm-12', nombre: 'Tequeños 8cm — 12 unidades', precio: 6900, categoria: 'Tequeños' },
