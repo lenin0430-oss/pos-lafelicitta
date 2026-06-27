@@ -94,17 +94,6 @@ export const MENU: Producto[] = [
   { id: 'arroz-cerdo-camaron', nombre: 'Especial Cerdo–Camarón', precio: 10000, categoria: 'Arroz chino', ingredientes: 'Arroz salteado, camarón, cerdo, huevo, cebollín' },
   { id: 'arroz-la-felicitta', nombre: 'Arroz La Felicitta', precio: 12000, categoria: 'Arroz chino', ingredientes: 'Jamón, pollo, cerdo, camarón, diente de dragón, huevo' },
 
-  // ── PEPITOS ──────────────────────────────────────────────────
-  { id: 'pepito-pollo-15', nombre: 'Pepito Pollo 15cm', precio: 7500, categoria: 'Pepitos', ingredientes: '200gr pollo, huevo, tocineta, queso gouda, lechuga, tomate' },
-  { id: 'pepito-carne-15', nombre: 'Pepito Carne 15cm', precio: 8500, categoria: 'Pepitos', ingredientes: '200gr carne, huevo, tocineta, queso gouda, lechuga, tomate' },
-  { id: 'pepito-mixto-15', nombre: 'Pepito Mixto 15cm', precio: 9500, categoria: 'Pepitos', ingredientes: '100gr pollo + 100gr carne + 100gr chorizo, queso gouda' },
-  { id: 'pepito-mixto-bestia', nombre: 'Pepito Mixto BESTIA', precio: 14990, categoria: 'Pepitos', ingredientes: 'Carne + pollo + chorizo + chuleta ahumada, queso gouda' },
-
-  // ── PATACONES ────────────────────────────────────────────────
-  { id: 'patacon-normal', nombre: 'Patacón Normal', precio: 7500, categoria: 'Patacones', ingredientes: 'Carne mechada o pollo, queso rallado, ensalada, salsas' },
-  { id: 'patacon-especial', nombre: 'Patacón Especial', precio: 8500, categoria: 'Patacones', ingredientes: 'Carne mechada o pollo, jamón, tocineta, queso gouda' },
-  { id: 'patacon-mixto-top', nombre: 'Patacón Mixto TOP', precio: 12000, categoria: 'Patacones', ingredientes: 'Carne mechada y pollo, jamón, tocineta, queso gouda' },
-
   // ── PAPAS Y ACOMPAÑAMIENTOS ──────────────────────────────────
   { id: 'papas-normal', nombre: 'Papas Normal', precio: 3500, categoria: 'Papas' },
   { id: 'papas-xl', nombre: 'Papas XL', precio: 6500, categoria: 'Papas' },
@@ -447,8 +436,6 @@ function inferirCategoriaProducto(nombre: string) {
   if (clave.includes('arepa')) return 'Arepas'
   if (clave.includes('cachapa')) return 'Cachapas'
   if (clave.includes('arroz')) return 'Arroz chino'
-  if (clave.includes('pepito')) return 'Pepitos'
-  if (clave.includes('patacon')) return 'Patacones'
   if (clave.includes('papa') || clave.includes('bacon') || clave.includes('salchipapa') || clave.includes('nugget')) return 'Papas'
   if (clave.includes('empanada')) return 'Empanadas'
   if (clave.includes('tequeno')) return 'Tequeños'
