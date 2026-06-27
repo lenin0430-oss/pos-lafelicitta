@@ -54,11 +54,18 @@ export default function CajaPage() {
   useEffect(() => {
     inicializarCaja()
 
+    // Actualizar reloj cada segundo
     const tick = setInterval(() => {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
     }, 1000)
 
-    return () => clearInterval(tick)
+    // Re-verificar estado de caja cada 60 segundos para detectar si se abrió/cerró desde otra sesión
+    // La caja NUNCA se cierra automáticamente — solo se re-consulta el estado real en Supabase
+    const poll = setInterval(() => {
+      verificarApertura()
+    }, 60000)
+
+    return () => { clearInterval(tick); clearInterval(poll) }
   }, [])
 
   async function inicializarCaja() {
