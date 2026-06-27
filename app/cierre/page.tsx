@@ -89,6 +89,7 @@ export default function CierrePage() {
     if (todas) setTodasAperturasHoy(todas)
 
     // La activa es la primera con estado 'abierta', sin importar la fecha
+    // Tomar SOLO la apertura más reciente con estado='abierta' (debería haber máximo una)
     const activa = todas ? (todas.find(a => a.estado === 'abierta') || null) : null
     setAperturaActiva(activa)
 
@@ -208,6 +209,14 @@ export default function CierrePage() {
     } catch { /* sin sesión */ }
 
     const turnoNum = todasAperturasHoy.length + 1
+
+    // Antes de abrir un turno nuevo, cerrar cualquier apertura que haya quedado abierta por error
+    // Esto evita que haya múltiples registros con estado='abierta' en Supabase
+    await supabase
+      .from('aperturas_caja')
+      .update({ estado: 'cerrada', cerrada_at: new Date().toISOString() })
+      .eq('empresa_id', empresaId)
+      .eq('estado', 'abierta')
 
     const { error } = await supabase.from('aperturas_caja').insert({
       empresa_id: empresaId,
