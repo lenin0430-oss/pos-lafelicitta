@@ -26,45 +26,52 @@ interface AperturaCaja {
   created_at: string
 }
 
-type Periodo = 'hoy' | 'semana' | 'mes'
+type Periodo = 'hoy' | 'semana' | 'mes' | 'dia'
 
 export default function ReportesPage() {
   const empresaNombre = useEmpresaNombre()
   const [ventas, setVentas] = useState<Venta[]>([])
   const [aperturas, setAperturas] = useState<AperturaCaja[]>([])
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
+  const [fechaDia, setFechaDia] = useState<string>(() => new Date().toISOString().split('T')[0])
   const [cargando, setCargando] = useState(true)
   const [editandoPago, setEditandoPago] = useState<string | null>(null)
   const [nuevoPago, setNuevoPago] = useState('')
   const esAdmin = getSesion()?.rol === 'admin'
 
-  useEffect(() => { cargarDatos() }, [periodo])
+  useEffect(() => { cargarDatos() }, [periodo, fechaDia])
 
   async function cargarDatos() {
     setCargando(true)
     const empresaId = await getEmpresaIdActual()
-    if (!empresaId) {
-      setVentas([])
-      setAperturas([])
-      setCargando(false)
-      return
-    }
+    if (!empresaId) { setVentas([]); setAperturas([]); setCargando(false); return }
 
     const ahora = new Date()
     let desde: Date
+    let hasta: Date | null = null
 
     if (periodo === 'hoy') {
       desde = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
     } else if (periodo === 'semana') {
       desde = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000)
-    } else {
+    } else if (periodo === 'mes') {
       desde = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
+    } else {
+      // dia especifico
+      const [y, m, d] = fechaDia.split('-').map(Number)
+      desde = new Date(y, m - 1, d, 0, 0, 0)
+      hasta = new Date(y, m - 1, d + 1, 0, 0, 0)
     }
 
-    const [{ data: ventasData }, { data: aperturasData }] = await Promise.all([
-      supabase.from('ventas').select('*').eq('empresa_id', empresaId).gte('created_at', desde.toISOString()).order('created_at', { ascending: false }),
-      supabase.from('aperturas_caja').select('*').eq('empresa_id', empresaId).gte('created_at', desde.toISOString()).order('created_at', { ascending: false })
-    ])
+    let ventasQ = supabase.from('ventas').select('*').eq('empresa_id', empresaId).gte('created_at', desde.toISOString()).order('created_at', { ascending: false })
+    let aperturasQ = supabase.from('aperturas_caja').select('*').eq('empresa_id', empresaId).gte('created_at', desde.toISOString()).order('created_at', { ascending: false })
+
+    if (hasta) {
+      ventasQ = ventasQ.lt('created_at', hasta.toISOString())
+      aperturasQ = aperturasQ.lt('created_at', hasta.toISOString())
+    }
+
+    const [{ data: ventasData }, { data: aperturasData }] = await Promise.all([ventasQ, aperturasQ])
 
     if (ventasData) setVentas(ventasData)
     if (aperturasData) setAperturas(aperturasData)
@@ -78,9 +85,7 @@ export default function ReportesPage() {
     if (!empresaId) return
     const { error } = await supabase.from('ventas').update({ metodo_pago: nuevoPago }).eq('empresa_id', empresaId).eq('id', id)
     if (error) { alert('Error al corregir pago: ' + error.message); return }
-    setEditandoPago(null)
-    setNuevoPago('')
-    cargarDatos()
+    setEditandoPago(null); setNuevoPago(''); cargarDatos()
     alert('Método de pago corregido correctamente.')
   }
 
@@ -94,8 +99,7 @@ export default function ReportesPage() {
     if (!empresaId) return
     const { error } = await supabase.from('ventas').delete().eq('empresa_id', empresaId).eq('id', id)
     if (error) { alert('Error al eliminar venta: ' + error.message); return }
-    cargarDatos()
-    alert('Venta eliminada correctamente.')
+    cargarDatos(); alert('Venta eliminada correctamente.')
   }
 
   function exportarCSV() {
@@ -108,7 +112,7 @@ export default function ReportesPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ventas_${periodo}_${new Date().toLocaleDateString('es-CL').replace(/\//g, '-')}.csv`
+    a.download = `ventas_${periodo === 'dia' ? fechaDia : periodo}_${new Date().toLocaleDateString('es-CL').replace(/\//g, '-')}.csv`
     a.click()
   }
 
@@ -135,10 +139,7 @@ export default function ReportesPage() {
   })
 
   const porTipo: Record<string, number> = {}
-  ventas.forEach(v => {
-    const t = v.tipo_servicio || 'Mesa'
-    porTipo[t] = (porTipo[t] || 0) + v.total
-  })
+  ventas.forEach(v => { const t = v.tipo_servicio || 'Mesa'; porTipo[t] = (porTipo[t] || 0) + v.total })
 
   const conteoProductos: Record<string, { cantidad: number; ingresos: number }> = {}
   ventas.forEach(v => {
@@ -150,11 +151,7 @@ export default function ReportesPage() {
   })
   const topProductos = Object.entries(conteoProductos).sort((a, b) => b[1].cantidad - a[1].cantidad).slice(0, 8)
 
-  const aperturaHoy = aperturas.find(a => {
-    const fechaA = new Date(a.created_at).toLocaleDateString('es-CL')
-    const hoy = new Date().toLocaleDateString('es-CL')
-    return fechaA === hoy
-  })
+  const aperturaHoy = aperturas.length > 0 ? aperturas[aperturas.length - 1] : null
 
   const METODO_COLOR: Record<string, string> = {
     'Efectivo': '#4CAF7D', 'Débito': '#D4A843', 'Transferencia': '#64B5F6',
@@ -169,10 +166,11 @@ export default function ReportesPage() {
     </div>
   )
 
+  const labelPeriodo = periodo === 'hoy' ? 'Hoy' : periodo === 'semana' ? 'Últimos 7 días' : periodo === 'mes' ? 'Este mes' : fechaDia
+
   return (
     <AuthGuard rolRequerido="admin">
       <div style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font)' }}>
-        {/* Header */}
         <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 20px', height: 56, display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontFamily: 'var(--display)', fontSize: 20, letterSpacing: 3, color: 'var(--gold)' }}>{empresaNombre}</span>
           <nav style={{ display: 'flex', gap: 4, marginLeft: 16 }}>
@@ -191,6 +189,18 @@ export default function ReportesPage() {
                 {p === 'hoy' ? 'Hoy' : p === 'semana' ? 'Últimos 7 días' : 'Este mes'}
               </button>
             ))}
+            {/* Filtro por día específico */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid ' + (periodo === 'dia' ? 'var(--gold)' : 'var(--border)'), borderRadius: 20, padding: '3px 12px', background: periodo === 'dia' ? 'rgba(212,168,67,.12)' : 'transparent' }}>
+              <span style={{ fontSize: 13, color: periodo === 'dia' ? 'var(--gold)' : 'var(--muted)', fontWeight: 600 }}>📅</span>
+              <input
+                type="date"
+                value={fechaDia}
+                max={new Date().toISOString().split('T')[0]}
+                onChange={e => { setFechaDia(e.target.value); setPeriodo('dia') }}
+                onClick={() => setPeriodo('dia')}
+                style={{ background: 'transparent', border: 'none', color: periodo === 'dia' ? 'var(--gold)' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', outline: 'none', fontFamily: 'var(--font)' }}
+              />
+            </div>
             <button onClick={exportarCSV} style={{ marginLeft: 'auto', padding: '6px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
               ⬇️ CSV
             </button>
@@ -203,7 +213,7 @@ export default function ReportesPage() {
               {/* APERTURA DE CAJA */}
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>🔓 Apertura de Caja — Hoy</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>🔓 Apertura de Caja — {labelPeriodo}</div>
                   {aperturaHoy ? (
                     <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
                       <div>
@@ -215,7 +225,7 @@ export default function ReportesPage() {
                       <div style={{ fontSize: 13 }}>Efectivo en caja estimado: <strong style={{ fontFamily: 'var(--mono)', color: 'var(--gold)' }}>{fmt(aperturaHoy.monto_inicial + (porMetodo['Efectivo']?.total || 0))}</strong></div>
                     </div>
                   ) : (
-                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>No se registró apertura hoy</div>
+                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>No se registró apertura en este período</div>
                   )}
                 </div>
               </div>
