@@ -231,6 +231,13 @@ export default function CierrePage() {
   async function cerrarTurnoActual() {
     if (!aperturaActiva) return
     if (!efectivoFisico) { mostrarMensaje('Ingresa al menos el efectivo físico', 'err'); return }
+
+    // Confirmación doble obligatoria — la caja SOLO se cierra manualmente
+    const confirmar = window.confirm(
+      `¿Confirmas el cierre del Turno ${turnoActualNum}?\n\nEsta acción marcará la caja como cerrada.\nSolo hazlo cuando el turno haya terminado.`
+    )
+    if (!confirmar) return
+
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
 
