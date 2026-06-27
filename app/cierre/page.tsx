@@ -239,8 +239,8 @@ export default function CierrePage() {
     const qrF = parseInt(qrFisico) || 0
     const transferF = parseInt(transferFisico) || 0
     const totalFisico = fisico + debitoF + qrF + transferF
-    // Restar gastos que salieron de caja fisica del efectivo esperado
-    const gastosAfectos = totalGastosTurno // ya calculado arriba, todos los gastos del turno por ahora
+    // Restar gastos que salieron de caja fisica del efectivo esperado (se recalcula al cerrar)
+    const gastosAfectos = 0 // los gastos reales se obtienen al cerrar en el bloque try
     const efectivoEsperado = resumenTurno.efectivo - gastosAfectos
     const totalEsperado = efectivoEsperado + resumenTurno.debito + resumenTurno.qr + resumenTurno.transferencia
     const diferencia = totalFisico - totalEsperado
