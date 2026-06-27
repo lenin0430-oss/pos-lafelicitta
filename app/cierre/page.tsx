@@ -77,32 +77,22 @@ export default function CierrePage() {
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) return
 
-    // SIN filtro de fecha: buscar directamente la apertura abierta
-    // El turno puede haber empezado ayer y seguir abierto hoy (trabajo nocturno)
-    const { data } = await supabase
+    // Traer TODAS las aperturas recientes sin filtro de fecha
+    // La caja se cierra SOLO manualmente, nunca por fecha/hora
+    const { data: todas } = await supabase
       .from('aperturas_caja')
       .select('*')
       .eq('empresa_id', empresaId)
-      .eq('estado', 'abierta')
       .order('created_at', { ascending: false })
-      .limit(1)
+      .limit(20)
 
-    // Para el historial del día, traer todas las de hoy
-    const hoy = new Date()
-    const desdeLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0)
-    const { data: dataHoy } = await supabase
-      .from('aperturas_caja')
-      .select('*')
-      .eq('empresa_id', empresaId)
-      .gte('created_at', desdeLocal.toISOString())
-      .order('created_at', { ascending: false })
+    if (todas) setTodasAperturasHoy(todas)
 
-    if (dataHoy) setTodasAperturasHoy(dataHoy)
-
-    const activa = (data && data.length > 0) ? data[0] : null
+    // La activa es la primera con estado 'abierta', sin importar la fecha
+    const activa = todas ? (todas.find(a => a.estado === 'abierta') || null) : null
     setAperturaActiva(activa)
 
-    // Si hay apertura activa, cargar ventas del turno
+    // Si hay apertura activa, cargar ventas desde que se abrió
     if (activa) {
       await cargarVentasTurno(activa.id, activa.created_at)
     }
@@ -152,12 +142,11 @@ export default function CierrePage() {
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) return
 
+    // Usar inicio del día natural solo para el acumulado del día en el panel admin
+    // No se usa para cerrar nada — la caja cierra solo manualmente
     const hoy = new Date()
-    // Usar medianoche hora local para que las ventas después de las 12 UTC sigan en el mismo día
     const desdeLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0)
-    const hastaLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1, 0, 0, 0)
     const desde = desdeLocal.toISOString()
-    const hasta = hastaLocal.toISOString()
 
     const { data } = await supabase
       .from('ventas')
@@ -165,7 +154,6 @@ export default function CierrePage() {
       .eq('empresa_id', empresaId)
       .eq('estado', 'listo')
       .gte('created_at', desde)
-      .lt('created_at', hasta)
 
     if (!data) return
 
@@ -415,7 +403,9 @@ export default function CierrePage() {
   const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
   const fechaHoy = new Date().toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const horaActual = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
-  const turnoActualNum = todasAperturasHoy.findIndex(a => a.id === aperturaActiva?.id) + 1 || todasAperturasHoy.length + 1
+  // turnoActualNum: posición de la apertura activa entre todas (sin filtro de fecha)
+  const idxActiva = aperturaActiva ? todasAperturasHoy.findIndex(a => a.id === aperturaActiva.id) : -1
+  const turnoActualNum = idxActiva >= 0 ? (todasAperturasHoy.length - idxActiva) : (todasAperturasHoy.filter(a => a.estado === 'cerrada').length + 1)
 
   const inp = { width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '10px 12px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }
 
