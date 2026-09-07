@@ -39,7 +39,7 @@ export default function LoginPage() {
     setCargando(true)
     setError('')
     try {
-            const { data, error } = await supabase
+      const { data, error } = await supabase
         .rpc('verificar_pin_garzon', { p_pin: pinCompleto })
         .maybeSingle()
 
@@ -77,11 +77,11 @@ export default function LoginPage() {
 
     try {
       const { data, error } = await supabase
-        .from('usuarios')
-        .select('nombre, rol, empresa_id, activo')
-              const { data, error } = await supabase
         .rpc('verificar_login_admin', { p_email: email.toLowerCase().trim(), p_pin: password.trim() })
         .maybeSingle()
+
+      if (error || !data) {
+        setError('Credenciales incorrectas')
         setCargando(false)
         return
       }
