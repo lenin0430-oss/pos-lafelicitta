@@ -1,385 +1,59 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import { resolverEmpresaId, setSesion, getSesion } from '@/lib/auth'
+import { useEffect, useState } from 'react'
+import { getSesion } from '@/lib/auth'
 
-// ────────────────────────────────────────────────────
-//  NOTA: Esta página ya no tiene ningún email ni slug
-//  hardcodeado. Cualquier admin de cualquier empresa
-//  puede entrar con su email + PIN.
-// ────────────────────────────────────────────────────
+const LINKS_ADMIN = [
+  { href: '/', label: '🧾 Caja' },
+  { href: '/cocina', label: '🍳 Cocina' },
+  { href: '/productos', label: '🏷️ Productos' },
+  { href: '/gastos', label: '💸 Gastos' },
+  { href: '/propinas', label: '💰 Propinas' },
+  { href: '/reportes', label: '📊 Reportes' },
+  { href: '/costeo', label: '🧮 Costeo' },
+  { href: '/stock', label: '📦 Stock' },
+  { href: '/cierre', label: '🔒 Cierre' },
+]
 
-export default function LoginPage() {
-  const [modo, setModo] = useState<'pin' | 'admin'>('pin')
-  const [pin, setPin] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [cargando, setCargando] = useState(false)
+const LINKS_GARZON = [
+  { href: '/', label: '🧾 Caja' },
+  { href: '/cocina', label: '🍳 Cocina' },
+  { href: '/gastos', label: '💸 Gastos' },
+  { href: '/propinas', label: '💰 Propinas' },
+  { href: '/cierre', label: '🔒 Cierre' },
+]
+
+export default function Nav({ active }: { active: string }) {
+  const [hora, setHora] = useState('')
+  const [links, setLinks] = useState(LINKS_GARZON)
 
   useEffect(() => {
-    // Limpiar sesión anterior al entrar al login
-    localStorage.removeItem('lf_sesion')
+    const sesion = getSesion()
+    setLinks(sesion?.rol === 'admin' ? LINKS_ADMIN : LINKS_GARZON)
+    const tick = setInterval(() => {
+      setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
+    }, 1000)
+    return () => clearInterval(tick)
   }, [])
 
-  // ── PIN login ────────────────────────────────────
-  function presionarPin(num: string) {
-    if (pin.length >= 4) return
-    setPin(prev => prev + num)
-    setError('')
-  }
-
-  function borrarPin() {
-    setPin(prev => prev.slice(0, -1))
-    setError('')
-  }
-
-  async function verificarPin(pinCompleto: string) {
-    if (pinCompleto.length < 4) return
-    setCargando(true)
-    setError('')
-    try {
-      const { data, error } = await supabase
-        .rpc('verificar_pin_garzon', { p_pin: pinCompleto })
-        .maybeSingle()
-
-      if (!error && data) {
-        setSesion(data.rol === 'admin' ? 'admin' : 'garzon', data.nombre, data.empresa_id)
-        window.location.href = '/'
-        return
-      }
-
-      setError('PIN incorrecto')
-      setPin('')
-    } catch {
-      setError('Error de conexión')
-      setPin('')
-    }
-    setCargando(false)
-  }
-
-  // Verificar automáticamente cuando el PIN llega a 4 dígitos
-  useEffect(() => {
-    if (pin.length === 4) verificarPin(pin)
-  }, [pin])
-
-  // ── Admin login ──────────────────────────────────
-  // Busca en la tabla 'usuarios' por email + pin.
-  // Funciona para cualquier empresa — sin hardcoding.
-  async function loginAdmin() {
-    if (!email.trim() || !password.trim()) {
-      setError('Ingresa email y PIN')
-      return
-    }
-
-    setCargando(true)
-    setError('')
-
-    try {
-      const { data, error } = await supabase
-        .rpc('verificar_login_admin', { p_email: email.toLowerCase().trim(), p_pin: password.trim() })
-        .maybeSingle()
-
-      if (error || !data) {
-        setError('Credenciales incorrectas')
-        setCargando(false)
-        return
-      }
-
-      setSesion('admin', data.nombre, data.empresa_id)
-      window.location.href = '/'
-    } catch {
-      setError('Error de conexión')
-    }
-
-    setCargando(false)
-  }
-
-  // ── UI helpers ───────────────────────────────────
-  const btnPin = (num: string) => (
-    <button
-      key={num}
-      onClick={() => presionarPin(num)}
-      disabled={cargando}
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        color: 'var(--text)',
-        fontSize: 22,
-        fontWeight: 700,
-        fontFamily: 'var(--mono)',
-        cursor: 'pointer',
-        height: 64,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'background 0.1s',
-      }}
-    >
-      {num}
-    </button>
-  )
-
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'var(--bg)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: 'var(--font)',
-      padding: 20,
-    }}>
-
-      {/* Logo */}
-      <div style={{
-        fontFamily: 'var(--display)',
-        fontSize: 32,
-        letterSpacing: 4,
-        color: 'var(--gold)',
-        marginBottom: 4,
-      }}>
-        MESAPOS
+    <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 100 }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 3, color: 'var(--gold)' }}>LA FELICITTA</span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)' }}>{hora}</span>
       </div>
-      <div style={{
-        fontSize: 12,
-        color: 'var(--muted)',
-        letterSpacing: 2,
-        marginBottom: 32,
-      }}>
-        SISTEMA DE CAJA
+      <div style={{ display: 'flex', borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
+        {links.map(link => (
+          <a key={link.href} href={link.href} style={{
+            flex: 1, textAlign: 'center', padding: '10px 8px', fontSize: 12, fontWeight: 600,
+            textDecoration: 'none', fontFamily: 'var(--font)', whiteSpace: 'nowrap',
+            borderBottom: active === link.href ? '2px solid var(--gold)' : '2px solid transparent',
+            color: active === link.href ? 'var(--gold)' : 'var(--muted)',
+            background: 'transparent', transition: 'color .15s',
+          }}>
+            {link.label}
+          </a>
+        ))}
       </div>
-
-      {/* Tabs */}
-      <div style={{
-        display: 'flex',
-        background: 'var(--surface)',
-        borderRadius: 12,
-        padding: 4,
-        gap: 4,
-        marginBottom: 28,
-        border: '1px solid var(--border)',
-      }}>
-        <button
-          onClick={() => { setModo('pin'); setError('') }}
-          style={{
-            padding: '8px 24px',
-            borderRadius: 10,
-            border: 'none',
-            background: modo === 'pin' ? 'var(--gold)' : 'transparent',
-            color: modo === 'pin' ? '#000' : 'var(--muted)',
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: 'pointer',
-            fontFamily: 'var(--font)',
-          }}
-        >
-          👤 Garzón
-        </button>
-        <button
-          onClick={() => { setModo('admin'); setError('') }}
-          style={{
-            padding: '8px 24px',
-            borderRadius: 10,
-            border: 'none',
-            background: modo === 'admin' ? 'var(--gold)' : 'transparent',
-            color: modo === 'admin' ? '#000' : 'var(--muted)',
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: 'pointer',
-            fontFamily: 'var(--font)',
-          }}
-        >
-          🔐 Admin
-        </button>
-      </div>
-
-      <div style={{ width: '100%', maxWidth: 320 }}>
-
-        {modo === 'pin' ? (
-          <>
-            {/* Indicador PIN */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 28 }}>
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  background: pin.length > i ? 'var(--gold)' : 'var(--surface2)',
-                  border: '2px solid ' + (pin.length > i ? 'var(--gold)' : 'var(--border)'),
-                  transition: 'all 0.15s',
-                }} />
-              ))}
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div style={{
-                textAlign: 'center',
-                color: 'var(--red)',
-                fontSize: 13,
-                marginBottom: 16,
-                padding: '8px',
-                background: 'rgba(217,79,61,.1)',
-                borderRadius: 8,
-                border: '1px solid var(--red)',
-              }}>
-                {error}
-              </div>
-            )}
-
-            {/* Teclado PIN */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => btnPin(n))}
-              <div />
-              {btnPin('0')}
-              <button
-                onClick={borrarPin}
-                style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 12,
-                  color: 'var(--muted)',
-                  fontSize: 20,
-                  cursor: 'pointer',
-                  height: 64,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                ⌫
-              </button>
-            </div>
-
-            {cargando && (
-              <div style={{
-                textAlign: 'center',
-                color: 'var(--muted)',
-                fontSize: 13,
-                marginTop: 20,
-              }}>
-                Verificando...
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            {/* Login Admin — email + PIN */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-              <div>
-                <label style={{
-                  fontSize: 11,
-                  color: 'var(--muted)',
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                  display: 'block',
-                  marginBottom: 6,
-                }}>
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => { setEmail(e.target.value); setError('') }}
-                  placeholder="admin@turestaurante.com"
-                  style={{
-                    width: '100%',
-                    background: 'var(--surface2)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--text)',
-                    padding: '12px 14px',
-                    fontFamily: 'var(--font)',
-                    fontSize: 14,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{
-                  fontSize: 11,
-                  color: 'var(--muted)',
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                  display: 'block',
-                  marginBottom: 6,
-                }}>
-                  PIN Admin
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => { setPassword(e.target.value); setError('') }}
-                  placeholder="••••"
-                  maxLength={8}
-                  onKeyDown={e => e.key === 'Enter' && loginAdmin()}
-                  style={{
-                    width: '100%',
-                    background: 'var(--surface2)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--text)',
-                    padding: '12px 14px',
-                    fontFamily: 'var(--font)',
-                    fontSize: 14,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              {error && (
-                <div style={{
-                  color: 'var(--red)',
-                  fontSize: 13,
-                  padding: '8px 12px',
-                  background: 'rgba(217,79,61,.1)',
-                  borderRadius: 8,
-                  border: '1px solid var(--red)',
-                }}>
-                  {error}
-                </div>
-              )}
-
-              <button
-                onClick={loginAdmin}
-                disabled={cargando || !email || !password}
-                style={{
-                  padding: '14px',
-                  borderRadius: 10,
-                  border: 'none',
-                  background: (!email || !password) ? 'var(--surface2)' : 'var(--gold)',
-                  color: (!email || !password) ? 'var(--muted)' : '#000',
-                  fontSize: 15,
-                  fontWeight: 700,
-                  cursor: (!email || !password) ? 'not-allowed' : 'pointer',
-                  fontFamily: 'var(--font)',
-                  opacity: cargando ? 0.6 : 1,
-                }}
-              >
-                {cargando ? 'Entrando...' : '🔐 Entrar como Admin'}
-              </button>
-
-              <p style={{
-                fontSize: 11,
-                color: 'var(--muted)',
-                textAlign: 'center',
-                marginTop: 4,
-                lineHeight: 1.5,
-              }}>
-                Usa el email registrado en tu cuenta y tu PIN de 4 dígitos
-              </p>
-            </div>
-          </>
-        )}
-
-      </div>
-    </div>
+    </header>
   )
 }
