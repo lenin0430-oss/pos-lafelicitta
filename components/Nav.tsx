@@ -4,8 +4,6 @@ import { getSesion } from '@/lib/auth'
 
 const LINKS_ADMIN = [
   { href: '/', label: '🧾 Caja' },
-  { href: '/cocina', label: '🍳 Cocina' },const LINKS_ADMIN = [
-  { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
   { href: '/productos', label: '🏷️ Productos' },
   { href: '/gastos', label: '💸 Gastos' },
