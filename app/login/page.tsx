@@ -39,11 +39,8 @@ export default function LoginPage() {
     setCargando(true)
     setError('')
     try {
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select('nombre, rol, empresa_id, activo')
-        .eq('pin', pinCompleto)
-        .eq('activo', true)
+            const { data, error } = await supabase
+        .rpc('verificar_pin_garzon', { p_pin: pinCompleto })
         .maybeSingle()
 
       if (!error && data) {
@@ -82,14 +79,9 @@ export default function LoginPage() {
       const { data, error } = await supabase
         .from('usuarios')
         .select('nombre, rol, empresa_id, activo')
-        .eq('email', email.toLowerCase().trim())
-        .eq('pin', password.trim())
-        .eq('rol', 'admin')
-        .eq('activo', true)
+              const { data, error } = await supabase
+        .rpc('verificar_login_admin', { p_email: email.toLowerCase().trim(), p_pin: password.trim() })
         .maybeSingle()
-
-      if (error || !data) {
-        setError('Credenciales incorrectas')
         setCargando(false)
         return
       }
