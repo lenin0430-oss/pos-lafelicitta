@@ -166,7 +166,7 @@ export default function GastosPage() {
   }
 
   return (
-    <AuthGuard>
+    <AuthGuard rolRequerido="admin">
       <Nav active="/gastos" />
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '20px 16px', fontFamily: 'var(--font)' }}>
 
