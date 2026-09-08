@@ -17,6 +17,7 @@ const LINKS_ADMIN = [
 const LINKS_GARZON = [
   { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
+]
   
 
 export default function Nav({ active }: { active: string }) {
