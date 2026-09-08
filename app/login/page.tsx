@@ -39,7 +39,7 @@ export default function LoginPage() {
     setCargando(true)
     setError('')
     try {
-      const { data, error } = await supabase
+      const { data, error }: { data: { nombre: string; rol: string; empresa_id: string } | null; error: any } = await supabase
         .rpc('verificar_pin_garzon', { p_pin: pinCompleto })
         .maybeSingle()
 
@@ -76,7 +76,7 @@ export default function LoginPage() {
     setError('')
 
     try {
-      const { data, error } = await supabase
+      const { data, error }: { data: { nombre: string; rol: string; empresa_id: string } | null; error: any } = await supabase
         .rpc('verificar_login_admin', { p_email: email.toLowerCase().trim(), p_pin: password.trim() })
         .maybeSingle()
 
