@@ -17,10 +17,7 @@ const LINKS_ADMIN = [
 const LINKS_GARZON = [
   { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
-  { href: '/gastos', label: '💸 Gastos' },
-  { href: '/propinas', label: '💰 Propinas' },
-  { href: '/cierre', label: '🔒 Cierre' },
-]
+  
 
 export default function Nav({ active }: { active: string }) {
   const [hora, setHora] = useState('')
