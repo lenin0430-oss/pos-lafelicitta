@@ -472,7 +472,7 @@ export default function CierrePage() {
   }
 
   return (
-    <AuthGuard>
+    <AuthGuard rolRequerido="admin">
       <>
         {/* PRINT CIERRE */}
         <div id="cierre-print" style={{ display: 'none' }}>
