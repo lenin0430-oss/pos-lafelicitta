@@ -34,11 +34,24 @@ export const MENU: Producto[] = [
   { id: 'personal-brasa-completo', nombre: '¼ Pollo + Papas + Arroz + Ensalada', precio: 7000, categoria: 'Combos a la Brasa', ingredientes: '¼ pollo a la brasa + papas + arroz + ensalada' },
 
   // ── ALMUERZOS ────────────────────────────────────────────────
-  { id: 'almuerzo-pollo-agridulce', nombre: 'Pollo agridulce', precio: 6990, categoria: 'Almuerzos', ingredientes: 'Pollo agridulce + 2 acompañamientos' },
-  { id: 'almuerzo-chop-suey', nombre: 'Chop suey de pollo', precio: 6990, categoria: 'Almuerzos', ingredientes: 'Chop suey de pollo + 2 acompañamientos' },
-  { id: 'almuerzo-pechuga-crispy', nombre: 'Pechuga Crispy al Estilo Chef', precio: 6990, categoria: 'Almuerzos', ingredientes: 'Pechuga crispy + 2 acompañamientos' },
-  { id: 'almuerzo-pollo-brasa', nombre: 'Pollo a la brasa', precio: 7500, categoria: 'Almuerzos', ingredientes: 'Pollo a la brasa + 2 acompañamientos' },
-  { id: 'almuerzo-costillas-agridulce', nombre: 'Costillas chinas agridulce', precio: 7990, categoria: 'Almuerzos', ingredientes: 'Costillas chinas agridulce + 2 acompañamientos' },
+  { id: 'almuerzo-chuleta-vetada', nombre: 'Chuleta vetada', precio: 4000, categoria: 'Almuerzos', ingredientes: 'Agregados: arroz chino o blanco, ensalada chilena/rallada/surtida, papas fritas o fideos salteados' },
+  { id: 'almuerzo-pollo-estofado', nombre: 'Pollo estofado', precio: 4000, categoria: 'Almuerzos', ingredientes: 'Agregados: arroz chino o blanco, ensalada chilena/rallada/surtida, papas fritas o fideos salteados' },
+  { id: 'almuerzo-pechuga-plancha', nombre: 'Pechuga a la plancha', precio: 4000, categoria: 'Almuerzos', ingredientes: 'Agregados: arroz chino o blanco, ensalada chilena/rallada/surtida, papas fritas o fideos salteados' },
+  { id: 'almuerzo-pollo-horno', nombre: 'Pollo al horno', precio: 4990, categoria: 'Almuerzos', ingredientes: 'Agregados: arroz chino o blanco, ensalada chilena/rallada/surtida, papas fritas o fideos salteados' },
+  { id: 'almuerzo-chop-suey', nombre: 'Chop suey', precio: 6990, categoria: 'Almuerzos', ingredientes: 'Agregados: arroz chino o blanco, ensalada chilena/rallada/surtida, papas fritas o fideos salteados' },
+  { id: 'almuerzo-pollo-agridulce', nombre: 'Pollo agridulce', precio: 6990, categoria: 'Almuerzos', ingredientes: 'Agregados: arroz chino o blanco, ensalada chilena/rallada/surtida, papas fritas o fideos salteados' },
+
+  // ── PARRILLA ─────────────────────────────────────────────────
+  { id: 'parrilla-arepa', nombre: 'Arepa Parrillera', precio: 5990, categoria: 'Parrilla', ingredientes: 'Carne, pollo y chorizo a la parrilla' },
+  { id: 'parrilla-salchipollo', nombre: 'Salchipollo a la Parrilla', precio: 5990, categoria: 'Parrilla', ingredientes: 'Papas fritas, pollo a la parrilla y chorizo' },
+  { id: 'parrilla-salchicarne', nombre: 'Salchicarne a la Parrilla', precio: 6990, categoria: 'Parrilla', ingredientes: 'Papas fritas, carne a la parrilla y chorizo' },
+  { id: 'parrilla-burger-super', nombre: 'Hamburguesa Super a la Parrilla', precio: 7500, categoria: 'Parrilla', ingredientes: 'Proteína a la parrilla, huevo, queso gouda, cebolla morada, lechuga, tomate y tocino' },
+  { id: 'parrilla-salchimixta', nombre: 'Salchimixta a la Parrilla', precio: 7990, categoria: 'Parrilla', ingredientes: 'Papas fritas, carne, pollo y chorizo a la parrilla' },
+  { id: 'parrilla-costilla-bbq', nombre: 'Costilla BBQ', precio: 9990, categoria: 'Parrilla', ingredientes: '300 g de costilla BBQ acompañada de papas fritas' },
+  { id: 'parrilla-picada-colombiana', nombre: 'Picada Colombiana', precio: 12000, categoria: 'Parrilla', ingredientes: 'Chorizo, costilla de cerdo, carne, pollo, 2 tostones y 2 arepas' },
+  { id: 'parrilla-personal', nombre: 'Parrilla Personal', precio: 13990, categoria: 'Parrilla', ingredientes: 'Vacuno, pollo, cerdo, 1 chorizo, 1 prieta + 2 agregados a elección' },
+  { id: 'parrilla-duo', nombre: 'Parrilla Dúo', precio: 25990, categoria: 'Parrilla', ingredientes: 'Vacuno, pollo, cerdo, 2 chorizos, 2 prietas + 2 agregados a elección' },
+  { id: 'parrilla-familiar', nombre: 'Parrilla Familiar', precio: 35990, categoria: 'Parrilla', ingredientes: 'Vacuno, pollo, cerdo, 3 chorizos, 3 prietas + 2 agregados a elección' },
 
   // ── BURGERS ──────────────────────────────────────────────────
   { id: 'burger-felicitta', nombre: 'La Felicitta', precio: 3500, categoria: 'Burgers', ingredientes: 'Carne de la casa, papas hilo, tomate, lechuga, ketchup, mostaza, mayo' },
