@@ -80,7 +80,7 @@ export default function GastosPage() {
       .from('aperturas_caja')
       .select('id')
       .eq('empresa_id', empresaId)
-      .eq('estado', 'abierto')
+      .eq('estado', 'abierta')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -166,7 +166,7 @@ export default function GastosPage() {
   }
 
   return (
-    <AuthGuard rolRequerido="admin">
+    <AuthGuard>
       <Nav active="/gastos" />
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '20px 16px', fontFamily: 'var(--font)' }}>
 
