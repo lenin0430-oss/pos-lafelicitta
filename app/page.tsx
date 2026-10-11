@@ -154,12 +154,16 @@ export default function CajaPage() {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 2500)
     try {
-      const response = await fetch('http://127.0.0.1:9109/print', {
+      const requestInit = {
         method: 'POST',
+        mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: controller.signal
-      })
+        signal: controller.signal,
+        targetAddressSpace: 'loopback'
+      } as RequestInit & { targetAddressSpace: 'loopback' }
+
+      const response = await fetch('http://127.0.0.1:9109/print', requestInit)
       if (!response.ok) throw new Error('Print server ' + response.status)
       mostrarMensaje('Comanda impresa en XP-80C ✓', 'ok')
     } catch {
