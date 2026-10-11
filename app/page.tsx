@@ -222,7 +222,7 @@ export default function CajaPage() {
         ctx.font = l.font
         ctx.textAlign = 'left'
         ctx.fillText(l.texto, PAD, y)
-      } else {
+      } else if (l.tipo === 'par') {
         ctx.font = l.font
         ctx.textAlign = 'left'
         const maxIzq = MAX - 110
