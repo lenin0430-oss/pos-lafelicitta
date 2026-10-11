@@ -140,6 +140,7 @@ export default function CajaPage() {
 
     const W = 576
     const PAD = 24
+    const TOP_SAFE = 220
     const MAX = W - PAD * 2
     const measure = document.createElement('canvas').getContext('2d')
     if (!measure) { window.print(); return }
@@ -192,7 +193,7 @@ export default function CajaPage() {
     lineas.push({ tipo: 'regla', alto: 18 })
     lineas.push({ tipo: 'centro', texto: 'Gracias por su visita!', font: '18px Arial', alto: 30 })
 
-    const H = PAD * 2 + lineas.reduce((s, l) => s + l.alto, 0)
+    const H = TOP_SAFE + PAD + lineas.reduce((s, l) => s + l.alto, 0)
     canvas.width = W
     canvas.height = H
 
@@ -203,7 +204,9 @@ export default function CajaPage() {
     ctx.fillStyle = '#000'
     ctx.textBaseline = 'top'
 
-    let y = PAD
+    // Zona blanca de seguridad al inicio: absorbe la corrupción del driver XP-80C
+    // antes de que comience la información útil del ticket.
+    let y = TOP_SAFE
     lineas.forEach(l => {
       if (l.tipo === 'regla') {
         ctx.strokeStyle = '#000'
