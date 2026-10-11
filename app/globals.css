@@ -52,6 +52,19 @@ html, body {
     line-height: 1.4;
   }
 
+  /* Ticket de cocina: texto puro, sin graficos ni estilos complejos */
+  #ticket-print {
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 10pt !important;
+    line-height: 1.25 !important;
+    font-weight: 400 !important;
+    font-style: normal !important;
+    letter-spacing: 0 !important;
+    white-space: pre-wrap !important;
+    word-break: break-word;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
   /* LOGO */
   .t-logo {
     font-size: 11pt;
