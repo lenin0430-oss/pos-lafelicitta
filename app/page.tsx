@@ -134,7 +134,7 @@ export default function CajaPage() {
 
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
   const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
-  async function imprimirComandaRaw(numeroTicket: number) {
+  function imprimirComandaRaw(numeroTicket: number, printWindow?: Window | null) {
     const payload = {
       empresa: empresaNombre,
       tipo: mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA',
@@ -150,23 +150,16 @@ export default function CajaPage() {
       })),
       total
     }
-
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 5000)
+    const url = 'http://localhost:9109/print?d=' + encodeURIComponent(JSON.stringify(payload))
     try {
-      const response = await fetch('http://localhost:9109/print', {
-        method: 'POST',
-        mode: 'cors',
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      })
-      if (!response.ok) throw new Error('Print server ' + response.status)
-      mostrarMensaje('Comanda impresa ✓', 'ok')
+      if (printWindow && !printWindow.closed) {
+        printWindow.location.href = url
+      } else {
+        window.open(url, 'lf_print', 'width=360,height=220')
+      }
+      mostrarMensaje('Comanda enviada a impresora ✓', 'ok')
     } catch {
-      mostrarMensaje('Abra LA FELICITTA IMPRESORA y vuelva a intentar', 'err')
-    } finally {
-      clearTimeout(timeout)
+      mostrarMensaje('No se pudo abrir la impresora local', 'err')
     }
   }
 
@@ -277,9 +270,10 @@ export default function CajaPage() {
   // PASO 1: Enviar a cocina — guarda sin pago, imprime comanda
   async function enviarACocina() {
     if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return }
+    const printWindow = typeof window !== 'undefined' ? window.open('about:blank', 'lf_print', 'width=360,height=220') : null
 
     const empresaId = await getEmpresaIdActual()
-    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+    if (!empresaId) { if (printWindow && !printWindow.closed) printWindow.close(); mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
 
     if (enviada && ventaId) {
       setGuardando(true)
@@ -304,8 +298,9 @@ export default function CajaPage() {
         if (error) throw error
 
         mostrarMensaje('Comanda actualizada en cocina ✓', 'ok')
-        void imprimirComandaRaw(Math.max(1, ordenNum - 1))
+        imprimirComandaRaw(Math.max(1, ordenNum - 1), printWindow)
       } catch (e: unknown) {
+        if (printWindow && !printWindow.closed) printWindow.close()
         mostrarMensaje('Error al actualizar: ' + (e as Error).message, 'err')
       }
       setGuardando(false)
@@ -328,8 +323,9 @@ export default function CajaPage() {
       setOrdenNum(nuevoNum)
       if (typeof window !== 'undefined') localStorage.setItem('lf_orden_num', String(nuevoNum))
       mostrarMensaje(`Comanda #${ordenNum} enviada a cocina ✓`, 'ok')
-      void imprimirComandaRaw(ordenNum)
+      imprimirComandaRaw(ordenNum, printWindow)
     } catch (e: unknown) {
+      if (printWindow && !printWindow.closed) printWindow.close()
       mostrarMensaje('Error: ' + (e as Error).message, 'err')
     }
     setGuardando(false)
