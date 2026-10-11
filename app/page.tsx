@@ -135,9 +135,38 @@ export default function CajaPage() {
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
   const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
   async function imprimirComandaRaw(numeroTicket: number) {
-    // La impresión física la realiza el servidor local leyendo la venta desde Supabase.
-    // Así evitamos la corrupción del driver/Chrome de la XP-80C.
-    mostrarMensaje('Comanda enviada a impresión ✓', 'ok')
+    const payload = {
+      empresa: empresaNombre,
+      tipo: mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA',
+      comanda: String(numeroTicket).padStart(3, '0'),
+      mesa,
+      fecha: new Date().toLocaleDateString('es-CL') + ' ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+      items: items.map(i => ({
+        cantidad: i.cantidad,
+        nombre: i.producto.nombre,
+        precio: i.cantidad * i.producto.precio,
+        detalle: i.producto.ingredientes || '',
+        nota: i.nota || ''
+      })),
+      total
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 4000)
+    try {
+      const response = await fetch('http://127.0.0.1:9109/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      })
+      if (!response.ok) throw new Error('Print server ' + response.status)
+      mostrarMensaje('Comanda impresa en XP-80C ✓', 'ok')
+    } catch (e) {
+      mostrarMensaje('Impresora local no disponible', 'err')
+    } finally {
+      clearTimeout(timeout)
+    }
   }
 
   const totalItems = items.reduce((s, i) => s + i.cantidad, 0)
