@@ -163,8 +163,7 @@ export default function CajaPage() {
       if (!response.ok) throw new Error('Print server ' + response.status)
       mostrarMensaje('Comanda impresa en XP-80C ✓', 'ok')
     } catch {
-      mostrarMensaje('Servidor RAW no disponible; usando impresión de Windows', 'err')
-      setTimeout(() => window.print(), 100)
+      mostrarMensaje('No se pudo conectar al servidor de impresión RAW', 'err')
     } finally {
       clearTimeout(timeout)
     }
