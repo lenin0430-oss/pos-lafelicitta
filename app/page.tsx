@@ -542,7 +542,7 @@ export default function CajaPage() {
       )}
       {cajaAbierta === true && <>
 
-      {/* TICKET SIMPLE — solo texto para máxima compatibilidad con XP-80C */}
+      {/* TICKET SIMPLE — texto puro para XP-80C */}
       <pre id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
         {
           textoTicket(empresaNombre) + '\n' +
@@ -1127,8 +1127,8 @@ export default function CajaPage() {
               <tr key={i.id}>
                 <td>
                   <strong>{i.producto.nombre}</strong>
-                  {i.producto.ingredientes && <span className="nota">- {i.producto.ingredientes}</span>}
-                  {i.nota && <span className="nota">- Nota: {i.nota}</span>}
+                  {i.producto.ingredientes && <span className="nota">↳ {i.producto.ingredientes}</span>}
+                  {i.nota && <span className="nota">↳ Nota: {i.nota}</span>}
                 </td>
                 <td>{i.cantidad}</td>
                 <td>{fmt(i.cantidad * i.producto.precio)}</td>
@@ -1140,7 +1140,7 @@ export default function CajaPage() {
           <div className="t-fila grand"><span>TOTAL</span><span>{fmt(total)}</span></div>
         </div>
         <hr className="t-divider" />
-        <div className="t-footer">Gracias por su visita!</div>
+        <div className="t-footer">¡Gracias por su visita! ❤️</div>
       </div>
 
       {/* HEADER */}
