@@ -23,11 +23,10 @@ html, body {
   min-height: 100vh;
 }
 
-/* ---- PRINT 58mm COMANDA COCINA ---- */
+/* ---- PRINT 80mm COMANDA COCINA (XPrinter XP/POS-80C) ---- */
 @media print {
   @page {
-    size: 58mm auto;
-    margin: 0mm;
+    margin: 0;
   }
 
   html, body {
@@ -35,7 +34,7 @@ html, body {
     padding: 0 !important;
     background: #fff;
     color: #000;
-    width: 58mm;
+    width: 80mm;
   }
 
   .no-print {
@@ -44,11 +43,11 @@ html, body {
 
   #ticket-print, #cierre-print {
     display: block !important;
-    width: 56mm;
-    max-width: 56mm;
-    padding: 2mm 1mm;
+    width: 72mm;
+    max-width: 72mm;
+    padding: 2mm 2mm;
     margin: 0 !important;
-    font-family: 'Courier New', monospace;
+    font-family: Arial, Helvetica, sans-serif;
     font-size: 10pt;
     line-height: 1.4;
   }
@@ -82,7 +81,7 @@ html, body {
 
   .t-divider {
     border: none;
-    border-top: 2px dashed #000;  /* ← más grueso */
+    border-top: 2px dashed #000;
     margin: 2mm 0;
   }
 
