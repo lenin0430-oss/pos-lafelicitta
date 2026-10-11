@@ -150,7 +150,7 @@ export default function CajaPage() {
       })),
       total
     }
-    const url = 'http://localhost:9109/print?d=' + encodeURIComponent(JSON.stringify(payload))
+    const url = 'http://127.0.0.1:9109/print?d=' + encodeURIComponent(JSON.stringify(payload))
     try {
       if (printWindow && !printWindow.closed) {
         printWindow.location.href = url
