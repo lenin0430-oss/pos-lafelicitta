@@ -134,6 +134,42 @@ export default function CajaPage() {
 
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
   const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
+  async function imprimirComandaRaw(numeroTicket: number) {
+    const payload = {
+      empresa: empresaNombre,
+      tipo: mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA',
+      comanda: String(numeroTicket).padStart(3, '0'),
+      mesa,
+      fecha: new Date().toLocaleDateString('es-CL') + ' ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+      items: items.map(i => ({
+        cantidad: i.cantidad,
+        nombre: i.producto.nombre,
+        precio: i.cantidad * i.producto.precio,
+        detalle: i.producto.ingredientes || '',
+        nota: i.nota || ''
+      })),
+      total
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 2500)
+    try {
+      const response = await fetch('http://127.0.0.1:9109/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      })
+      if (!response.ok) throw new Error('Print server ' + response.status)
+      mostrarMensaje('Comanda impresa en XP-80C ✓', 'ok')
+    } catch {
+      mostrarMensaje('Servidor RAW no disponible; usando impresión de Windows', 'err')
+      setTimeout(() => window.print(), 100)
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
   const totalItems = items.reduce((s, i) => s + i.cantidad, 0)
   const esPagoMixto = metodoPago === 'Mixto'
   const montoMixto = Object.values(pagosMixtos).reduce((s, v) => s + (parseInt(v || '0') || 0), 0)
@@ -268,7 +304,7 @@ export default function CajaPage() {
         if (error) throw error
 
         mostrarMensaje('Comanda actualizada en cocina ✓', 'ok')
-        setTimeout(() => window.print(), 400)
+        void imprimirComandaRaw(Math.max(1, ordenNum - 1))
       } catch (e: unknown) {
         mostrarMensaje('Error al actualizar: ' + (e as Error).message, 'err')
       }
@@ -292,7 +328,7 @@ export default function CajaPage() {
       setOrdenNum(nuevoNum)
       if (typeof window !== 'undefined') localStorage.setItem('lf_orden_num', String(nuevoNum))
       mostrarMensaje(`Comanda #${ordenNum} enviada a cocina ✓`, 'ok')
-      setTimeout(() => window.print(), 400)
+      void imprimirComandaRaw(ordenNum)
     } catch (e: unknown) {
       mostrarMensaje('Error: ' + (e as Error).message, 'err')
     }
