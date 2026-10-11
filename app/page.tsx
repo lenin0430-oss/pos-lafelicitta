@@ -152,18 +152,19 @@ export default function CajaPage() {
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 4000)
+    const timeout = setTimeout(() => controller.abort(), 5000)
     try {
-      const response = await fetch('http://127.0.0.1:9109/print', {
+      const response = await fetch('http://localhost:9109/print', {
         method: 'POST',
+        mode: 'cors',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify(payload),
         signal: controller.signal
       })
       if (!response.ok) throw new Error('Print server ' + response.status)
-      mostrarMensaje('Comanda impresa en XP-80C ✓', 'ok')
-    } catch (e) {
-      mostrarMensaje('Impresora local no disponible', 'err')
+      mostrarMensaje('Comanda impresa ✓', 'ok')
+    } catch {
+      mostrarMensaje('Abra LA FELICITTA IMPRESORA y vuelva a intentar', 'err')
     } finally {
       clearTimeout(timeout)
     }
