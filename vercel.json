@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/reporte-semanal?token=lafelicitta2026",
+      "schedule": "0 11 * * 1"
+    }
+  ]
+}

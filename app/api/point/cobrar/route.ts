@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const db = supabaseAdmin();
 
   // El total lo manda la base, no el navegador.
-  const { data: venta } = await db.from("ventas").select("total, estado").eq("id", ventaId).maybeSingle();
+  const { data: venta } = await db.from("ventas").select("total, estado").eq("empresa_id", restauranteId).eq("id", ventaId).maybeSingle();
   if (!venta) return NextResponse.json({ error: "Venta no encontrada" }, { status: 404 });
   if (venta.estado === "listo") return NextResponse.json({ error: "La venta ya está cobrada" }, { status: 409 });
   if (Math.round(venta.total) !== monto) {

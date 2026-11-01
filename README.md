@@ -81,3 +81,4 @@ cp .env.example .env.local
 # Edita .env.local con tus credenciales
 npm run dev
 ```
+

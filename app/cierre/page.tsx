@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaIdActual, esAdmin, getSesion } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
 
@@ -38,9 +39,16 @@ interface CierreCaja {
 }
 
 export default function CierrePage() {
+  const [isAdmin, setIsAdmin] = useState(false)
+  useEffect(() => { setIsAdmin(esAdmin()) }, [])
+
   const [resumen, setResumen] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
   const [resumenTurno, setResumenTurno] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
+  const [gastosAfectoCajaDisplay, setGastosAfectoCajaDisplay] = useState(0)
   const [efectivoFisico, setEfectivoFisico] = useState('')
+  const [debitoFisico, setDebitoFisico] = useState('')
+  const [qrFisico, setQrFisico] = useState('')
+  const [transferFisico, setTransferFisico] = useState('')
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [cierres, setCierres] = useState<CierreCaja[]>([])
@@ -48,13 +56,11 @@ export default function CierrePage() {
   const [tab, setTab] = useState<'nuevo' | 'historial'>('nuevo')
   const [montoApertura, setMontoApertura] = useState('')
   const [aperturaActiva, setAperturaActiva] = useState<AperturaCaja | null>(null)
-  const [todasAperturasHoy, setTodasAperturasHoy] = useState<AperturaCaja[]>([])
+  const [todasAperturas, setTodasAperturas] = useState<AperturaCaja[]>([])
   const [guardandoApertura, setGuardandoApertura] = useState(false)
   const [cerrando, setCerrando] = useState(false)
 
-  useEffect(() => {
-    cargarDatos()
-  }, [])
+  useEffect(() => { cargarDatos() }, [])
 
   async function cargarDatos() {
     await Promise.all([
@@ -65,34 +71,55 @@ export default function CierrePage() {
   }
 
   async function cargarAperturaActiva() {
-    const hoy = new Date()
-    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
 
-    // Traer todas las aperturas de hoy
-    const { data } = await supabase
+    const { data: todas } = await supabase
       .from('aperturas_caja')
       .select('*')
-      .gte('created_at', desde)
+      .eq('empresa_id', empresaId)
       .order('created_at', { ascending: false })
+      .limit(50)
 
-    if (data) {
-      setTodasAperturasHoy(data)
-      // La activa es la primera con estado 'abierta'
-      const activa = data.find(a => a.estado === 'abierta') || null
-      setAperturaActiva(activa)
+    if (todas) setTodasAperturas(todas)
 
-      // Si hay apertura activa, cargar ventas del turno
-      if (activa) {
-        await cargarVentasTurno(activa.id, activa.created_at)
-      }
+    // La activa es la primera con estado 'abierta'
+    const activa = todas ? (todas.find(a => a.estado === 'abierta') || null) : null
+    setAperturaActiva(activa)
+
+    if (activa) {
+      await cargarVentasTurno(activa.id, activa.created_at)
+      await cargarGastosTurnoDisplay(activa.created_at)
     }
   }
 
+  async function cargarGastosTurnoDisplay(desde: string) {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+    try {
+      const { data } = await supabase
+        .from('gastos')
+        .select('monto, afecto_caja')
+        .eq('empresa_id', empresaId)
+        .gte('created_at', desde)
+      if (data) {
+        const total = data
+          .filter(g => g.afecto_caja === true)
+          .reduce((s, g) => s + Number(g.monto), 0)
+        setGastosAfectoCajaDisplay(total)
+      }
+    } catch { /* sin gastos */ }
+  }
+
   async function cargarVentasTurno(aperturaId: string, desde: string) {
-    // Ventas desde la apertura hasta ahora (o hasta el cierre del turno)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
     const { data } = await supabase
       .from('ventas')
       .select('*')
+      .eq('empresa_id', empresaId)
+      .eq('estado', 'listo')
       .gte('created_at', desde)
       .order('created_at', { ascending: true })
 
@@ -100,67 +127,116 @@ export default function CierrePage() {
 
     const res: ResumenVentas = { total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: data.length }
     data.forEach(v => {
-      res.total += v.total
       const mp = (v.metodo_pago || '').toLowerCase()
+      if (!mp) return
+      res.total += v.total
       if (mp.includes('efectivo')) res.efectivo += v.total
       else if (mp.includes('débito') || mp.includes('debito')) res.debito += v.total
       else if (mp.includes('qr') || mp.includes('mercado')) res.qr += v.total
       else if (mp.includes('transfer')) res.transferencia += v.total
-      else res.efectivo += v.total
+      else if (mp.includes('mixto')) {
+        const partes = mp.split('+')
+        partes.forEach((p: string) => {
+          const num = parseInt(p.replace(/[^0-9]/g, '')) || 0
+          if (p.includes('efectivo')) res.efectivo += num
+          else if (p.includes('débito') || p.includes('debito')) res.debito += num
+          else if (p.includes('transfer')) res.transferencia += num
+          else if (p.includes('qr') || p.includes('mercado')) res.qr += num
+        })
+      }
     })
     setResumenTurno(res)
   }
 
   async function cargarVentasHoy() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
     const hoy = new Date()
-    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
-    const hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1).toISOString()
+    const desdeLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0)
+    const desde = desdeLocal.toISOString()
 
     const { data } = await supabase
       .from('ventas')
       .select('*')
+      .eq('empresa_id', empresaId)
+      .eq('estado', 'listo')
       .gte('created_at', desde)
-      .lt('created_at', hasta)
 
     if (!data) return
 
     const res: ResumenVentas = { total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: data.length }
     data.forEach(v => {
-      res.total += v.total
       const mp = (v.metodo_pago || '').toLowerCase()
+      if (!mp) return
+      res.total += v.total
       if (mp.includes('efectivo')) res.efectivo += v.total
       else if (mp.includes('débito') || mp.includes('debito')) res.debito += v.total
       else if (mp.includes('qr') || mp.includes('mercado')) res.qr += v.total
       else if (mp.includes('transfer')) res.transferencia += v.total
-      else res.efectivo += v.total
+      else if (mp.includes('mixto')) {
+        const partes = mp.split('+')
+        partes.forEach((p: string) => {
+          const num = parseInt(p.replace(/[^0-9]/g, '')) || 0
+          if (p.includes('efectivo')) res.efectivo += num
+          else if (p.includes('débito') || p.includes('debito')) res.debito += num
+          else if (p.includes('transfer')) res.transferencia += num
+          else if (p.includes('qr') || p.includes('mercado')) res.qr += num
+        })
+      }
     })
     setResumen(res)
   }
 
   async function cargarCierres() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+
     const { data } = await supabase
       .from('cierres_caja')
       .select('*')
+      .eq('empresa_id', empresaId)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(30)
     if (data) setCierres(data)
   }
 
   async function registrarApertura() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
+    // NUNCA cerrar aperturas automáticamente — solo el usuario puede cerrar un turno
+    // Si ya hay una apertura abierta, no permitir abrir otra
+    const { data: abiertas } = await supabase
+      .from('aperturas_caja')
+      .select('id')
+      .eq('empresa_id', empresaId)
+      .eq('estado', 'abierta')
+      .limit(1)
+
+    if (abiertas && abiertas.length > 0) {
+      mostrarMensaje('Ya hay un turno abierto. Ciérralo primero.', 'err')
+      return
+    }
+
     const monto = parseInt(montoApertura) || 0
     setGuardandoApertura(true)
 
-    // Obtener nombre del cajero de la sesión
     let cajero = 'Admin'
     try {
-      const { getSesion } = await import('@/lib/auth')
       const sesion = getSesion()
       cajero = sesion?.nombre || 'Admin'
     } catch { /* sin sesión */ }
 
-    const turnoNum = todasAperturasHoy.length + 1
+    // turno número = total de aperturas + 1
+    const { count } = await supabase
+      .from('aperturas_caja')
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', empresaId)
+    const turnoNum = (count || 0) + 1
 
     const { error } = await supabase.from('aperturas_caja').insert({
+      empresa_id: empresaId,
       monto_inicial: monto,
       cajero,
       estado: 'abierta',
@@ -171,7 +247,7 @@ export default function CierrePage() {
     if (error) {
       mostrarMensaje('Error al abrir caja: ' + error.message, 'err')
     } else {
-      mostrarMensaje(`✅ Turno ${turnoNum} abierto — caja lista para vender`, 'ok')
+      mostrarMensaje(`✅ Turno abierto — caja lista para vender`, 'ok')
       setMontoApertura('')
       await cargarDatos()
     }
@@ -180,15 +256,64 @@ export default function CierrePage() {
 
   async function cerrarTurnoActual() {
     if (!aperturaActiva) return
-    if (!efectivoFisico) { mostrarMensaje('Ingresa el efectivo físico', 'err'); return }
+    if (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) {
+      mostrarMensaje('Ingresa al menos un monto físico', 'err')
+      return
+    }
+
+    const confirmar = window.confirm(
+      `¿Confirmas el cierre del turno?\n\nEsta acción marcará la caja como cerrada.\nSolo hazlo cuando el turno haya terminado.`
+    )
+    if (!confirmar) return
+
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
 
     const fisico = parseInt(efectivoFisico) || 0
-    const diferencia = fisico - resumenTurno.efectivo
+    const debitoF = parseInt(debitoFisico) || 0
+    const qrF = parseInt(qrFisico) || 0
+    const transferF = parseInt(transferFisico) || 0
+    const totalFisico = fisico + debitoF + qrF + transferF
     setCerrando(true)
 
     try {
+      // Obtener gastos del turno
+      let gastosAfectoCaja = 0
+      let gastosTurno: {categoria: string, monto: number}[] = []
+      let totalGastosTurno = 0
+      let totalGastosDia = 0
+      try {
+        const { data: gastosData } = await supabase
+          .from('gastos')
+          .select('categoria, monto, afecto_caja')
+          .eq('empresa_id', empresaId)
+          .gte('created_at', aperturaActiva.created_at)
+        if (gastosData) {
+          gastosTurno = gastosData.map(g => ({ categoria: g.categoria, monto: Number(g.monto) }))
+          totalGastosTurno = gastosData.reduce((s, g) => s + Number(g.monto), 0)
+          gastosAfectoCaja = gastosData
+            .filter(g => g.afecto_caja === true)
+            .reduce((s, g) => s + Number(g.monto), 0)
+        }
+        const hoy = new Date()
+        const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
+        const { data: gastosDiaData } = await supabase
+          .from('gastos').select('monto').eq('empresa_id', empresaId).gte('created_at', inicioDia)
+        if (gastosDiaData) {
+          totalGastosDia = gastosDiaData.reduce((s, g) => s + Number(g.monto), 0)
+        }
+      } catch (eg) { console.warn('Error gastos pre-cierre:', eg) }
+
+      // Fórmula correcta:
+      // efectivo_esperado = fondo_inicial + ventas_efectivo - gastos_afecto_caja
+      // diferencia = efectivo_fisico - efectivo_esperado
+      const fondoInicial = aperturaActiva.monto_inicial || 0
+      const efectivoEsperado = fondoInicial + resumenTurno.efectivo - gastosAfectoCaja
+      const diferencia = fisico - efectivoEsperado
+
       // 1. Registrar cierre
       const { error: errCierre } = await supabase.from('cierres_caja').insert({
+        empresa_id: empresaId,
         fecha: new Date().toISOString().split('T')[0],
         ventas_total: resumenTurno.total,
         ventas_efectivo: resumenTurno.efectivo,
@@ -207,11 +332,96 @@ export default function CierrePage() {
       const { error: errAp } = await supabase
         .from('aperturas_caja')
         .update({ estado: 'cerrada', cerrada_at: new Date().toISOString() })
+        .eq('empresa_id', empresaId)
         .eq('id', aperturaActiva.id)
       if (errAp) throw errAp
 
-      mostrarMensaje('✅ Turno cerrado correctamente', 'ok')
+      // Obtener propinas del turno
+      let totalPropinasTurno = 0
+      let propinasPorEmpleado: {empleado: string, monto: number}[] = []
+      try {
+        const { data: propinasData } = await supabase
+          .from('propinas')
+          .select('empleado, monto')
+          .eq('empresa_id', empresaId)
+          .gte('created_at', aperturaActiva.created_at)
+        if (propinasData) {
+          totalPropinasTurno = propinasData.reduce((s, p) => s + Number(p.monto), 0)
+          const mapa: Record<string, number> = {}
+          propinasData.forEach(p => { mapa[p.empleado] = (mapa[p.empleado] || 0) + Number(p.monto) })
+          propinasPorEmpleado = Object.entries(mapa).map(([empleado, monto]) => ({ empleado, monto }))
+        }
+      } catch (ep) { console.warn('Error propinas:', ep) }
+
+      // Calcular número de turno para el reporte
+      const turnoActualNumReport = todasAperturas.findIndex(a => a.id === aperturaActiva.id)
+      const turnoNum = turnoActualNumReport >= 0
+        ? (todasAperturas.length - turnoActualNumReport)
+        : todasAperturas.filter(a => a.estado === 'cerrada').length + 1
+
+      // Notificar al dueño por WhatsApp
+      try {
+        await fetch('/api/cierre-whatsapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-bot-secret': 'lafelicitta2026' },
+          body: JSON.stringify({
+            turno: turnoNum,
+            cajero: aperturaActiva.cajero,
+            fecha: new Date().toLocaleDateString('es-CL'),
+            hora_apertura: new Date(aperturaActiva.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+            hora_cierre: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+            ventas_total: resumenTurno.total,
+            ventas_efectivo: resumenTurno.efectivo,
+            ventas_debito: resumenTurno.debito,
+            ventas_qr: resumenTurno.qr,
+            ventas_transferencia: resumenTurno.transferencia,
+            efectivo_fisico: fisico,
+            debito_fisico: debitoF,
+            qr_fisico: qrF,
+            transfer_fisico: transferF,
+            total_fisico: totalFisico,
+            diferencia,
+            cantidad_ventas: resumenTurno.cantidad,
+            total_dia: resumen.total,
+            gastos_turno: gastosTurno,
+            total_gastos_turno: totalGastosTurno,
+            total_gastos_dia: totalGastosDia,
+            total_propinas_turno: totalPropinasTurno,
+            propinas_por_empleado: propinasPorEmpleado,
+            turno_num: turnoNum,
+            total_turnos_hoy: todasAperturas.length,
+            notas
+          })
+        })
+      } catch (e) { console.warn('WhatsApp cierre:', (e as Error).message) }
+
+      // Alerta especial si diferencia mayor a $3.000
+      if (Math.abs(diferencia) > 3000) {
+        try {
+          await fetch('/api/cierre-whatsapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-bot-secret': 'lafelicitta2026' },
+            body: JSON.stringify({
+              alerta_diferencia: true,
+              cajero: aperturaActiva.cajero,
+              fecha: new Date().toLocaleDateString('es-CL'),
+              diferencia,
+              efectivo_fisico: fisico,
+              efectivo_esperado: efectivoEsperado,
+              fondo_inicial: fondoInicial,
+              gastos_caja: gastosAfectoCaja,
+              ventas_efectivo: resumenTurno.efectivo,
+              turno: turnoNum
+            })
+          })
+        } catch (e) { console.warn('Alerta diferencia:', (e as Error).message) }
+      }
+
+      mostrarMensaje('✅ Turno cerrado — resumen enviado a WhatsApp', 'ok')
       setEfectivoFisico('')
+      setDebitoFisico('')
+      setQrFisico('')
+      setTransferFisico('')
       setNotas('')
       await cargarDatos()
       await cargarCierres()
@@ -229,13 +439,37 @@ export default function CierrePage() {
   }
 
   const fisico = parseInt(efectivoFisico) || 0
-  const diferencia = fisico - resumenTurno.efectivo
+  const debitoF = parseInt(debitoFisico) || 0
+  const qrF = parseInt(qrFisico) || 0
+  const transferF = parseInt(transferFisico) || 0
+  const totalFisico = fisico + debitoF + qrF + transferF
+
+  // Diferencia para display en tiempo real (incluye gastos ya cargados)
+  const fondoInicialDisplay = aperturaActiva?.monto_inicial || 0
+  const efectivoEsperadoDisplay = fondoInicialDisplay + resumenTurno.efectivo - gastosAfectoCajaDisplay
+  const diferencia = fisico - efectivoEsperadoDisplay
+
   const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
   const fechaHoy = new Date().toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const horaActual = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
-  const turnoActualNum = todasAperturasHoy.findIndex(a => a.id === aperturaActiva?.id) + 1 || todasAperturasHoy.length + 1
 
-  const inp = { width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '10px 12px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }
+  const idxActiva = aperturaActiva ? todasAperturas.findIndex(a => a.id === aperturaActiva.id) : -1
+  const turnoActualNum = idxActiva >= 0
+    ? (todasAperturas.length - idxActiva)
+    : (todasAperturas.filter(a => a.estado === 'cerrada').length + 1)
+
+  const inp = {
+    width: '100%',
+    background: 'var(--surface2)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    color: 'var(--text)',
+    padding: '10px 12px',
+    fontFamily: 'var(--font)',
+    fontSize: 13,
+    outline: 'none',
+    boxSizing: 'border-box' as const
+  }
 
   return (
     <AuthGuard rolRequerido="admin">
@@ -261,16 +495,18 @@ export default function CierrePage() {
           <hr className="t-divider" />
           <div className="t-meta">
             <span><strong>TOTAL TURNO: {fmt(resumenTurno.total)}</strong></span>
-            <span>Efectivo esperado: {fmt(resumenTurno.efectivo)}</span>
+            <span>Fondo inicial: {fmt(fondoInicialDisplay)}</span>
+            <span>Gastos de caja: {fmt(gastosAfectoCajaDisplay)}</span>
+            <span>Efectivo esperado: {fmt(efectivoEsperadoDisplay)}</span>
             <span>Efectivo físico: {fmt(fisico)}</span>
             <span><strong>DIFERENCIA: {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}</strong></span>
           </div>
-          {todasAperturasHoy.length > 0 && (
+          {todasAperturas.length > 0 && (
             <>
               <hr className="t-divider" />
               <div className="t-meta">
                 <span><strong>TOTAL ACUMULADO DÍA: {fmt(resumen.total)}</strong></span>
-                <span>Turnos completados hoy: {todasAperturasHoy.filter(a => a.estado === 'cerrada').length + 1}</span>
+                <span>Turnos completados hoy: {todasAperturas.filter(a => a.estado === 'cerrada').length + 1}</span>
               </div>
             </>
           )}
@@ -289,8 +525,8 @@ export default function CierrePage() {
               </div>
             )}
 
-            {/* RESUMEN DÍA si hay múltiples turnos */}
-            {todasAperturasHoy.length > 0 && (
+            {/* RESUMEN DÍA — solo admin */}
+            {isAdmin && todasAperturas.length > 0 && (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 16px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const }}>Acumulado del día</div>
@@ -299,7 +535,7 @@ export default function CierrePage() {
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>{resumen.cantidad} comandas</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                    {todasAperturasHoy.filter(a => a.estado === 'cerrada').length} turno(s) cerrado(s)
+                    {todasAperturas.filter(a => a.estado === 'cerrada').length} turno(s) cerrado(s)
                     {aperturaActiva ? ' · 1 activo' : ''}
                   </div>
                 </div>
@@ -328,12 +564,12 @@ export default function CierrePage() {
                 <>
                   <div style={{ fontSize: 11, color: 'var(--red)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10, fontWeight: 600 }}>
                     🔴 Sin turno activo
-                    {todasAperturasHoy.length > 0 ? ` — ${todasAperturasHoy.length} turno(s) completado(s) hoy` : ''}
+                    {todasAperturas.length > 0 ? ` — ${todasAperturas.filter(a => a.estado === 'cerrada').length} turno(s) completado(s)` : ''}
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                     <div style={{ flex: 1 }}>
                       <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
-                        Efectivo inicial — Turno {todasAperturasHoy.length + 1}
+                        Efectivo inicial (fondo de caja)
                       </label>
                       <input
                         type="number"
@@ -357,7 +593,7 @@ export default function CierrePage() {
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: 'var(--surface)', borderRadius: 10, padding: 4, border: '1px solid var(--border)' }}>
-              {[['nuevo', '🔒 Cerrar Turno'], ['historial', '📋 Historial']].map(([val, label]) => (
+              {(isAdmin ? [['nuevo', '🔒 Cerrar Turno'], ['historial', '📋 Historial']] : [['nuevo', '🔒 Cerrar Turno']]).map(([val, label]) => (
                 <button key={val} onClick={() => setTab(val as 'nuevo' | 'historial')}
                   style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: tab === val ? 'var(--gold)' : 'transparent', color: tab === val ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                   {label}
@@ -383,40 +619,49 @@ export default function CierrePage() {
                       </div>
                     </div>
 
-                    {/* Ventas del turno */}
-                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ventas del turno</div>
-                      {[
-                        { label: '💵 Efectivo', valor: resumenTurno.efectivo, color: '#4caf7d' },
-                        { label: '💳 Débito', valor: resumenTurno.debito, color: '#4a9fd4' },
-                        { label: '📱 QR MercadoPago', valor: resumenTurno.qr, color: '#9b59b6' },
-                        { label: '🏦 Transferencia', valor: resumenTurno.transferencia, color: '#e8a32c' },
-                      ].map(item => (
-                        <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
-                          <span style={{ fontSize: 14, color: item.color }}>{item.label}</span>
-                          <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600, color: item.valor > 0 ? 'var(--text)' : 'var(--muted)' }}>{fmt(item.valor)}</span>
+                    {/* Ventas del turno — solo admin */}
+                    {isAdmin && (
+                      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ventas del turno</div>
+                        {[
+                          { label: '💵 Efectivo', valor: resumenTurno.efectivo, color: '#4caf7d' },
+                          { label: '💳 Débito', valor: resumenTurno.debito, color: '#4a9fd4' },
+                          { label: '📱 QR MercadoPago', valor: resumenTurno.qr, color: '#9b59b6' },
+                          { label: '🏦 Transferencia', valor: resumenTurno.transferencia, color: '#e8a32c' },
+                        ].map(item => (
+                          <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+                            <span style={{ fontSize: 14, color: item.color }}>{item.label}</span>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600, color: item.valor > 0 ? 'var(--text)' : 'var(--muted)' }}>{fmt(item.valor)}</span>
+                          </div>
+                        ))}
+                        {gastosAfectoCajaDisplay > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+                            <span style={{ fontSize: 14, color: '#e8584a' }}>🧾 Gastos de caja</span>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600, color: '#e8584a' }}>-{fmt(gastosAfectoCajaDisplay)}</span>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', alignItems: 'center' }}>
+                          <span style={{ fontSize: 15, fontWeight: 700 }}>TOTAL TURNO</span>
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: 'var(--gold)' }}>{fmt(resumenTurno.total)}</span>
                         </div>
-                      ))}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', alignItems: 'center' }}>
-                        <span style={{ fontSize: 15, fontWeight: 700 }}>TOTAL TURNO</span>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: 'var(--gold)' }}>{fmt(resumenTurno.total)}</span>
                       </div>
-                    </div>
+                    )}
 
                     {/* Arqueo */}
                     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Arqueo de caja</div>
-                      <div style={{ marginBottom: 10 }}>
-                        <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>¿Cuánto efectivo hay físicamente?</label>
-                        <input
-                          type="number"
-                          value={efectivoFisico}
-                          onChange={e => setEfectivoFisico(e.target.value)}
-                          placeholder="0"
-                          style={{ ...inp, fontFamily: 'var(--mono)', fontSize: 22 }}
-                        />
-                      </div>
-                      {efectivoFisico && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ingresa los totales del turno</div>
+                      {[
+                        { label: '💵 Efectivo físico', value: efectivoFisico, set: setEfectivoFisico },
+                        { label: '💳 Débito (datáfono)', value: debitoFisico, set: setDebitoFisico },
+                        { label: '📱 Mercado Pago / QR', value: qrFisico, set: setQrFisico },
+                        { label: '🏦 Transferencia', value: transferFisico, set: setTransferFisico },
+                      ].map(({ label, value, set }) => (
+                        <div key={label} style={{ marginBottom: 10 }}>
+                          <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>{label}</label>
+                          <input type="number" value={value} onChange={e => set(e.target.value)} placeholder="0" style={{ ...inp, fontFamily: 'var(--mono)', fontSize: 18 }} />
+                        </div>
+                      ))}
+                      {isAdmin && totalFisico > 0 && (
                         <div style={{ background: diferencia === 0 ? 'rgba(76,175,125,.1)' : diferencia > 0 ? 'rgba(74,159,212,.1)' : 'rgba(217,79,61,.1)', border: `1px solid ${diferencia === 0 ? 'var(--green)' : diferencia > 0 ? '#4a9fd4' : 'var(--red)'}`, borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: 13, color: 'var(--muted)' }}>
@@ -427,7 +672,7 @@ export default function CierrePage() {
                             </span>
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
-                            Esperado: {fmt(resumenTurno.efectivo)} · Físico: {fmt(fisico)}
+                            Esperado: {fmt(efectivoEsperadoDisplay)} (fondo {fmt(fondoInicialDisplay)} + ventas {fmt(resumenTurno.efectivo)} - gastos {fmt(gastosAfectoCajaDisplay)})
                           </div>
                         </div>
                       )}
@@ -440,8 +685,8 @@ export default function CierrePage() {
 
                     <button
                       onClick={cerrarTurnoActual}
-                      disabled={cerrando || !efectivoFisico}
-                      style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: !efectivoFisico ? 'var(--surface2)' : 'var(--gold)', color: !efectivoFisico ? 'var(--muted)' : '#000', fontSize: 16, fontWeight: 700, cursor: !efectivoFisico ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: !efectivoFisico ? 0.5 : 1 }}>
+                      disabled={cerrando || (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico)}
+                      style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'var(--surface2)' : 'var(--gold)', color: !efectivoFisico ? 'var(--muted)' : '#000', fontSize: 16, fontWeight: 700, cursor: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 0.5 : 1 }}>
                       {cerrando ? 'Cerrando...' : `🔒 Cerrar Turno ${turnoActualNum} e Imprimir`}
                     </button>
                   </>
@@ -453,7 +698,7 @@ export default function CierrePage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {cierres.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)', fontSize: 13 }}>No hay cierres registrados</div>
-                ) : cierres.map((c, idx) => (
+                ) : cierres.map((c) => (
                   <div key={c.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <div>
@@ -495,4 +740,3 @@ export default function CierrePage() {
     </AuthGuard>
   )
 }
-

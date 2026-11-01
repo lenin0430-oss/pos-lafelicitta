@@ -1,7 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaIdActual } from '@/lib/auth'
 import Nav from '@/components/Nav'
+import AuthGuard from '@/components/AuthGuard'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'porciones']
 
@@ -28,7 +30,10 @@ export default function InsumosPage() {
   useEffect(() => { cargar() }, [])
 
   async function cargar() {
-    const { data } = await supabase.from('insumos').select('*').order('nombre')
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { setInsumos([]); return }
+
+    const { data } = await supabase.from('insumos').select('*').eq('empresa_id', empresaId).order('nombre')
     if (data) setInsumos(data)
   }
 
@@ -45,13 +50,16 @@ export default function InsumosPage() {
   async function guardar() {
     if (!nombre.trim()) { mostrarMensaje('Ingresa el nombre', 'err'); return }
     if (!precio || parseFloat(precio) <= 0) { mostrarMensaje('Ingresa un precio válido', 'err'); return }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     setGuardando(true)
     const datos = { nombre: nombre.trim(), precio: parseFloat(precio), cantidad: parseFloat(cantidad), unidad, proveedor: proveedor.trim() }
     if (editandoId) {
-      await supabase.from('insumos').update(datos).eq('id', editandoId)
+      await supabase.from('insumos').update(datos).eq('empresa_id', empresaId).eq('id', editandoId)
       mostrarMensaje('Insumo actualizado ✓', 'ok')
     } else {
-      await supabase.from('insumos').insert(datos)
+      await supabase.from('insumos').insert({ ...datos, empresa_id: empresaId })
       mostrarMensaje('Insumo agregado ✓', 'ok')
     }
     limpiar(); cargar(); setGuardando(false)
@@ -59,7 +67,9 @@ export default function InsumosPage() {
 
   async function eliminar(id: string) {
     if (!confirm('¿Eliminar este insumo?')) return
-    await supabase.from('insumos').delete().eq('id', id)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) return
+    await supabase.from('insumos').delete().eq('empresa_id', empresaId).eq('id', id)
     cargar()
   }
 
@@ -72,6 +82,7 @@ export default function InsumosPage() {
   const inp = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text)', fontSize: 14, width: '100%' }
 
   return (
+    <AuthGuard>
     <main style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)', paddingBottom: 40 }}>
       <Nav active="insumos" />
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 16px' }}>
@@ -132,5 +143,6 @@ export default function InsumosPage() {
         </div>
       </div>
     </main>
+    </AuthGuard>
   )
 }

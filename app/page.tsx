@@ -1,11 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, type Producto } from '@/lib/menu'
-import { getSesion } from '@/lib/auth'
+import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
+import { getEmpresaIdActual, getSesion } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
 import BotonCobrarPoint from '@/components/BotonCobrarPoint'
+import { useEmpresaNombre } from '@/lib/useEmpresaNombre'
+import { useEmpresaLogo } from '@/lib/useEmpresaLogo'
 
 interface ItemComanda {
   id: number
@@ -19,6 +21,11 @@ export default function CajaPage() {
   const [mesero, setMesero] = useState('')
   const [personas, setPersonas] = useState(2)
   const [items, setItems] = useState<ItemComanda[]>([])
+  const [menu, setMenu] = useState<Producto[]>(MENU)
+  const [categorias, setCategorias] = useState<string[]>(CATEGORIAS)
+  const [mesas, setMesas] = useState<string[]>(MESAS)
+  const [metodosPago, setMetodosPago] = useState<string[]>(METODOS_PAGO)
+  const [cargandoCatalogo, setCargandoCatalogo] = useState(true)
   const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0] || '')
   const [busqueda, setBusqueda] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -38,34 +45,125 @@ export default function CajaPage() {
   const [metodoPago, setMetodoPago] = useState('')
   const [pagosMixtos, setPagosMixtos] = useState({ Efectivo: '', Débito: '', Transferencia: '', Crédito: '' })
   const [cobrando, setCobrando] = useState(false)
+  const [propinaMonto, setPropinaMonto] = useState('')
+  const [propinaEmpleado, setPropinaEmpleado] = useState('')
 
   const esAdmin = getSesion()?.rol === 'admin'
+  const empresaNombre = useEmpresaNombre('LA FELICITTA')
+  const empresaLogo = useEmpresaLogo('/logo-lafelicitta.png')
 
   useEffect(() => {
-    const n = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
-    setOrdenNum(n)
+    inicializarCaja()
+
+    // Actualizar reloj cada segundo
     const tick = setInterval(() => {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
     }, 1000)
+
+    // Re-verificar estado de caja cada 60 segundos para detectar si se abrió/cerró desde otra sesión
+    // La caja NUNCA se cierra automáticamente — solo se re-consulta el estado real en Supabase
+    const poll = setInterval(() => {
+      verificarApertura()
+    }, 60000)
+
+    return () => { clearInterval(tick); clearInterval(poll) }
+  }, [])
+
+  async function inicializarCaja() {
+    const n = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
+    setOrdenNum(n)
     verificarApertura()
+
+    const catalogo = await cargarCatalogo()
 
     if (typeof window !== 'undefined') {
       const editarId = new URLSearchParams(window.location.search).get('editar')
-      if (editarId) cargarComandaParaEditar(editarId)
+      if (editarId) cargarComandaParaEditar(editarId, catalogo.menu)
+    }
+  }
+
+  async function cargarCatalogo() {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) {
+      setCargandoCatalogo(false)
+      return { menu: MENU, categorias: CATEGORIAS, mesas: MESAS, metodosPago: METODOS_PAGO }
     }
 
-    return () => clearInterval(tick)
-  }, [])
+    try {
+      const datos = await cargarDatosEmpresa(empresaId)
+      const categoriasConProductos = Array.from(new Set(
+        datos.menu
+          .map(producto => producto.categoria)
+          .filter(categoria => !esCategoriaSinCategoria(categoria))
+      ))
+      const categoriasFinales = datos.categorias.length > 0
+        ? unirCategorias(datos.categorias, categoriasConProductos)
+        : categoriasConProductos
+
+      setMenu(datos.menu)
+      setCategorias(categoriasFinales)
+      setMesas(datos.mesas)
+      setMetodosPago(datos.metodosPago)
+      setCategoriaActiva(prev => {
+        const existe = categoriasFinales.some(categoria => normalizarTexto(categoria) === normalizarTexto(prev))
+        const tieneProductos = datos.menu.some(producto => normalizarTexto(producto.categoria) === normalizarTexto(prev))
+        if (existe && tieneProductos) return prev
+        return categoriasConProductos[0] || categoriasFinales[0] || ''
+      })
+      setMesa(prev => datos.mesas.includes(prev) ? prev : datos.mesas[0] || 'Mesa 1')
+      return datos
+    } catch {
+      return { menu: MENU, categorias: CATEGORIAS, mesas: MESAS, metodosPago: METODOS_PAGO }
+    } finally {
+      setCargandoCatalogo(false)
+    }
+  }
 
   async function verificarApertura() {
     const sesion = getSesion()
     if (sesion?.rol === 'admin') { setCajaAbierta(true); return }
-    const { data } = await supabase.from('aperturas_caja').select('id').eq('estado', 'abierta').limit(1)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { setCajaAbierta(false); return }
+    const { data } = await supabase
+      .from('aperturas_caja')
+      .select('id')
+      .eq('empresa_id', empresaId)
+      .eq('estado', 'abierta')
+      .limit(1)
     setCajaAbierta(!!(data && data.length > 0))
   }
 
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
   const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
+  function imprimirComandaRaw(numeroTicket: number, printWindow?: Window | null) {
+    const payload = {
+      empresa: empresaNombre,
+      tipo: mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA',
+      comanda: String(numeroTicket).padStart(3, '0'),
+      mesa,
+      fecha: new Date().toLocaleDateString('es-CL') + ' ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+      items: items.map(i => ({
+        cantidad: i.cantidad,
+        nombre: i.producto.nombre,
+        precio: i.cantidad * i.producto.precio,
+        detalle: i.producto.ingredientes || '',
+        nota: i.nota || ''
+      })),
+      total
+    }
+    const url = 'http://127.0.0.1:9109/print?d=' + encodeURIComponent(JSON.stringify(payload))
+    try {
+      if (printWindow && !printWindow.closed) {
+        printWindow.location.href = url
+      } else {
+        window.open(url, 'lf_print', 'width=360,height=220')
+      }
+      mostrarMensaje('Comanda enviada a impresora ✓', 'ok')
+    } catch {
+      mostrarMensaje('No se pudo abrir la impresora local', 'err')
+    }
+  }
+
   const totalItems = items.reduce((s, i) => s + i.cantidad, 0)
   const esPagoMixto = metodoPago === 'Mixto'
   const montoMixto = Object.values(pagosMixtos).reduce((s, v) => s + (parseInt(v || '0') || 0), 0)
@@ -75,20 +173,33 @@ export default function CajaPage() {
     : metodoPago
   const pagoValido = !esPagoMixto ? !!metodoPago : total > 0 && montoMixto === total
 
-  const productosFiltrados = MENU.filter(p => {
-    const enCat = p.categoria === categoriaActiva
+  const productosPorBusqueda = menu.filter(p => {
     const enBusq = busqueda === '' || p.nombre.toLowerCase().includes(busqueda.toLowerCase())
-    return enCat && enBusq
+    return enBusq
   })
+  const productosFiltradosPorCategoria = productosPorBusqueda.filter(p => {
+    return normalizarTexto(p.categoria) === normalizarTexto(categoriaActiva)
+  })
+  const productosFiltrados = productosFiltradosPorCategoria.length > 0 || busqueda
+    ? productosFiltradosPorCategoria
+    : productosFiltradosPorCategoria
 
   function mostrarMensaje(txt: string, tipo: 'ok' | 'err') {
     setMensaje({ txt, tipo })
     setTimeout(() => setMensaje(null), 3500)
   }
 
-  async function cargarComandaParaEditar(id: string) {
+  async function cargarComandaParaEditar(id: string, menuActual: Producto[] = menu) {
     try {
-      const { data, error } = await supabase.from('ventas').select('*').eq('id', id).single()
+      const empresaId = await getEmpresaIdActual()
+      if (!empresaId) throw new Error('No hay empresa activa en la sesión')
+
+      const { data, error } = await supabase
+        .from('ventas')
+        .select('*')
+        .eq('empresa_id', empresaId)
+        .eq('id', id)
+        .single()
       if (error) throw error
       if (!data) return
 
@@ -99,7 +210,7 @@ export default function CajaPage() {
       setOrdenNum((data.numero || 1) + 1)
 
       const itemsEditados = (data.items || []).map((it: any, idx: number) => {
-        const prod = MENU.find(p => p.nombre === it.nombre) || {
+        const prod = menuActual.find(p => p.nombre === it.nombre) || {
           id: 'editado-' + idx + '-' + Date.now(),
           nombre: it.nombre,
           precio: it.precio_unit || 0,
@@ -160,6 +271,10 @@ export default function CajaPage() {
   // PASO 1: Enviar a cocina — guarda sin pago, imprime comanda
   async function enviarACocina() {
     if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return }
+    const printWindow = typeof window !== 'undefined' ? window.open('about:blank', 'lf_print', 'width=360,height=220') : null
+
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { if (printWindow && !printWindow.closed) printWindow.close(); mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
 
     if (enviada && ventaId) {
       setGuardando(true)
@@ -178,13 +293,15 @@ export default function CajaPage() {
               ingredientes: i.producto.ingredientes || ''
             }))
           })
+          .eq('empresa_id', empresaId)
           .eq('id', ventaId)
 
         if (error) throw error
 
         mostrarMensaje('Comanda actualizada en cocina ✓', 'ok')
-        setTimeout(() => window.print(), 400)
+        imprimirComandaRaw(Math.max(1, ordenNum - 1), printWindow)
       } catch (e: unknown) {
+        if (printWindow && !printWindow.closed) printWindow.close()
         mostrarMensaje('Error al actualizar: ' + (e as Error).message, 'err')
       }
       setGuardando(false)
@@ -194,6 +311,7 @@ export default function CajaPage() {
     setGuardando(true)
     try {
       const { data, error } = await supabase.from('ventas').insert({
+        empresa_id: empresaId,
         numero: ordenNum, mesa, mesero: mesero || 'Caja', personas,
         metodo_pago: '', total,
         items: items.map(i => ({ nombre: i.producto.nombre, cantidad: i.cantidad, precio_unit: i.producto.precio, nota: i.nota, ingredientes: i.producto.ingredientes || '' })),
@@ -206,8 +324,9 @@ export default function CajaPage() {
       setOrdenNum(nuevoNum)
       if (typeof window !== 'undefined') localStorage.setItem('lf_orden_num', String(nuevoNum))
       mostrarMensaje(`Comanda #${ordenNum} enviada a cocina ✓`, 'ok')
-      setTimeout(() => window.print(), 400)
+      imprimirComandaRaw(ordenNum, printWindow)
     } catch (e: unknown) {
+      if (printWindow && !printWindow.closed) printWindow.close()
       mostrarMensaje('Error: ' + (e as Error).message, 'err')
     }
     setGuardando(false)
@@ -226,15 +345,34 @@ export default function CajaPage() {
       mostrarMensaje(esPagoMixto ? `Falta ${fmt(Math.max(restanteMixto, 0))}` : 'Selecciona método de pago', 'err')
       return
     }
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+
     setCobrando(true)
     try {
       const { error } = await supabase.from('ventas')
         .update({ metodo_pago: detalleMetodoPago, estado: 'listo' })
+        .eq('empresa_id', empresaId)
         .eq('id', ventaId)
       if (error) throw error
       setCobrada(true)
       setModalCobro(false)
       mostrarMensaje('¡Cobro registrado! Mesa lista ✓', 'ok')
+      // Guardar propina si se ingreso
+      if (propinaMonto && parseInt(propinaMonto) > 0 && propinaEmpleado) {
+        try {
+          await supabase.from('propinas').insert({
+            empresa_id: empresaId,
+            empleado: propinaEmpleado,
+            monto: parseInt(propinaMonto),
+            metodo_pago: metodoPago || 'Efectivo',
+            cajero: getSesion()?.nombre || 'Caja',
+            venta_id: ventaId,
+            notas: 'Cobro comanda #' + String(ordenNum - 1).padStart(3,'0'),
+            created_at: new Date().toISOString()
+          })
+        } catch(ep) { console.warn('Error propina:', ep) }
+      }
     } catch (e: unknown) {
       mostrarMensaje('Error al cobrar: ' + (e as Error).message, 'err')
     }
@@ -252,6 +390,37 @@ export default function CajaPage() {
     setVentaId(null)
     setModalCobro(false)
     setTabMovil('menu')
+    setPropinaMonto('')
+    setPropinaEmpleado('')
+  }
+
+  function normalizarTexto(valor: string) {
+    return valor
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+  }
+
+  function unirCategorias(base: string[], extras: string[]) {
+    const vistas = new Set<string>()
+    const resultado: string[] = []
+
+    for (const categoria of [...base, ...extras]) {
+      if (esCategoriaSinCategoria(categoria)) continue
+      const clave = normalizarTexto(categoria)
+      if (vistas.has(clave)) continue
+      vistas.add(clave)
+      resultado.push(categoria)
+    }
+
+    return resultado
+  }
+
+  function esCategoriaSinCategoria(categoria?: string | null) {
+    if (!categoria) return false
+    return normalizarTexto(categoria) === 'sin categoria'
   }
 
   const inp: React.CSSProperties = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }
@@ -269,7 +438,7 @@ export default function CajaPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: 8, marginBottom: 8 }}>
           <div>
             <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Mesa</label>
-            <select value={mesa} onChange={e => setMesa(e.target.value)} style={sel}>{MESAS.map(m => <option key={m}>{m}</option>)}</select>
+            <select value={mesa} onChange={e => setMesa(e.target.value)} style={sel}>{mesas.map(m => <option key={m}>{m}</option>)}</select>
           </div>
           <div>
             <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 3 }}>Mesero</label>
@@ -281,14 +450,26 @@ export default function CajaPage() {
           </div>
         </div>
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar producto..." style={{ ...inp, background: 'var(--surface)' }} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔒 Cerrar Turno</button>
+          <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: 'var(--green)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔓 Abrir Turno</button>
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 6, padding: '10px 14px', overflowX: 'auto', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        {CATEGORIAS.map(cat => (
+        {categorias.map(cat => (
           <button key={cat} onClick={() => setCategoriaActiva(cat)} style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva ? '#000' : 'var(--muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}>{cat}</button>
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, alignContent: 'start' as const }}>
-        {productosFiltrados.map(p => (
+        {cargandoCatalogo ? (
+          <div style={{ gridColumn: '1 / -1', color: 'var(--muted)', padding: 20, textAlign: 'center' }}>
+            Cargando productos...
+          </div>
+        ) : productosFiltrados.length === 0 ? (
+          <div style={{ gridColumn: '1 / -1', color: 'var(--muted)', padding: 20, textAlign: 'center' }}>
+            No hay productos en esta categoria.
+          </div>
+        ) : productosFiltrados.map(p => (
           <button key={p.id} onClick={() => agregarProducto(p)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px', color: 'var(--text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', minHeight: 80 }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, lineHeight: 1.3 }}>{p.nombre}</div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 15, color: 'var(--gold)', fontWeight: 700 }}>{fmt(p.precio)}</div>
@@ -396,8 +577,8 @@ export default function CajaPage() {
 
       {/* TICKET — sin método de pago, se imprime antes de cobrar */}
       <div id="ticket-print" style={{ display: 'none', background: 'white', color: 'black' }}>
-        <div className="t-logo">LA FELICITTA</div>
-        <div className="t-sub">@lafelicittacl</div>
+        <div className="t-logo">{empresaNombre}</div>
+        <div className="t-sub">MesaPOS</div>
         <div className="t-tipo">{mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA'}</div>
         <hr className="t-divider" />
         <div className="t-meta">
@@ -433,8 +614,8 @@ export default function CajaPage() {
       <header className="no-print" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 14px', height: 52, position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
   <img
-    src="/logo-lafelicitta.png"
-    alt="La Felicitta"
+    src={empresaLogo}
+    alt={empresaNombre}
     style={{
       width: 48,
       height: 48,
@@ -445,7 +626,7 @@ export default function CajaPage() {
   />
   <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
     <span style={{ fontFamily: 'var(--display)', fontSize: 22, letterSpacing: 3, color: 'var(--gold)', fontWeight: 900 }}>
-      LA FELICITTA
+      {empresaNombre}
     </span>
     <span style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', letterSpacing: 2, marginTop: 4 }}>
       POS · CAJA
@@ -453,7 +634,7 @@ export default function CajaPage() {
   </div>
 </div>
         <nav style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
-          {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/reportes', '📊']].map(([href, icon]) => (
+          {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/propinas', '💰'], ['/reportes', '📊']].map(([href, icon]) => (
             <a key={href} href={href} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? '#000' : 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
           ))}
           {esAdmin && <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--green)', fontSize: 18, textDecoration: 'none' }}>🔓</a>}
@@ -507,7 +688,7 @@ export default function CajaPage() {
                 {metodoPago ? '💳 Método de pago' : '⚠️ Selecciona método de pago'}
               </label>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {[...METODOS_PAGO, 'Mixto'].map(m => (
+                {[...metodosPago, 'Mixto'].map(m => (
                   <button key={m} onClick={() => seleccionarMetodoPago(m)} style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
                 ))}
               </div>
@@ -532,7 +713,18 @@ export default function CajaPage() {
                 <BotonCobrarPoint
                   ventaId={ventaId}
                   monto={total}
-                  onPagado={() => {
+                  onPagado={async () => {
+                    const empresaId = await getEmpresaIdActual()
+                    if (empresaId && propinaMonto && parseInt(propinaMonto) > 0 && propinaEmpleado) {
+                      try {
+                        await supabase.from('propinas').insert({
+                          empresa_id: empresaId, empleado: propinaEmpleado, monto: parseInt(propinaMonto),
+                          metodo_pago: 'Point', cajero: getSesion()?.nombre || 'Caja', venta_id: ventaId,
+                          notas: 'Cobro comanda #' + String(ordenNum - 1).padStart(3,'0'),
+                          created_at: new Date().toISOString()
+                        })
+                      } catch(ep) { console.warn('Error propina:', ep) }
+                    }
                     setCobrada(true)
                     setModalCobro(false)
                     mostrarMensaje('¡Pago con Point aprobado! Mesa lista ✓', 'ok')
@@ -540,6 +732,20 @@ export default function CajaPage() {
                 />
               </div>
             )}
+            <div style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
+              <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 8 }}>
+                Propina para {getSesion()?.nombre || 'cajera'} (opcional)
+              </label>
+              <input type="number" value={propinaMonto}
+                onChange={e => { setPropinaMonto(e.target.value); setPropinaEmpleado(getSesion()?.nombre || 'Cajera') }}
+                placeholder="Monto propina..."
+                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }} />
+              {propinaMonto && parseInt(propinaMonto) > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--green)' }}>
+                  Propina registrada: ${parseInt(propinaMonto).toLocaleString('es-CL')}
+                </div>
+              )}
+            </div>
             <button onClick={confirmarCobro} disabled={cobrando || !pagoValido}
               style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: pagoValido ? 'var(--green)' : 'var(--surface2)', color: pagoValido ? '#000' : 'var(--muted)', fontSize: 15, fontWeight: 700, cursor: pagoValido ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)', opacity: pagoValido ? 1 : 0.5 }}>
               {cobrando ? 'Registrando...' : `✓ Confirmar cobro ${fmt(total)}`}

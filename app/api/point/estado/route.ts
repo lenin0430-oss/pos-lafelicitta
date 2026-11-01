@@ -26,7 +26,7 @@ export async function GET(req: Request) {
       .from("pagos_point")
       .update({ estado: orden.status, updated_at: new Date().toISOString() })
       .eq("id", pago.id);
-    if (orden.status === "processed") await marcarVentaPagadaPoint(db, pago.venta_id);
+    if (orden.status === "processed") await marcarVentaPagadaPoint(db, pago.venta_id, restauranteId);
     return NextResponse.json({ estado: orden.status });
   } catch {
     return NextResponse.json({ error: "No se pudo consultar la orden" }, { status: 502 });

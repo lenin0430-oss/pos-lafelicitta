@@ -2,46 +2,37 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/mp";
 import { COOKIE_SESION, DURACION_SESION_S, crearToken } from "@/lib/restaurante";
 
-const EMPRESA_ID = "lafelicitta";
-const ADMIN_EMAIL = "lenin0430@gmail.com";
+type Usuario = { nombre: string; rol: string; empresa_id: string };
 
 // POST { modo: "pin", pin } | { modo: "admin", email, password }
-// Valida en el servidor y emite la cookie de sesión firmada.
+// Verifica con las mismas funciones RPC del login (verificar_pin_garzon / verificar_login_admin),
+// pero en el servidor, y emite la cookie de sesión firmada.
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const db = supabaseAdmin();
 
-  let rol: "admin" | "garzon";
-  let nombre: string;
+  let usuario: Usuario | null = null;
 
   if (body.modo === "pin") {
     const pin = String(body.pin ?? "");
     if (!/^\d{4}$/.test(pin)) return NextResponse.json({ error: "PIN incorrecto" }, { status: 401 });
-    const { data } = await db.from("usuarios_pos").select("nombre").eq("pin", pin).eq("activo", true).maybeSingle();
-    if (!data) return NextResponse.json({ error: "PIN incorrecto" }, { status: 401 });
-    rol = "garzon";
-    nombre = data.nombre;
+    const { data } = await db.rpc("verificar_pin_garzon", { p_pin: pin }).maybeSingle();
+    usuario = (data as Usuario | null) ?? null;
+    if (!usuario) return NextResponse.json({ error: "PIN incorrecto" }, { status: 401 });
   } else if (body.modo === "admin") {
-    if (String(body.email ?? "").toLowerCase().trim() !== ADMIN_EMAIL) {
-      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
-    }
-    const { data } = await db
-      .from("usuarios_pos")
-      .select("password")
-      .eq("email", ADMIN_EMAIL)
-      .eq("rol", "admin")
-      .maybeSingle();
-    if (!data || data.password !== body.password) {
-      return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
-    }
-    rol = "admin";
-    nombre = "Admin";
+    const email = String(body.email ?? "").toLowerCase().trim();
+    const pin = String(body.password ?? "").trim();
+    if (!email || !pin) return NextResponse.json({ error: "Ingresa email y PIN" }, { status: 400 });
+    const { data } = await db.rpc("verificar_login_admin", { p_email: email, p_pin: pin }).maybeSingle();
+    usuario = (data as Usuario | null) ?? null;
+    if (!usuario) return NextResponse.json({ error: "Email o PIN incorrecto" }, { status: 401 });
   } else {
     return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 });
   }
 
-  const res = NextResponse.json({ ok: true, rol, nombre, empresa_id: EMPRESA_ID });
-  res.cookies.set(COOKIE_SESION, crearToken({ rol, nombre, empresa_id: EMPRESA_ID }), {
+  const rol = usuario.rol === "admin" ? "admin" : "garzon";
+  const res = NextResponse.json({ ok: true, rol, nombre: usuario.nombre, empresa_id: usuario.empresa_id });
+  res.cookies.set(COOKIE_SESION, crearToken({ rol, nombre: usuario.nombre, empresa_id: usuario.empresa_id }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

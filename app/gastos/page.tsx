@@ -1,183 +1,303 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getEmpresaIdActual, getSesion, esAdmin } from '@/lib/auth'
 import Nav from '@/components/Nav'
+import AuthGuard from '@/components/AuthGuard'
 
-const CATEGORIAS = [
-  { id: 'ingredientes', label: '🥩 Ingredientes / Insumos', color: '#e8a32c' },
-  { id: 'sueldos', label: '👤 Sueldos / Personal', color: '#4a9fd4' },
-  { id: 'servicios', label: '💡 Servicios (luz, agua, gas)', color: '#9b59b6' },
-  { id: 'arriendo', label: '🏠 Arriendo', color: '#e74c3c' },
-  { id: 'varios', label: '📦 Gastos Varios', color: '#7a7670' },
-]
-
-interface Gasto {
+type Gasto = {
   id: string
   categoria: string
   descripcion: string
   monto: number
+  cajero: string
+  apertura_id: string
+  afecto_caja: boolean
   created_at: string
 }
 
+const CATEGORIAS = ['Ingredientes / Insumos', 'Sueldos', 'Servicios', 'Varios']
+const ADMIN_PIN = '0000'
+
 export default function GastosPage() {
-  const [gastos, setGastos] = useState<Gasto[]>([])
-  const [categoria, setCategoria] = useState('ingredientes')
+  const [categoria, setCategoria] = useState('Ingredientes / Insumos')
   const [descripcion, setDescripcion] = useState('')
   const [monto, setMonto] = useState('')
   const [guardando, setGuardando] = useState(false)
-  const [mensaje, setMensaje] = useState<{ txt: string; tipo: 'ok' | 'err' } | null>(null)
-  const [filtro, setFiltro] = useState('hoy')
+  const [afectoCaja, setAfectoCaja] = useState(true)
+  const [gastos, setGastos] = useState<Gasto[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
+  const [pinAdmin, setPinAdmin] = useState('')
+  const [esperandoPin, setEsperandoPin] = useState(false)
+  const [gastosPendiente, setGastoPendiente] = useState<{categoria: string, descripcion: string, monto: number} | null>(null)
 
-  useEffect(() => { cargarGastos() }, [filtro])
+  // Filtros
+  const [filtroFecha, setFiltroFecha] = useState(new Date().toISOString().split('T')[0])
+  const [filtroCategoria, setFiltroCategoria] = useState('todas')
+  const [filtroCajero, setFiltroCajero] = useState('todos')
+
+  const sesion = getSesion()
+  const isAdmin = esAdmin()
+
+  useEffect(() => { cargarGastos() }, [filtroFecha, filtroCategoria, filtroCajero])
 
   async function cargarGastos() {
-    const ahora = new Date()
-    let desde: Date
-    if (filtro === 'hoy') desde = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
-    else if (filtro === 'semana') desde = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000)
-    else desde = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
+    setCargando(true)
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { setCargando(false); return }
 
-    const { data } = await supabase
+    const desde = new Date(filtroFecha + 'T00:00:00').toISOString()
+    const hasta = new Date(filtroFecha + 'T23:59:59').toISOString()
+
+    let query = supabase
       .from('gastos')
       .select('*')
-      .gte('created_at', desde.toISOString())
+      .eq('empresa_id', empresaId)
+      .gte('created_at', desde)
+      .lte('created_at', hasta)
       .order('created_at', { ascending: false })
-    if (data) setGastos(data)
+
+    if (filtroCategoria !== 'todas') query = query.eq('categoria', filtroCategoria)
+    if (filtroCajero !== 'todos') query = query.eq('cajero', filtroCajero)
+
+    const { data } = await query
+    setGastos(data || [])
+    setCargando(false)
   }
 
-  async function registrarGasto() {
-    if (!descripcion.trim()) { mostrarMensaje('Ingresa una descripción', 'err'); return }
-    if (!monto || parseFloat(monto) <= 0) { mostrarMensaje('Ingresa un monto válido', 'err'); return }
+  function mostrarMensaje(txt: string, tipo: 'ok'|'err') {
+    setMensaje({ txt, tipo })
+    setTimeout(() => setMensaje(null), 3500)
+  }
+
+  async function guardarGasto(cat: string, desc: string, mon: number) {
+    const empresaId = await getEmpresaIdActual()
+    if (!empresaId) { mostrarMensaje('No hay empresa activa', 'err'); return }
+
+    // Obtener apertura activa
+    const { data: apertura } = await supabase
+      .from('aperturas_caja')
+      .select('id')
+      .eq('empresa_id', empresaId)
+      .eq('estado', 'abierta')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
     setGuardando(true)
     const { error } = await supabase.from('gastos').insert({
-      categoria,
-      descripcion: descripcion.trim(),
-      monto: parseFloat(monto),
+      empresa_id: empresaId,
+      categoria: cat.toLowerCase().split(' /')[0].trim(),
+      descripcion: desc,
+      monto: mon,
+      cajero: sesion?.nombre || 'Caja',
+      apertura_id: apertura?.id || null,
+      afecto_caja: afectoCaja,
       created_at: new Date().toISOString()
     })
-    if (error) { mostrarMensaje('Error al guardar: ' + error.message, 'err') }
-    else {
-      mostrarMensaje('Gasto registrado ✓', 'ok')
+
+    if (error) {
+      mostrarMensaje('Error: ' + error.message, 'err')
+    } else {
+      mostrarMensaje('Gasto registrado', 'ok')
+      setCategoria('Ingredientes / Insumos')
       setDescripcion('')
       setMonto('')
-      cargarGastos()
+      setGastoPendiente(null)
+      setEsperandoPin(false)
+      setPinAdmin('')
+      await cargarGastos()
     }
     setGuardando(false)
   }
 
+  async function intentarGuardar() {
+    if (!descripcion.trim()) { mostrarMensaje('Ingresa una descripcion', 'err'); return }
+    if (!monto || parseInt(monto) <= 0) { mostrarMensaje('Ingresa un monto valido', 'err'); return }
+
+    const montoNum = parseInt(monto)
+
+    // Si monto >= 10000 y no es admin, pedir PIN
+    if (montoNum >= 30000 && !isAdmin) {
+      setGastoPendiente({ categoria, descripcion, monto: montoNum })
+      setEsperandoPin(true)
+      return
+    }
+
+    await guardarGasto(categoria, descripcion, montoNum)
+  }
+
+  async function verificarPin() {
+    // Verificar PIN admin en Supabase
+    const empresaId = await getEmpresaIdActual()
+    const { data } = await supabase
+      .from('usuarios')
+      .select('nombre')
+      .eq('empresa_id', empresaId)
+      .eq('pin', pinAdmin)
+      .eq('rol', 'admin')
+      .maybeSingle()
+
+    if (data && gastosPendiente) {
+      await guardarGasto(gastosPendiente.categoria, gastosPendiente.descripcion, gastosPendiente.monto)
+    } else {
+      mostrarMensaje('PIN admin incorrecto', 'err')
+      setPinAdmin('')
+    }
+  }
+
   async function eliminarGasto(id: string) {
-    if (!confirm('¿Eliminar este gasto?')) return
-    await supabase.from('gastos').delete().eq('id', id)
-    cargarGastos()
+    if (!isAdmin) { mostrarMensaje('Solo el admin puede eliminar', 'err'); return }
+    if (!confirm('Eliminar este gasto?')) return
+    const { error } = await supabase.from('gastos').delete().eq('id', id)
+    if (error) { mostrarMensaje('Error: ' + error.message, 'err') }
+    else { mostrarMensaje('Eliminado', 'ok'); await cargarGastos() }
   }
 
-  function mostrarMensaje(txt: string, tipo: 'ok' | 'err') {
-    setMensaje({ txt, tipo })
-    setTimeout(() => setMensaje(null), 3000)
+  const totalFiltrado = gastos.reduce((s, g) => s + g.monto, 0)
+  const cajeros = gastos.map(g => g.cajero).filter((c, i, a) => c && a.indexOf(c) === i)
+  const fmt = (n: number) => '$' + n.toLocaleString('es-CL')
+
+  const inp: React.CSSProperties = {
+    background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8,
+    color: 'var(--text)', padding: '10px 12px', fontFamily: 'var(--font)', fontSize: 14,
+    outline: 'none', width: '100%'
   }
-
-  const totalGastos = gastos.reduce((s, g) => s + g.monto, 0)
-  const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
-
-  const porCategoria = CATEGORIAS.map(cat => ({
-    ...cat,
-    total: gastos.filter(g => g.categoria === cat.id).reduce((s, g) => s + g.monto, 0),
-    count: gastos.filter(g => g.categoria === cat.id).length
-  })).filter(c => c.count > 0)
-
-  const catActiva = CATEGORIAS.find(c => c.id === categoria)
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font)', paddingBottom: 80 }}>
+    <AuthGuard>
       <Nav active="/gastos" />
+      <div style={{ maxWidth: 620, margin: '0 auto', padding: '20px 16px', fontFamily: 'var(--font)' }}>
 
-      <div style={{ padding: '16px', maxWidth: 600, margin: '0 auto' }}>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: 'var(--display)', fontSize: 20, letterSpacing: 2, color: 'var(--gold)', marginBottom: 4 }}>GASTOS</div>
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>Registro por turno y cajera</div>
+          {mensaje && (
+            <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, fontSize: 13,
+              background: mensaje.tipo === 'ok' ? 'rgba(76,175,125,0.1)' : 'rgba(220,53,69,0.1)',
+              border: '1px solid ' + (mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'),
+              color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)' }}>
+              {mensaje.txt}
+            </div>
+          )}
+        </div>
 
-        {/* Mensaje */}
-        {mensaje && (
-          <div style={{ padding: '10px 16px', borderRadius: 8, marginBottom: 12, background: mensaje.tipo === 'ok' ? 'rgba(76,175,125,.15)' : 'rgba(217,79,61,.15)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>
-            {mensaje.txt}
+        {/* Formulario */}
+        {!esperandoPin ? (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 20, marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 14 }}>
+              Registrar gasto — {sesion?.nombre || 'Caja'}
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>Categoria</label>
+              <select value={categoria} onChange={e => setCategoria(e.target.value)} style={inp}>
+                {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>Descripcion</label>
+              <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Ej: 2 harina pan, aceite..." style={inp} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>
+                Monto {parseInt(monto) >= 30000 && !isAdmin && <span style={{ color: 'var(--warning)', fontSize: 11 }}> — requiere PIN admin</span>}
+              </label>
+              <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" style={inp} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 8 }}>Sale de caja</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setAfectoCaja(true)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (afectoCaja ? 'var(--gold)' : 'var(--border)'), background: afectoCaja ? 'var(--gold)' : 'transparent', color: afectoCaja ? '#000' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: afectoCaja ? 700 : 400 }}>Si - sale de caja</button>
+              <button onClick={() => setAfectoCaja(false)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (!afectoCaja ? 'var(--gold)' : 'var(--border)'), background: !afectoCaja ? 'var(--gold)' : 'transparent', color: !afectoCaja ? '#000' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: !afectoCaja ? 700 : 400 }}>No - solo registro</button>
+            </div>
+          </div>
+          <button onClick={intentarGuardar} disabled={guardando} style={{
+              width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: 'var(--gold)', color: '#000', fontSize: 15, fontWeight: 700, fontFamily: 'var(--font)'
+            }}>
+              {guardando ? 'Guardando...' : 'Guardar gasto'}
+            </button>
+          </div>
+        ) : (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 20, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Gasto de {fmt(gastosPendiente?.monto || 0)} requiere autorizacion</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>Ingresa el PIN del administrador para continuar</div>
+            <input type="password" value={pinAdmin} onChange={e => setPinAdmin(e.target.value)}
+              placeholder="PIN admin" maxLength={4} style={{ ...inp, marginBottom: 12, letterSpacing: 4, fontSize: 20, textAlign: 'center' as const }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button onClick={() => { setEsperandoPin(false); setPinAdmin(''); setGastoPendiente(null) }}
+                style={{ padding: 12, borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                Cancelar
+              </button>
+              <button onClick={verificarPin} disabled={pinAdmin.length < 4}
+                style={{ padding: 12, borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', cursor: 'pointer', fontWeight: 700, fontFamily: 'var(--font)', opacity: pinAdmin.length < 4 ? 0.5 : 1 }}>
+                Autorizar
+              </button>
+            </div>
           </div>
         )}
 
-        {/* FORM */}
+        {/* Filtros */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontFamily: 'var(--display)', fontSize: 13, letterSpacing: 2, color: 'var(--muted)', marginBottom: 12 }}>REGISTRAR GASTO</div>
-
-          {/* Categorías */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-            {CATEGORIAS.map(cat => (
-              <button key={cat.id} onClick={() => setCategoria(cat.id)} style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${categoria === cat.id ? cat.color : 'var(--border)'}`, background: categoria === cat.id ? cat.color + '22' : 'transparent', color: categoria === cat.id ? cat.color : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                {cat.label}
-              </button>
-            ))}
+          <div style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 12 }}>Filtros</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Fecha</label>
+              <input type="date" value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)} style={{ ...inp, fontSize: 12 }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Categoria</label>
+              <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} style={{ ...inp, fontSize: 12 }}>
+                <option value="todas">Todas</option>
+                <option value="ingredientes">Ingredientes</option>
+                <option value="sueldos">Sueldos</option>
+                <option value="servicios">Servicios</option>
+                <option value="varios">Varios</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Cajera</label>
+              <select value={filtroCajero} onChange={e => setFiltroCajero(e.target.value)} style={{ ...inp, fontSize: 12 }}>
+                <option value="todos">Todas</option>
+                {cajeros.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
-
-          {/* Descripción */}
-          <div style={{ marginBottom: 10 }}>
-            <label style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Descripción</label>
-            <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Ej: Carne para hamburguesas, 5kg..." style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '10px 12px', fontFamily: 'var(--font)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-
-          {/* Monto */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Monto (CLP)</label>
-            <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '10px 12px', fontFamily: 'var(--font)', fontSize: 18, outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-
-          <button onClick={registrarGasto} disabled={guardando} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: catActiva?.color || 'var(--gold)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-            {guardando ? 'Guardando...' : '+ Registrar Gasto'}
-          </button>
         </div>
 
-        {/* Filtros */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-          {[['hoy', 'Hoy'], ['semana', '7 días'], ['mes', 'Este mes']].map(([val, label]) => (
-            <button key={val} onClick={() => setFiltro(val)} style={{ flex: 1, padding: '8px', borderRadius: 20, border: `1px solid ${filtro === val ? 'var(--gold)' : 'var(--border)'}`, background: filtro === val ? 'var(--gold)' : 'transparent', color: filtro === val ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-              {label}
-            </button>
+        {/* Lista */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const }}>
+              {gastos.length} gastos
+            </div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 18, color: 'var(--gold)', fontWeight: 700 }}>{fmt(totalFiltrado)}</div>
+          </div>
+
+          {cargando ? (
+            <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>Cargando...</div>
+          ) : gastos.length === 0 ? (
+            <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>Sin gastos para este filtro</div>
+          ) : gastos.map(g => (
+            <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontSize: 14 }}>{g.descripcion}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                  {g.categoria} · {g.cajero || 'sin cajera'} · {new Date(g.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · {g.afecto_caja === false ? 'NO afecto caja' : 'Sale de caja'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: 'var(--mono)', color: g.monto >= 10000 ? 'var(--warning)' : 'var(--gold)', fontWeight: 700 }}>{fmt(g.monto)}</span>
+                {isAdmin && (
+                  <button onClick={() => eliminarGasto(g.id)} style={{ background: 'transparent', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 15 }}>x</button>
+                )}
+              </div>
+            </div>
           ))}
         </div>
 
-        {/* Total */}
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>Total gastos</span>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: 'var(--red)' }}>{fmt(totalGastos)}</span>
-        </div>
-
-        {/* Por categoría */}
-        {porCategoria.length > 0 && (
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, marginBottom: 12 }}>
-            {porCategoria.map(cat => (
-              <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 13, color: cat.color }}>{cat.label}</span>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--text)' }}>{fmt(cat.total)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Lista gastos */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {gastos.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)', fontSize: 13 }}>No hay gastos registrados</div>
-          ) : gastos.map(g => {
-            const cat = CATEGORIAS.find(c => c.id === g.categoria)
-            return (
-              <div key={g.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{g.descripcion}</div>
-                  <div style={{ fontSize: 11, color: cat?.color || 'var(--muted)' }}>{cat?.label} · {new Date(g.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--red)', whiteSpace: 'nowrap' }}>{fmt(g.monto)}</span>
-                  <button onClick={() => eliminarGasto(g.id)} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 16, padding: 4 }}>✕</button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
       </div>
-    </div>
+    </AuthGuard>
   )
 }

@@ -15,10 +15,11 @@ export function supabaseAdmin() {
 
 // Cierra la venta igual que el POS (app/page.tsx → confirmarCobro): metodo_pago + estado "listo".
 // Idempotente: no toca ventas que ya están cobradas.
-export async function marcarVentaPagadaPoint(db: ReturnType<typeof supabaseAdmin>, ventaId: string) {
+export async function marcarVentaPagadaPoint(db: ReturnType<typeof supabaseAdmin>, ventaId: string, empresaId: string) {
   const { error } = await db
     .from("ventas")
     .update({ metodo_pago: "Point", estado: "listo" })
+    .eq("empresa_id", empresaId)
     .eq("id", ventaId)
     .neq("estado", "listo");
   if (error) throw error;
