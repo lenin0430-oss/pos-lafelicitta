@@ -7,6 +7,7 @@ const LINKS = [
   { href: '/gastos', label: '💸 Gastos' },
   { href: '/reportes', label: '📊 Reportes' },
   { href: '/cierre', label: '🔒 Cierre' },
+  { href: '/configuracion/mercadopago', label: '💳 Mercado Pago' },
 ]
 
 export default function Nav({ active }: { active: string }) {

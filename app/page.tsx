@@ -5,6 +5,7 @@ import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, type Producto } from '@/lib/menu
 import { getSesion } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
+import BotonCobrarPoint from '@/components/BotonCobrarPoint'
 
 interface ItemComanda {
   id: number
@@ -456,6 +457,7 @@ export default function CajaPage() {
             <a key={href} href={href} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? '#000' : 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
           ))}
           {esAdmin && <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--green)', fontSize: 18, textDecoration: 'none' }}>🔓</a>}
+          {esAdmin && <a href="/configuracion/mercadopago" title="Mercado Pago" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>💳</a>}
         </nav>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 12 }}>
           {mensaje && <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
@@ -523,6 +525,19 @@ export default function CajaPage() {
                 <div style={{ marginTop: 8, fontSize: 12, fontFamily: 'var(--mono)', color: restanteMixto === 0 ? 'var(--green)' : restanteMixto < 0 ? 'var(--red)' : 'var(--gold)' }}>
                   Pagado: {fmt(montoMixto)} · {restanteMixto === 0 ? 'Pago completo ✓' : restanteMixto > 0 ? `Falta: ${fmt(restanteMixto)}` : `Sobra: ${fmt(Math.abs(restanteMixto))}`}
                 </div>
+              </div>
+            )}
+            {ventaId && total > 0 && (
+              <div style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
+                <BotonCobrarPoint
+                  ventaId={ventaId}
+                  monto={total}
+                  onPagado={() => {
+                    setCobrada(true)
+                    setModalCobro(false)
+                    mostrarMensaje('¡Pago con Point aprobado! Mesa lista ✓', 'ok')
+                  }}
+                />
               </div>
             )}
             <button onClick={confirmarCobro} disabled={cobrando || !pagoValido}

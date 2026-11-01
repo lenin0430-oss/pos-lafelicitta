@@ -33,7 +33,9 @@ export function setSesion(rol: Rol, nombre: string, empresa_id: string) {
 
 export function cerrarSesion() {
   localStorage.removeItem(CLAVE)
-  window.location.href = '/login'
+  fetch('/api/auth/login', { method: 'DELETE' }).finally(() => {
+    window.location.href = '/login'
+  })
 }
 
 export function esAdmin(): boolean {

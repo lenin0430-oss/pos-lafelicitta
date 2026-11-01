@@ -1,6 +1,5 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
 import { setSesion, getSesion } from '@/lib/auth'
 
 export default function LoginPage() {
@@ -32,18 +31,18 @@ export default function LoginPage() {
     setCargando(true)
     setError('')
     try {
-      const { data, error } = await supabase
-        .from('usuarios_pos')
-        .select('*')
-        .eq('pin', pinCompleto)
-        .eq('activo', true)
-        .single()
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modo: 'pin', pin: pinCompleto }),
+      })
+      const data = await r.json()
 
-      if (error || !data) {
-        setError('PIN incorrecto')
+      if (!r.ok) {
+        setError(data.error || 'PIN incorrecto')
         setPin('')
       } else {
-        setSesion('garzon', data.nombre, 'lafelicitta')
+        setSesion('garzon', data.nombre, data.empresa_id)
         window.location.href = '/'
       }
     } catch {
@@ -57,34 +56,21 @@ export default function LoginPage() {
     setCargando(true)
     setError('')
 
-    // Solo este email puede ser admin
-    if (email.toLowerCase().trim() !== 'lenin0430@gmail.com') {
-      setError('Acceso denegado')
-      setCargando(false)
-      return
-    }
-
     try {
-      const { data, error } = await supabase
-        .from('usuarios_pos')
-        .select('*')
-        .eq('email', 'lenin0430@gmail.com')
-        .eq('rol', 'admin')
-        .single()
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modo: 'admin', email, password }),
+      })
+      const data = await r.json()
 
-      if (error || !data) {
-        setError('Credenciales incorrectas')
+      if (!r.ok) {
+        setError(data.error || 'Credenciales incorrectas')
         setCargando(false)
         return
       }
 
-      if (data.password !== password) {
-        setError('Contraseña incorrecta')
-        setCargando(false)
-        return
-      }
-
-      setSesion('admin', 'Admin', 'lafelicitta')
+      setSesion('admin', data.nombre, data.empresa_id)
       window.location.href = '/'
     } catch {
       setError('Error de conexión')
