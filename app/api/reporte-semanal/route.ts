@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       .from('ventas')
       .select('total, metodo_pago, created_at')
       .eq('empresa_id', EMPRESA_ID)
-      .eq('estado', 'listo')
+      .eq('estado_pago', 'pagado')
       .gte('created_at', desde)
       .lte('created_at', hasta)
 
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
     const efectivo = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('efectivo')).reduce((s, v) => s + v.total, 0)
     const debito = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('deb')).reduce((s, v) => s + v.total, 0)
     const transfer = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('trans')).reduce((s, v) => s + v.total, 0)
-    const qr = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('mercado')).reduce((s, v) => s + v.total, 0)
+    const qr = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('mercado') || (v.metodo_pago || '').toLowerCase().includes('point')).reduce((s, v) => s + v.total, 0)
 
     // Promedio diario
     const promedioDiario = Math.round(totalVentas / 7)

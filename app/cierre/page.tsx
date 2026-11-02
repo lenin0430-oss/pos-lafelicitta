@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaIdActual, esAdmin, getSesion } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
+import { resumirVentasPagadas } from '@/lib/cierre'
 
 interface ResumenVentas {
   total: number
@@ -119,33 +120,14 @@ export default function CierrePage() {
       .from('ventas')
       .select('*')
       .eq('empresa_id', empresaId)
-      .eq('estado', 'listo')
+      .eq('estado_pago', 'pagado')
       .gte('created_at', desde)
       .order('created_at', { ascending: true })
 
     if (!data) return
 
-    const res: ResumenVentas = { total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: data.length }
-    data.forEach(v => {
-      const mp = (v.metodo_pago || '').toLowerCase()
-      if (!mp) return
-      res.total += v.total
-      if (mp.includes('efectivo')) res.efectivo += v.total
-      else if (mp.includes('débito') || mp.includes('debito')) res.debito += v.total
-      else if (mp.includes('qr') || mp.includes('mercado')) res.qr += v.total
-      else if (mp.includes('transfer')) res.transferencia += v.total
-      else if (mp.includes('mixto')) {
-        const partes = mp.split('+')
-        partes.forEach((p: string) => {
-          const num = parseInt(p.replace(/[^0-9]/g, '')) || 0
-          if (p.includes('efectivo')) res.efectivo += num
-          else if (p.includes('débito') || p.includes('debito')) res.debito += num
-          else if (p.includes('transfer')) res.transferencia += num
-          else if (p.includes('qr') || p.includes('mercado')) res.qr += num
-        })
-      }
-    })
-    setResumenTurno(res)
+    // Solo ventas PAGADAS; preparado/entregado no influye (lib/cierre.ts)
+    setResumenTurno(resumirVentasPagadas(data))
   }
 
   async function cargarVentasHoy() {
@@ -160,32 +142,13 @@ export default function CierrePage() {
       .from('ventas')
       .select('*')
       .eq('empresa_id', empresaId)
-      .eq('estado', 'listo')
+      .eq('estado_pago', 'pagado')
       .gte('created_at', desde)
 
     if (!data) return
 
-    const res: ResumenVentas = { total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: data.length }
-    data.forEach(v => {
-      const mp = (v.metodo_pago || '').toLowerCase()
-      if (!mp) return
-      res.total += v.total
-      if (mp.includes('efectivo')) res.efectivo += v.total
-      else if (mp.includes('débito') || mp.includes('debito')) res.debito += v.total
-      else if (mp.includes('qr') || mp.includes('mercado')) res.qr += v.total
-      else if (mp.includes('transfer')) res.transferencia += v.total
-      else if (mp.includes('mixto')) {
-        const partes = mp.split('+')
-        partes.forEach((p: string) => {
-          const num = parseInt(p.replace(/[^0-9]/g, '')) || 0
-          if (p.includes('efectivo')) res.efectivo += num
-          else if (p.includes('débito') || p.includes('debito')) res.debito += num
-          else if (p.includes('transfer')) res.transferencia += num
-          else if (p.includes('qr') || p.includes('mercado')) res.qr += num
-        })
-      }
-    })
-    setResumen(res)
+    // Solo ventas PAGADAS; preparado/entregado no influye (lib/cierre.ts)
+    setResumen(resumirVentasPagadas(data))
   }
 
   async function cargarCierres() {

@@ -12,6 +12,7 @@ interface Venta {
   mesero: string
   items: { nombre: string; cantidad: number; nota?: string; ingredientes?: string }[]
   estado: 'pendiente' | 'en_proceso' | 'listo'
+  estado_pago?: 'pendiente' | 'pagado'
   created_at: string
   total: number
 }
@@ -54,7 +55,9 @@ export default function CocinaPage() {
       .from('ventas')
       .select('*')
       .eq('empresa_id', empresaId)
-      .in('estado', ['pendiente', 'en_proceso'])
+      .in('estado', ['pendiente', 'en_proceso', 'listo'])
+      // Pagar ya no saca la comanda de cocina: se limita a las últimas 12 h para que no se acumulen
+      .gte('created_at', new Date(Date.now() - 12 * 3600 * 1000).toISOString())
       .order('created_at', { ascending: true })
     if (data) setVentas(data)
   }
@@ -118,6 +121,7 @@ export default function CocinaPage() {
                     <div style={{ background: urgente ? 'var(--red)' : ESTADO_COLOR[venta.estado], padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 1, color: '#fff' }}>#{String(venta.numero).padStart(3, '0')} — {venta.mesa}</span>
+                        {venta.estado_pago === 'pagado' && <span style={{ marginLeft: 8, fontSize: 11, background: 'rgba(0,0,0,.25)', color: '#fff', padding: '2px 6px', borderRadius: 8 }}>💳 Pagado</span>}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ color: 'rgba(255,255,255,.9)', fontSize: 11 }}>{mins}min</div>

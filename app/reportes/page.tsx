@@ -16,6 +16,7 @@ interface Venta {
   items: { nombre: string; cantidad: number; precio_unit: number }[]
   created_at: string
   estado: string
+  estado_pago?: string
 }
 
 interface AperturaCaja {
@@ -104,8 +105,8 @@ export default function ReportesPage() {
 
   function exportarCSV() {
     const filas = [
-      ['#', 'Mesa', 'Mesero', 'Tipo', 'Método pago', 'Total', 'Estado', 'Fecha'],
-      ...ventas.map(v => [v.numero, v.mesa, v.mesero || '', v.tipo_servicio || '', v.metodo_pago, v.total, v.estado, new Date(v.created_at).toLocaleString('es-CL')])
+      ['#', 'Mesa', 'Mesero', 'Tipo', 'Método pago', 'Total', 'Estado cocina', 'Estado pago', 'Fecha'],
+      ...ventas.map(v => [v.numero, v.mesa, v.mesero || '', v.tipo_servicio || '', v.metodo_pago, v.total, v.estado, v.estado_pago || '', new Date(v.created_at).toLocaleString('es-CL')])
     ]
     const csv = filas.map(f => f.join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -369,8 +370,8 @@ export default function ReportesPage() {
                           <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', fontWeight: 600 }}>{fmt(v.total)}</td>
                           <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{new Date(v.created_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                           <td style={{ padding: '9px 12px' }}>
-                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: v.estado === 'listo' ? 'rgba(76,175,125,.15)' : 'rgba(201,168,76,.1)', color: v.estado === 'listo' ? 'var(--green)' : 'var(--gold)', border: `1px solid ${v.estado === 'listo' ? 'var(--green)' : 'var(--gold)'}` }}>
-                              {v.estado}
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: v.estado_pago === 'pagado' ? 'rgba(76,175,125,.15)' : 'rgba(201,168,76,.1)', color: v.estado_pago === 'pagado' ? 'var(--green)' : 'var(--gold)', border: `1px solid ${v.estado === 'listo' ? 'var(--green)' : 'var(--gold)'}` }}>
+                              {v.estado} · {v.estado_pago === 'pagado' ? 'pagado' : 'sin pagar'}
                             </span>
                           </td>
                           {esAdmin && (

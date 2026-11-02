@@ -1,80 +1,122 @@
 # ESTADO_ACTUAL — MesaPOS (POS operativo de La Felicitta)
 
-Actualizado: 2026-11-02 (Claude). Codex y Claude no deben editar los mismos archivos a la vez: antes de tocar algo, anotar aquí carpeta y archivos.
+Actualizado: 2026-11-02 (Claude, 2.ª entrega). Codex y Claude no deben editar los mismos archivos a la vez: antes de tocar algo, anotar aquí carpeta y archivos.
 
-## 1. Fuente principal
-- Carpeta: `C:\Users\yusma\mesapos-unified` (repo `lenin0430-oss/pos-lafelicitta`).
-- `main` = `origin/main` = **8142dc7** (01/11/2026). Árbol limpio salvo 2 archivos sin seguir: `menu-lafelicitta/` (copia local) y `tsconfig.tsbuildinfo`.
-- **Producción (Vercel, proyecto `pos-lafelicitta-ndkb`)**: último despliegue production `dpl_Dbn1AG…` = commit **8142dc7**, estado READY. Coincide con la carpeta. Rollback previo disponible: `dpl_BvydazKW…` (fd18122).
-- Rama de trabajo (solo local): **`claude/preparacion-2026-11-02`**.
-- Punto de retorno: tag `punto-retorno-2026-11-02` → 8142dc7 + bundle verificado `respaldos/pos-8142dc7.bundle` (carpeta excluida de git vía `.git/info/exclude`).
+## 1. Fuente principal y qué está publicado
+- Carpeta: `C:\Users\yusma\mesapos-unified` (repo `lenin0430-oss/pos-lafelicitta`). `main` = `origin/main` = **8142dc7**.
+- **Producción (Vercel `pos-lafelicitta-ndkb`)** = 8142dc7 (verificado el 02/11). Menú publicado = 411052f.
+- Rama de trabajo, **solo local, nada publicado ni empujado**: `claude/preparacion-2026-11-02`. Punto de retorno: tag `punto-retorno-2026-11-02` (= 8142dc7) y `respaldos/pos-8142dc7.bundle`.
+- Base de datos: proyecto Supabase `xlzbqgvmwbskpfajehgi` (el mismo que usa el `.env.local` del POS). Esta sesión hizo **solo lecturas** (SELECT) de estructura, conteos de estados y nombre/precio/categoría de productos de La Felicitta. No se aplicó SQL ni se leyó ninguna credencial ni dato personal.
 
-### Otras copias (solo lectura, no modificadas)
-| Carpeta | Estado | Uso |
-|---|---|---|
-| `C:\Users\yusma\pos-lafelicitta` | `e855e4a` (may-2026), antigua | No es la publicada |
-| `…\Documents\ChatGPT\…\menu-lafelicitta` | `411052f` (02/11), limpia, = menú publicado en Vercel | **Fuente del menú actual** |
-| `C:\Users\yusma\menu-lafelicitta` | `b0e3ecc` (21/05), antigua | Descartar como fuente |
-| `…\consolidacion` (Codex) | copias sin historial de Empresarial y del POS | Referencia |
-| `G:\Mi unidad\MesaPOS_ClaudeCode_Arranque_2026` (Empresarial, e4659a9) | **No accesible desde esta sesión**; solo se leyó la copia de Codex | Falta acceso para verificar commit |
-
-## 2. Cambios realizados (rama, sin publicar)
-| Archivo | Cambio |
+## 2. Cambios en la rama (sin aplicar remotamente)
+| Área | Archivos |
 |---|---|
-| `lib/pointGuard.ts` (nuevo) | Función pura `ordenPointReutilizable`: si la venta ya tiene una orden Point viva (`created`/`at_terminal`, < 5 min, mismo monto) se reutiliza |
-| `app/api/point/cobrar/route.ts` | (a) consulta `pagos_point` y reutiliza la orden viva en vez de crear otra; (b) si falla el `insert` en `pagos_point` tras crear la orden en MP, ya no se ignora: responde 500 con `orderId`, mensaje "no repitas el cobro" y log |
-| `tests/pointGuard.test.mjs` (nuevo) | 7 pruebas |
-| `docs/comparacion-catalogo-pos-vs-menu-2026-11-02.csv` (nuevo) | Diferencias POS vs menú |
-| `ESTADO_ACTUAL.md` (nuevo) | Este archivo |
+| Estados separados (lib) | `lib/estados.ts` (nuevo), `lib/cierre.ts` (nuevo) |
+| Cobro Point | `lib/pointCobro.ts` (nuevo), `lib/pointGuard.ts` (reescrito), `lib/mp.ts` (clave de idempotencia estable; marcar pagada solo toca `estado_pago`), `app/api/point/cobrar/route.ts` |
+| Pantallas | `app/page.tsx` (cobro manual escribe `estado_pago`), `app/cocina/page.tsx`, `app/cierre/page.tsx`, `app/reportes/page.tsx`, `app/api/reporte-semanal/route.ts` |
+| Migraciones (revisar, NO aplicadas) | `supabase/03_estados_separados.sql` + `_REVERSION`, `03b_retirar_compatibilidad.sql`, `04_pagos_point_reserva.sql` + `_REVERSION` |
+| Pruebas | `tests/*.test.mjs`, `tests/helpers-point.mjs`, `tests/register.mjs`, `tests/resolver.mjs`; `package.json` (script `test`) |
+| Documentos | `ESTADO_ACTUAL.md`, `INTEGRACION_POINT.md`, `docs/precios-reales-pos-vs-menu-2026-11-02.csv`, `docs/rotacion-secreto-cron/*`. `docs/comparacion-catalogo-pos-vs-menu-2026-11-02.csv` es de la 1.ª entrega y quedó **obsoleto** (comparaba el respaldo estático del código, no la base) |
 
-No se tocó: Point/OAuth/webhook/estado, impresión, caja, esquema SQL, precios, `.env*`, `vercel.json`.
+No se tocó: `.env*`, `vercel.json`, impresión, OAuth/webhook de Point, precios, productos ni ventas.
 
-## 3. Pruebas ejecutadas HOY
-- `node --test tests/pointGuard.test.mjs` → 7/7 OK.
-- `tsc --noEmit` → sin errores.
-- **No ejecutadas**: `next build`, pruebas contra Supabase/Mercado Pago, cobros reales, pruebas de impresión. `.env.local` local solo tiene 2 variables públicas de Supabase, así que Point no se puede probar en local.
-- Evidencia histórica (no reejecutada): prueba operativa de Point del 01/11/2026 (`INTEGRACION_POINT.md` + tu confirmación). Informe de Codex: suite Empresarial 1049 OK / 3 fallos clasificados, 611 pruebas de aislamiento (en PostgreSQL en memoria); no reverificado por mí.
+## 3. Pruebas ejecutadas HOY (datos ficticios, sin red, sin cobros)
+- `npm test` → **28/28 OK**: `pointCobro` (13), `cierre` (6), `pointGuard` (2), `migracion` (7, incluidas las reversiones).
+- `tsc --noEmit` (proyecto completo) → sin errores.
+- Point: dos y cinco solicitudes simultáneas → 1 sola orden; respuesta perdida → el reintento recupera la misma orden; fallo al guardar `pagos_point` tras crear la orden → se recupera sin duplicar; error definitivo 4xx cierra el intento; 5xx/red conserva la reserva; venta pagada → 409 sin llamar a MP. Una prueba de **contraste** muestra que "mirar antes si existe" sí duplica con solicitudes simultáneas.
+- Estados: preparado/en proceso/listo/entregado **no impiden cobrar**, y una venta pagada **no sale del cierre** al cambiar el estado de cocina (en código y en SQL).
+- Migraciones en PostgreSQL en memoria (PGlite, esquema equivalente al real, filas ficticias): el backfill conserva `estado`, `metodo_pago` y `total`; es repetible; es compatible con el código antiguo (cobro antiguo = pagado; cocina `listo` sin método ≠ pagado); la reversión restaura el esquema sin perder ventas ni cobros; el índice único rechaza el segundo intento activo (23505).
+- **No ejecutado:** `next build`. El entorno de revisión no puede (los `node_modules` son de Windows/SWC y no hay acceso a npm). Ejecutar en tu PC `npm run build`, o una vista previa de Vercel desde la rama (**no** producción). **No probado:** el comportamiento real de Mercado Pago con la reserva/idempotencia nueva.
 
-## 4. Hallazgos del flujo pedido → cocina → Point → pagada → cierre (por lectura de código)
-1. **`listo` significa dos cosas.** Cocina pone `listo` = comida lista; `/api/point/cobrar` lo trata como "ya cobrada" (409) y `marcarVentaPagadaPoint` usa `.neq("estado","listo")`. Si cocina marca `listo` antes de cobrar, Point no deja cobrar y, si cobrara, no registraría `metodo_pago = Point`.
-2. **Cierre de caja** (`app/cierre/page.tsx`) solo suma ventas `estado = 'listo'`; una venta pasada a `entregado` por cocina desaparece del cierre. Verificar con datos reales.
-3. Idempotencia: `mpFetch` genera clave aleatoria por llamada (no protege reintentos). Mitigado parcialmente por el cambio de arriba y por el bloqueo de MP `already_queued_order_on_terminal`.
-4. Webhook: captura errores y responde 200; no hay reintento durable ni conciliación (el polling de `/api/point/estado` es el respaldo).
-5. Documentación desactualizada: `INTEGRACION_POINT.md` aún lista como pendiente cosas ya hechas (sesión real, botón en cobro, marcar pagada).
-6. **`vercel.json` contiene un token en la URL del cron** (`/api/reporte-semanal?token=…`) dentro del repositorio: rotarlo y moverlo a variable de entorno. No se modificó.
-7. `README.md` propone política RLS `allow_all` en `ventas`: confirmar en Supabase que no sigue activa (no verificado, sin acceso remoto).
-8. El POS tiene `MENU` estático en `lib/menu.ts` como respaldo; el catálogo real viene de la tabla `productos` en Supabase (**no consultada**).
+## 4. Estados reales en la base (lectura 02/11/2026)
+`ventas.estado`: `listo` 6.095, `pendiente` 2 (nunca existieron `en_proceso` ni `entregado`). `pagos_point`: `processed` 5, `canceled` 1. Hoy `listo` significa "cobrada" en todo el histórico (incluye 585 ventas `listo` con `metodo_pago` vacío, que el cierre cuenta pero no asigna a ningún método: revisar). La migración 03 marca esas 6.095 como `pagado` y deja `pagado_at` en NULL (hora real desconocida).
 
-## 5. Catálogo y precios (resumen)
-Comparado `lib/menu.ts` (146 ítems) contra el menú publicado (411052f). Detalle en el CSV.
-- Coinciden en precio: ~100 (84 por nombre exacto + alias de combos, churrascos, jugos y tequeños 25 cm).
-- **Precio distinto (≈30)**: ¼/½/1 pollo solo (+500/+500/+1000), almuerzos chuleta/estofado/pechuga (+500), chop suey (−490), agridulce (+510), perros Americano/Peluo (+510) y Perripollo (+1000), Arroz Salteado (+2000), papas/salchipapas/nuggets (+400 a +2000), empanada Molida (+500), cachapas (+1000 a +2000), tequeños 8 cm 8 u. (+100) y 12 u. (−100), todos los Mix de pasapalos (+2000 a +4000) y Mini Tequeños (+2400 a +5600).
-- **Solo en POS**: Envase para llevar ($300), Pollo al horno ($4.990), Chicharrón P/M/G, Perico Queso Llanero (el menú lo retiró).
-- **Solo en menú**: Pollo broaster ($5.000), Tequeño individual ($500), promos (Perros a Luka, Almuerzo Ejecutivo $4.990, Burger+Papas+Bebida $8.500), y agregados/extras con precio.
-- Falso emparejamiento a ignorar: "Pabellón" empanada vs arepa.
-- **Pendiente**: leer `productos` en Supabase (solo lectura) para saber qué precios usa realmente el POS. La diferencia de arriba es del respaldo en código, no demuestra el estado de la base. No se cambió ningún precio ni venta histórica.
+## 5. Dónde se leían/escribían los estados (auditoría)
+| Lugar | Antes (8142dc7) | En la rama |
+|---|---|---|
+| Cocina | lee `pendiente/en_proceso`; escribe `estado` | lee `pendiente/en_proceso/listo` de las últimas 12 h; muestra "💳 Pagado"; escribe solo `estado` |
+| Cobro manual (`app/page.tsx`) | `metodo_pago` + `estado='listo'` | `metodo_pago` + `estado_pago='pagado'` + `pagado_at`; **no** toca `estado` |
+| Reabrir comanda | `cobrada = estado==='listo'` | `cobrada = estado_pago==='pagado'` |
+| Point cobrar | rechaza si `estado==='listo'` | rechaza solo si `estado_pago==='pagado'`; reserva atómica |
+| Point webhook / estado | `estado='listo'` | `estado_pago='pagado'`, `metodo_pago='Point'` |
+| Cierre (2 consultas) | `estado='listo'` | `estado_pago='pagado'` + `lib/cierre.ts` |
+| Reporte semanal | `estado='listo'` | `estado_pago='pagado'` |
+| Reportes | muestra `estado`; totales suman TODAS las ventas del período | muestra estado de cocina y de pago; **totales sin cambio** (decisión pendiente) |
 
-## 6. Publicado vs. solo local
-- Publicado: POS 8142dc7 (Vercel production); menú 411052f (Vercel production).
-- Solo local: rama `claude/preparacion-2026-11-02`, tag, bundle, este archivo, CSV. **Nada empujado a GitHub ni desplegado.**
+Sin cambios: `cierre-whatsapp` (no lee estados), propinas, gastos, costeo.
 
-## 7. Reversión
-- Descartar el trabajo: `git checkout main && git branch -D claude/preparacion-2026-11-02`.
-- Volver al estado exacto: `git checkout punto-retorno-2026-11-02` o restaurar desde `respaldos/pos-8142dc7.bundle` (`git clone respaldos/pos-8142dc7.bundle nueva-carpeta`).
-- Si algún día se despliega la rama y falla: Vercel → pos-lafelicitta-ndkb → Deployments → promover/rollback a `dpl_Dbn1AG…` (8142dc7).
+**Correcciones incluidas por hallazgos de las pruebas:**
+1. Los pagos "Mixto: Efectivo + Débito…" se contaban **enteros como efectivo** en el cierre (el texto contiene "efectivo" y esa rama iba primero). Ahora se reparten por método. Cambia los números de cierres futuros, no los ya guardados.
+2. Las ventas **Point** entraban al total del cierre pero a ningún método. Ahora se agrupan con QR/Mercado Pago.
 
-## 8. Pendientes y siguiente tarea
-1. Tu OK para consulta **solo lectura** de `productos` (Supabase) y reconciliar precios; luego script con vista previa (dry-run) y precios solo hacia adelante.
-2. Decidir semántica de estados (separar "preparado" de "pagado") — requiere SQL; proponer migración, sin aplicar.
-3. Rotar token del cron; actualizar `INTEGRACION_POINT.md`.
-4. Acceso a `G:\…\MesaPOS_ClaudeCode_Arranque_2026` para verificar e4659a9. Su `CLAUDE.md` aún dice "Venezuela, piloto dic-2026, La Felicitta solo como referencia": contradice la decisión actual (Chile, POS operativo como base); debe actualizarse antes de que otra sesión trabaje allí.
-5. Facturación: Point/voucher no equivale a emisión de facturas; validar modelo tributario con el SII antes de anunciarlo. Revendedor de equipos MP ≠ software certificado ni alianza tecnológica.
+El reporte semanal aún calcula efectivo/débito por texto y cuenta mixtos completos en el primer método (sin corregir).
 
-## 9. Propuesta para la primera prueba en el negocio (sin cobros reales fuera de lo normal)
-Con una sola caja y un solo turno de baja demanda, tras revisión y despliegue en una vista previa (no producción):
-1. Crear 3 comandas de prueba con total $100 en una mesa "PRUEBA".
-2. Caso A: cocina "En proceso" → cobrar con Point $100 → verificar pagada, `metodo_pago = Point`, que aparece en el cierre.
-3. Caso B: doble clic en "Cobrar con Point" → debe mostrar la misma orden, no dos.
-4. Caso C: cocina marca `listo` ANTES de cobrar → confirmar el bloqueo descrito en hallazgo 1 (documentar, no corregir aún).
-5. Cancelar/anular los $100 según el procedimiento habitual y comparar cierre vs. Mercado Pago.
-Criterio de éxito: cero duplicados, la venta pagada aparece en el cierre, y se conoce el comportamiento del caso C.
+## 6. ⚠ Cambio de comportamiento que debes decidir antes de publicar
+Hoy cobrar saca la comanda de la pantalla de cocina (porque cobrar = `listo`). Con la separación, **cobrar ya no la saca**: seguirá apareciendo hasta que cocina la marque. Como en la base nunca se usó `en_proceso`/`entregado`, es probable que cocina no use esos botones. Mitigación incluida: la pantalla muestra solo las últimas 12 h y los estados `listo`, con botón "Entregado". Alternativas: (a) aceptarlo y capacitar; (b) que cobrar también marque `listo` en negocios sin cocina (opción por negocio); (c) ocultar las pagadas tras N minutos. **Elige antes de publicar.**
+
+## 7. Precios reales del POS (tabla `productos`, La Felicitta, 210 filas) vs. menú publicado 411052f
+Resultado: **131 iguales · 27 con precio distinto (acordados) · 5 a retirar · 7 nuevos en el menú · 20 solo en POS · 23 solo en menú · 27 inactivos en POS.** Detalle por producto y categoría: `docs/precios-reales-pos-vs-menu-2026-11-02.csv`. No se cambió ningún precio, producto ni venta histórica.
+
+**Definición de "acordado":** cambio que aparece en los commits del menú del 02/11/2026 00:01–00:54 (entre `b7c11b5` del 22/10 y `411052f`). Esta sesión no ve la conversación donde se acordaron; si algún cambio de la lista no corresponde, avisar.
+
+### 7.1 Diferencias acordadas (el POS aún tiene el precio anterior)
+| Categoría | Producto | POS hoy | Menú | Dif. |
+|---|---|---|---|---|
+| Almuerzos | Chop suey | $6.990 | $6.500 | -490 |
+| Almuerzos | Chuleta vetada | $4.000 | $4.500 | +500 |
+| Almuerzos | Pechuga a la plancha | $4.000 | $4.500 | +500 |
+| Almuerzos | Pollo agridulce | $6.990 | $7.500 | +510 |
+| Almuerzos | Pollo estofado | $4.000 | $4.500 | +500 |
+| Combos a la Brasa | 1 Pollo solo | $12.000 | $13.000 | +1000 |
+| Combos a la Brasa | ½ Pollo solo | $6.000 | $6.500 | +500 |
+| Combos a la Brasa | ¼ Pollo solo | $3.000 | $3.500 | +500 |
+| Perros | El Americano | $3.990 | $4.500 | +510 |
+| Perros | El Peluo | $3.990 | $4.500 | +510 |
+| Perros | El Perripollo | $3.500 | $4.500 | +1000 |
+| Cachapas | Cochino + Queso | $10.000 | $12.000 | +2000 |
+| Cachapas | Cochino Frito | $8.500 | $9.500 | +1000 |
+| Cachapas | Queso de Mano | $7.500 | $8.500 | +1000 |
+| Arroz chino | Arroz Salteado | $4.500 | $6.500 | +2000 |
+| Papas | Bacon & Cheddar | $5.500 | $6.500 | +1000 |
+| Papas | Nuggets 12 u. | $7.500 | $8.500 | +1000 |
+| Papas | Nuggets 6 u. | $4.000 | $4.500 | +500 |
+| Papas | Papas Normal | $3.500 | $3.900 | +400 |
+| Papas | Papas XL | $6.500 | $7.500 | +1000 |
+| Papas | Salchipapas Normal | $4.500 | $5.500 | +1000 |
+| Papas | Salchipapas XL | $7.990 | $9.990 | +2000 |
+| Empanadas | Molida | $2.500 | $3.000 | +500 |
+| Empanadas | Pabellón | $3.000 | $3.500 | +500 |
+| Tequeños | Tequeños 8cm — 12 unidades | $5.800 | $6.800 | +1000 |
+| Tequeños | Tequeños 8cm — 4 unidades | $2.000 | $2.500 | +500 |
+| Tequeños | Tequeños 8cm — 8 unidades | $3.900 | $4.800 | +900 |
+
+**Retirar del POS (el menú los quitó):** 12 Tequeños de Queso + Salsas ($5.800), 4 Tequeños + Bebida ($3.500), Combo Pareja ($8.000), Pollo al horno ($4.990), Perico Queso Llanero ($2.500).
+**Nuevos en el menú, ausentes en el POS:** Salsa extra Mayo ajo ($500), Salsa extra Cheddar ($500), Salsa extra Maíz ($500), Salsa extra Tocineta ($500), Salsa extra Picante ($500), Salsa extra Barbecue ($500), Pollo broaster ($5.000).
+
+### 7.2 Otras diferencias (históricas, NO acordadas)
+- **Diferencias de precio entre productos equivalentes: ninguna.** Todo lo que está en ambos y no figura arriba coincide.
+- **Solo en el POS (activos):** Agua sin gas 500cc ($1.300), Costillas chinas agridulce ($7.990), Jarra limonada ($6.000), Jarra papelón ($6.000), Limonada ($2.500), Papelón con limón ($2.500), Pechuga Crispy al Estilo Chef ($6.990), Pollo a la brasa ($7.500), Envase para llevar ($300), La Casa Club XL ($9.500), Super de Carne ($6.000), El Perro Loco ($3.500), Pepito Pollo 15cm ($7.500), Pernil ($2.500), Pan de Coco ($500), Pan de Guayaba Pequeño ($600), Pan Dulce ($500), Chicharrón Grande ($2.500), Chicharrón Mediano ($2.000), Chicharrón Pequeño ($1.000). Limonada, Papelón, Jarras y Agua sí están en el menú, pero el cruce por nombre no los empareja; sus precios coinciden.
+- **Solo en el menú:** 23 filas; sobre todo agregados con precio en arepas, extras, guarniciones $0 y "Churrasco Italiano" (no existe en el POS).
+- **27 productos inactivos en el POS** (Pepitos, Patacones, Pepsi, cafés grandes…): no se comparan.
+- El respaldo estático `lib/menu.ts` (solo se usa si la base no devuelve productos) está desactualizado respecto a la base; no afecta la operación normal.
+
+## 8. Secreto detectado (sin mostrar su valor) — plan en `docs/rotacion-secreto-cron/`
+Un mismo secreto corto está escrito en texto plano en `vercel.json`, `app/api/reporte-semanal/route.ts` y `app/api/cierre-whatsapp/route.ts` (y en el historial de Git). Sirve como token del cron **y** como `x-bot-secret` del bot de WhatsApp (enlace HTTP sin cifrar a una IP). Además `POST /api/cierre-whatsapp` no exige sesión. **Mi sesión mostró ese valor por error en la salida de dos comandos (el primer `cat vercel.json` del 02/11 y una búsqueda posterior); no lo copié a ningún archivo ni commit.** Tratarlo como comprometido. Preparado, **sin aplicar**: `PLAN.md` (fases A/B/C y reversión) y `sustituir-secreto-por-variables.mjs` (vista previa por defecto; probado en una copia: deja 0 ocurrencias). La rotación real exige cambiar el bot (servidor DigitalOcean) y crear `CRON_SECRET`/`BOT_SECRET` en Vercel; esta sesión no tiene ese acceso.
+
+## 9. Riesgos y pendientes
+1. Decisión del §6 (cocina).
+2. Revisar las 585 ventas `listo` con `metodo_pago` vacío (¿cortesías, deudas, errores?).
+3. `reportes`: los totales incluyen ventas sin pagar; decidir si deben contar solo `pagado`.
+4. Reporte semanal: agrupa mixtos por texto.
+5. Sin barrido de reservas `reservado` huérfanas ni conciliación periódica con Mercado Pago.
+6. Compilación real pendiente (§3); probar en vista previa de Vercel con una base de pruebas, no la de producción.
+7. Facturación: Point/voucher ≠ emisión de facturas; verificar el modelo tributario con el SII antes de anunciarlo. Ser revendedor de equipos MP no acredita certificación del software ni alianza tecnológica.
+8. Acceso a `G:\Mi unidad\…\MesaPOS_ClaudeCode_Arranque_2026` sigue pendiente; el `CLAUDE.md` de Empresarial aún dice "Venezuela / dic-2026".
+
+## 10. Procedimiento de reversión
+- **Código:** `git checkout main && git branch -D claude/preparacion-2026-11-02`; o `git checkout punto-retorno-2026-11-02`; o restaurar `respaldos/pos-8142dc7.bundle` (`git clone respaldos/pos-8142dc7.bundle carpeta-nueva`).
+- **Base (cuando se apliquen):** primero volver a desplegar 8142dc7; luego `04_…_REVERSION.sql` y `03_…_REVERSION.sql`. Antes de aplicar: respaldo de `ventas` y `pagos_point` y ventana sin cobros activos.
+- **Vercel:** rollback al despliegue `dpl_Dbn1AG…` (8142dc7).
+
+## 11. Orden recomendado para publicar (cuando lo autorices)
+1. Decidir §6. 2. `npm run build` y `npm test` en tu PC. 3. Aplicar 03 y 04 en una base de pruebas con respaldo. 4. Vista previa de Vercel de la rama. 5. Prueba controlada con mesa "PRUEBA" y cobro bajo — casos: normal, doble clic, cocina marca `listo` antes de cobrar (debe poder cobrar), el cierre incluye la venta. 6. Recién entonces 03 → 04 → despliegue en producción fuera de horario de servicio. 7. Rotación del secreto como tarea aparte.

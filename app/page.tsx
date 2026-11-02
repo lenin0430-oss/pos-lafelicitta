@@ -228,7 +228,7 @@ export default function CajaPage() {
 
       setItems(itemsEditados)
       setEnviada(true)
-      setCobrada(data.estado === 'listo')
+      setCobrada(data.estado_pago === 'pagado')
       setTabMovil('comanda')
       mostrarMensaje('Comanda abierta para editar ✓', 'ok')
     } catch (e: unknown) {
@@ -351,7 +351,7 @@ export default function CajaPage() {
     setCobrando(true)
     try {
       const { error } = await supabase.from('ventas')
-        .update({ metodo_pago: detalleMetodoPago, estado: 'listo' })
+        .update({ metodo_pago: detalleMetodoPago, estado_pago: 'pagado', pagado_at: new Date().toISOString() })
         .eq('empresa_id', empresaId)
         .eq('id', ventaId)
       if (error) throw error
