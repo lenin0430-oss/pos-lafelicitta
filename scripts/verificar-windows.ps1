@@ -1,6 +1,10 @@
 # Verifica compilación y pruebas en Windows SIN tocar tu .env.local ni la base productiva.
 # Uso (PowerShell, en la carpeta del repo):  powershell -ExecutionPolicy Bypass -File scripts\verificar-windows.ps1
 # Copia el proyecto a una carpeta temporal (sin .git, .next ni .env*), usa variables FICTICIAS y ejecuta tsc, pruebas y next build.
+param(
+  # Ruta a @electric-sql/pglite/dist/index.js (necesaria para las pruebas de migración). También se lee de $env:PGLITE_JS.
+  [string]$PgliteJs = $env:PGLITE_JS
+)
 $ErrorActionPreference = 'Stop'
 $origen = (Resolve-Path "$PSScriptRoot\..").Path
 $tmp = Join-Path $env:TEMP ("mesapos-verificacion-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
@@ -26,9 +30,25 @@ Write-Host "== tsc =="
 npx tsc --noEmit
 if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: falló tsc (código $LASTEXITCODE)" -ForegroundColor Red; exit 1 }
 Write-Host "== pruebas =="
-npm test
-if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: falló pruebas (código $LASTEXITCODE)" -ForegroundColor Red; exit 1 }
+if ($PgliteJs -and (Test-Path $PgliteJs)) { $env:PGLITE_JS = (Resolve-Path $PgliteJs).Path } else { Remove-Item Env:PGLITE_JS -ErrorAction SilentlyContinue }
+$salida = npm test 2>&1 | Tee-Object -Variable pruebasLog
+$codigoPruebas = $LASTEXITCODE
+$pruebasLog | ForEach-Object { Write-Host $_ }
+if ($codigoPruebas -ne 0) { Write-Host "ERROR: fallaron las pruebas (código $codigoPruebas)" -ForegroundColor Red; exit 1 }
+$omitidas = 0
+$m = [regex]::Match(($pruebasLog -join "`n"), '# skipped (\d+)')
+if ($m.Success) { $omitidas = [int]$m.Groups[1].Value }
+$incompleta = ($omitidas -gt 0)
+if ($incompleta) { Write-Host "AVISO: $omitidas prueba(s) omitida(s) (migraciones sin PGlite). Indica -PgliteJs <ruta>\index.js o define PGLITE_JS." -ForegroundColor Yellow }
+Write-Host "== audit (informativo) =="
+npm audit --omit=dev
+$codigoAudit = $LASTEXITCODE
 Write-Host "== next build =="
 npm run build
 if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: falló next build (código $LASTEXITCODE)" -ForegroundColor Red; exit 1 }
-Write-Host "`nOK: compilación y pruebas completas en $tmp (puedes borrar esa carpeta)."
+if ($incompleta) {
+  Write-Host "`nVERIFICACIÓN INCOMPLETA: tsc y next build pasaron, pero se omitieron $omitidas prueba(s). No es una verificación completa." -ForegroundColor Yellow
+  exit 2
+}
+if ($codigoAudit -ne 0) { Write-Host "`nVERIFICACIÓN COMPLETA (tsc, 0 omitidas, next build), PERO npm audit reporta avisos pendientes (código $codigoAudit)." -ForegroundColor Yellow; exit 0 }
+Write-Host "`nOK COMPLETO: tsc, pruebas sin omisiones, next build y npm audit limpios en $tmp (puedes borrar esa carpeta)."
