@@ -15,7 +15,7 @@ Base: rama `claude/preparacion-2026-11-02` en `2e1819f` (Next 15.5.28, React 18)
 **Reportes:** tres cifras (registradas / cobros recibidos / saldo pendiente) más "Sin identificar" y cortesías; las ventas históricas sin método aparecen como "Sin identificar"; método por pagos suma cobros; CSV con columnas de estado de cocina y de pago; "Editar pago" sobre una "Sin identificar" fija su estado de pago.
 **Productos:** editar precio y activar/desactivar funciona; el menú del POS refleja el cambio.
 **Responsive:** móvil (comanda/cocina/cobro) sin desbordes.
-**Point (solo simulado):** sin cuenta MP conectada, `/api/point/cobrar` responde 400 "Conecta Mercado Pago"; con la base sin migración 03/04 responde 503 "Falta aplicar la migración…" sin llamar a MP. El cobro real con terminal se prueba **después**, con tu autorización, monto bajo y mesa PRUEBA.
+**Point (solo simulado):** ver la sección «Flujo completo con Point simulado» más abajo (simulador local, sin cobros reales). El cobro real con terminal se prueba **después**, con tu autorización, monto bajo y mesa PRUEBA.
 **Consola/red:** sin errores de hidratación ni advertencias de `cookies()`/`headers()` sin await.
 
 ## Siguiente paso de publicación (cuando apruebes cada punto)
@@ -27,3 +27,52 @@ Base: rama `claude/preparacion-2026-11-02` en `2e1819f` (Next 15.5.28, React 18)
 
 ## Límites conocidos
 Auditoría limpia no certifica seguridad total. No se ha ejecutado OAuth con cuenta real ni prueba física Point con Next 15.
+
+
+---
+
+# Flujo completo con Point simulado: pedido → cocina → cobro → entrega → cierre (preparado 02/11/2026, NO ejecutado)
+
+Todo con datos **ficticios** y **sin cobros reales**. Mercado Pago real nunca se contacta: la app habla con `scripts/simulador-point.mjs`, que solo acepta tokens `TEST-…`.
+
+## 1. Entorno (local en Windows; nada se publica)
+1. **Base:** únicamente `mesapos-pruebas-aislado` (ref `wcoaulvlicfimdfmwhid`). Antes de arrancar, comprueba que `NEXT_PUBLIC_SUPABASE_URL` de `.env.local` contiene ese ref. **Nunca** uses la llave de servicio de producción. Las llaves las pones tú en `.env.local`; no las pegues en el chat.
+2. **Esquema:** 03 y 04 aplicadas (y 04b para el caso P12 a nivel de base). Si las reversiones pendientes se ejecutan antes, reaplicar 03 → 04 → 04b primero.
+3. **Cuenta ficticia de Mercado Pago:** `MP_TOKEN_KEY=<clave de prueba> node scripts/prueba-navegador/sql_mp_cuenta_ficticia.mjs <empresa_id de prueba>` imprime un `insert` con tokens `TEST-` cifrados; ejecútalo solo en el proyecto de pruebas.
+4. **Variables de prueba** (`.env.local`): `SESSION_SECRET`, `CRON_SECRET`, `BOT_SECRET` (valor de prueba), `BOT_URL` (receptor falso, no el bot real), `BOT_EMPRESA_ID`, `MP_TOKEN_KEY`, `MP_WEBHOOK_SECRET` (valor de prueba) y `MP_SIMULADOR_URL=http://127.0.0.1:4010`. `lib/mpApi.ts` solo acepta ese valor si es `http` a localhost/127.0.0.1 y nunca con `VERCEL_ENV=production`.
+5. **Arranque:** `node scripts/simulador-point.mjs` (panel en `http://127.0.0.1:4010`) y `npm run dev` (`http://localhost:3000`). En el panel escribe el mismo `MP_WEBHOOK_SECRET` de prueba para poder enviar webhooks.
+6. En **Configuración** elige el terminal `TERM-FICTICIA` (el simulador lo lista).
+
+## 2. Cómo se prueba cada caso
+Para cada caso: ejecuta los pasos, captura la pantalla, y pega los bloques A–D de `scripts/prueba-navegador/verificar_flujo.sql` en el editor SQL del proyecto de pruebas (solo lectura). Los invariantes C1–C4 deben dar **0 filas** después de **cada** caso. Estados de la orden se manejan desde el panel del simulador (at_terminal / processed / failed / canceled / expired y «enviar webhook»).
+
+| # | Caso | Pasos | Esperado en pantalla | Esperado en base / simulador |
+|---|---|---|---|---|
+| F1 | Pedido → cocina | Crear comanda mesa PRUEBA-1 con 2 productos | Aparece en cocina; pasar a en proceso y listo | `ventas.estado` cambia; `estado_pago='pendiente'`; sin `pagos_point` |
+| P1 | Aprobado | Cobrar con Point → en el panel: at_terminal → processed (esperar el sondeo de 3 s o enviar webhook) | «Enviado al Point…», «Esperando que el cliente pague…», «¡Pago aprobado! ✅» | 1 fila `processed`, `estado_pago='pagado'`, `metodo_pago='Point'`, `pagado_at` con valor; `ventas.estado` (cocina) **sin cambio**; simulador: 1 orden |
+| P1b | Webhook repetido | Enviar el webhook 3 veces más | Sin cambios visibles | `pagado_at` no cambia; sigue 1 fila; 0 duplicados |
+| P2 | Rechazo | Otra venta: cobrar → at_terminal → **failed** | «Pago rechazado»; el botón «Cobrar con Point» vuelve a estar disponible | Fila `failed`; venta `pendiente`, sin `pagado_at`; no suma al cierre |
+| P3 | Cancelación en el terminal | Cobrar → **canceled** | «Cobro cancelado» | Fila `canceled`; venta `pendiente` |
+| P4 | Expiración | Cobrar → **expired** | «El cobro expiró» | Fila `expired`; venta `pendiente` |
+| P5 | Reintento tras rechazo | Después de P2/P3/P4 volver a cobrar la misma venta y aprobar | Pago aprobado | Filas: la anterior en estado final + una nueva con **otra** `clave_idempotencia`; 1 solo `processed` |
+| P6 | Respuesta perdida | Panel: «perder respuesta» → Cobrar | Error: «No se confirmó el envío al Point. Reintenta: no se duplicará el cobro.» | Fila `reservado` sin `mp_order_id`; simulador: **1** orden (existe) |
+| P6b | Reintento tras respuesta perdida | Presionar Cobrar otra vez | Sigue como un cobro normal («Enviado al Point…») | La **misma** fila toma el `mp_order_id` de la orden ya existente; simulador sigue con **1** orden; 1 fila activa |
+| P7 | Error 500 de Point sin crear | Panel: «error 500» → Cobrar → Cobrar de nuevo | Primer intento: mismo mensaje de reintento; segundo: normal | Simulador: 0 órdenes tras el 1.º, 1 tras el 2.º; 1 fila |
+| P8 | Máquina con cobro pendiente | Panel: «máquina con cobro pendiente (409)» → Cobrar | «La máquina tiene un cobro pendiente. Termínalo o cancélalo en el Point.» | Fila `failed` con `detalle` `mp_409_already_queued_order_on_terminal`; se puede reintentar |
+| P9 | Doble clic / dos pestañas | Abrir la misma venta en 2 pestañas y presionar Cobrar casi a la vez | Ambas muestran el mismo cobro | 1 fila activa, 1 orden (C1 = 0 filas) |
+| P10 | Venta ya cobrada / total cambiado | Cobrar manualmente en efectivo y luego intentar Point; o editar la venta antes de cobrar | «La venta ya está cobrada» / «El total cambió…» | Sin filas nuevas; simulador sin órdenes nuevas |
+| P11 | Webhook inválido | Panel: marcar «firma inválida» y enviar | — | El POS responde **401** (aparece en el aviso del panel); estado de la fila sin cambio |
+| P12 | Aislamiento entre negocios | Con la sesión del negocio B (segundo negocio ficticio) intentar cobrar una venta del negocio A (p. ej. desde la consola: `fetch('/api/point/cobrar',…)`) | Error «Venta no encontrada» (404) | Sin filas nuevas. Con 04b aplicada, además: un `insert` directo con la llave de servicio sobre una venta ajena falla con 23514 |
+| E1 | Entrega | En cocina pulsar «Entregado» en una venta ya pagada | Sale de cocina | `ventas.estado='entregado'`; `estado_pago` y `pagado_at` **no cambian** |
+| E2 | Entrega sin pago | «Entregado» en una venta pendiente de pago | Sale de cocina | `estado='entregado'`, `estado_pago='pendiente'`: se puede cobrar aparte (el bloque C5 la lista como informativa) |
+| C1 | Cierre | Abrir `/cierre` del turno | Efectivo/débito/Point/transferencia/mixto cuadran con los bloques D y A | Total = suma de ventas `pagado`; los intentos rechazados/cancelados/expirados no suman; P1 cuenta **una** vez bajo «Point» |
+| C2 | Cierre por turno | Cobrar una venta creada en el turno A durante el B | Cuenta en el turno B una sola vez | Misma verificación por fecha de cobro |
+
+## 3. Criterio de aprobado
+Todos los casos con captura + bloques A–D; C1–C4 siempre vacíos; simulador con el número de órdenes indicado; ningún error 500 ni de hidratación en consola; ninguna petición a `api.mercadopago.com` (comprobar en la pestaña Red: solo `127.0.0.1:4010` desde el servidor — en el navegador no se ven llamadas a Mercado Pago).
+
+## 4. Lo que esta prueba NO cubre
+Terminal físico, OAuth real, comportamiento real de Mercado Pago ante idempotencia y estados, emisión tributaria y cobros reales. El simulador reproduce el contrato que usa la app, no a Mercado Pago: el comportamiento real se prueba aparte, con tu autorización, monto bajo y mesa PRUEBA.
+
+## 5. Automatizado hoy (sin navegador)
+`tests/pointSimulador.test.mjs` ejecuta la orquestación real del cobro contra el simulador HTTP (aprobado, rechazo/cancelación/expiración con reintento, respuesta perdida, error 500, máquina ocupada, doble clic, venta ya cobrada). `tests/simuladorPoint.test.mjs`, `tests/mpApi.test.mjs` y `tests/cuentaFicticia.test.mjs` prueban el simulador, la salvaguarda de URL y el SQL ficticio.

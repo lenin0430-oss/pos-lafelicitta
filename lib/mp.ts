@@ -1,7 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 
-export const MP_API = "https://api.mercadopago.com";
+import { resolverMpApi } from "./mpApi";
+
+// Siempre la API real, salvo simulador LOCAL de pruebas (ver lib/mpApi.ts; ignorado en producción).
+export const MP_API = resolverMpApi(process.env);
 export const MP_AUTH = "https://auth.mercadopago.cl/authorization";
 
 // ---------- Supabase (solo servidor, service role) ----------
