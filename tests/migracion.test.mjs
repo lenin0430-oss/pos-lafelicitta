@@ -171,7 +171,7 @@ test("04: un solo intento activo por venta aunque lleguen dos INSERT a la vez", 
   const r = await Promise.allSettled([ins("A", "vx"), ins("A", "vx")]);
   assert.equal(r.filter((x) => x.status === "fulfilled").length, 1);
   assert.equal(r.find((x) => x.status === "rejected").reason.code, "23505");
-  await ins("B", "vx");                       // otro negocio, misma venta: permitido
+  await ins("B", "vx");                       // OJO: solo prueba que el ÍNDICE único es por negocio; NO prueba pertenencia de la venta (eso lo hace 04b, ver prueba siguiente)
   await ins("A", "vy");                       // otra venta: permitido
   await db.query("update pagos_point set estado='processed' where restaurante_id='A' and venta_id='vx'");
   await ins("A", "vx");                       // tras un estado final se puede reintentar
@@ -221,4 +221,28 @@ test("05 (propuesta): reconciliación de menú todo-o-nada, reversible y sin toc
   assert.equal((await val(db, "select precio from productos where id=$1", [ops.actualizar_precio[0].id]))[0].precio, 6990);
   assert.equal((await val(db, "select count(*)::int n from productos where activo=false"))[0].n, 7, "las 7 altas quedan desactivadas, no borradas");
   assert.equal((await val(db, "select count(*)::int n from productos"))[0].n, 39);
+});
+
+test("04b: un negocio B NO puede crear cobros sobre una venta del negocio A; cada negocio sí sobre las suyas", T, async () => {
+  const db = await nuevaBase();
+  const [a, b] = ["aaaaaaaa-0000-0000-0000-00000000000a", "bbbbbbbb-0000-0000-0000-00000000000b"];
+  const va = (await val(db, "insert into ventas (numero,mesa,total,estado,empresa_id) values (101,'A1',5000,'pendiente',$1) returning id", [a]))[0].id;
+  const vb = (await val(db, "insert into ventas (numero,mesa,total,estado,empresa_id) values (201,'B1',6000,'pendiente',$1) returning id", [b]))[0].id;
+  await db.exec(sql("04_pagos_point_reserva.sql"));
+  // Sin 04b la base NO lo impide (por eso existe 04b):
+  await db.query("insert into pagos_point (restaurante_id,venta_id,monto,estado) values ($1,$2,5000,'processed')", [b, va]);
+  await db.query("delete from pagos_point where restaurante_id=$1 and venta_id=$2", [b, va]);
+  await db.exec(sql("04b_pagos_point_aislamiento.sql"));
+  const ins = (rest, venta, est = "reservado") => db.query("insert into pagos_point (restaurante_id,venta_id,monto,estado) values ($1,$2,5000,$3)", [rest, venta, est]);
+  await assert.rejects(ins(b, va), (e) => e.code === "23514");              // B sobre venta de A
+  await assert.rejects(ins(a, vb), (e) => e.code === "23514");              // A sobre venta de B
+  await assert.rejects(ins(b, "no-existe"), (e) => e.code === "23514");     // venta inexistente
+  await ins(a, va); await ins(b, vb);                                       // cada uno sobre la suya
+  await assert.rejects(ins(a, va), (e) => e.code === "23505");              // y sigue habiendo un solo intento activo
+  await assert.rejects(db.query("update pagos_point set venta_id=$1 where restaurante_id=$2", [va, b]), (e) => e.code === "23514"); // no se puede mover un cobro a otra venta
+  const n = (await val(db, "select count(*)::int n from pagos_point where mp_order_id like 'ORD-F%'"))[0].n;
+  assert.equal(n, 2, "filas históricas intactas");
+  await db.exec(sql("04b_pagos_point_aislamiento_REVERSION.sql"));
+  await db.query("insert into pagos_point (restaurante_id,venta_id,monto,estado) values ($1,$2,1,'failed')", [b, va]); // sin 04b vuelve a permitirse
+  assert.equal((await val(db, "select count(*)::int n from pg_trigger where tgname='trg_pagos_point_valida_venta'"))[0].n, 0);
 });
