@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { cronAutorizado } from '@/lib/seguridadBot'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,10 +14,8 @@ function fmt(n: number) {
 }
 
 export async function GET(request: Request) {
-  // Verificar token secreto
-  const { searchParams } = new URL(request.url)
-  const token = searchParams.get('token')
-  if (token !== 'lafelicitta2026') {
+  // Vercel Cron envía Authorization: Bearer CRON_SECRET. Sin CRON_SECRET configurado se rechaza todo.
+  if (!cronAutorizado(request.headers.get('authorization'), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
@@ -123,11 +122,11 @@ Neto estimado: *${fmt(neto)}*
 ${totalPropinas > 0 ? `💰 Propinas semana: ${fmt(totalPropinas)}\n` : ''}${Math.abs(totalDiferencias) > 0 ? `⚠️ Diferencias acumuladas: ${fmt(totalDiferencias)}\n` : ''}${peorDiferencia < -10000 ? `🚨 Peor diferencia: ${fmt(peorDiferencia)}\n` : ''}`
 
     // Enviar por WhatsApp via bot
-    await fetch('http://67.205.170.244:3001/cierre-turno', {
+    await fetch(`${process.env.BOT_URL}/cierre-turno`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-bot-secret': 'lafelicitta2026'
+        'x-bot-secret': process.env.BOT_SECRET || ''
       },
       body: JSON.stringify({ alerta_diferencia: false, reporte_semanal: true, mensaje_custom: mensaje })
     })

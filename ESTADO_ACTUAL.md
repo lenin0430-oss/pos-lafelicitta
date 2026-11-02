@@ -1,35 +1,27 @@
 # ESTADO_ACTUAL — MesaPOS (POS operativo de La Felicitta)
 
-Actualizado: 2026-11-02 (Claude, 2.ª entrega). Codex y Claude no deben editar los mismos archivos a la vez: antes de tocar algo, anotar aquí carpeta y archivos.
+Actualizado: 2026-11-02 (Claude, 3.ª entrega). Codex y Claude no deben editar los mismos archivos a la vez: antes de tocar algo, anotar aquí carpeta y archivos.
 
 ## 1. Fuente principal y qué está publicado
-- Carpeta: `C:\Users\yusma\mesapos-unified` (repo `lenin0430-oss/pos-lafelicitta`). `main` = `origin/main` = **8142dc7**.
-- **Producción (Vercel `pos-lafelicitta-ndkb`)** = 8142dc7 (verificado el 02/11). Menú publicado = 411052f.
+- Carpeta: `C:\Users\yusma\mesapos-unified` (repo `lenin0430-oss/pos-lafelicitta`). `main` = `origin/main` = **8142dc7** = producción (Vercel `pos-lafelicitta-ndkb`). Menú publicado = 411052f.
 - Rama de trabajo, **solo local, nada publicado ni empujado**: `claude/preparacion-2026-11-02`. Punto de retorno: tag `punto-retorno-2026-11-02` (= 8142dc7) y `respaldos/pos-8142dc7.bundle`.
-- Base de datos: proyecto Supabase `xlzbqgvmwbskpfajehgi` (el mismo que usa el `.env.local` del POS). Esta sesión hizo **solo lecturas** (SELECT) de estructura, conteos de estados y nombre/precio/categoría de productos de La Felicitta. No se aplicó SQL ni se leyó ninguna credencial ni dato personal.
+- Base: proyecto Supabase `xlzbqgvmwbskpfajehgi`. Esta sesión hizo **solo SELECT** (estructura, conteos, nombre/precio/categoría de productos). No se aplicó SQL, no se leyeron credenciales ni datos personales.
 
-## 2. Cambios en la rama (sin aplicar remotamente)
-| Área | Archivos |
-|---|---|
-| Estados separados (lib) | `lib/estados.ts` (nuevo), `lib/cierre.ts` (nuevo) |
-| Cobro Point | `lib/pointCobro.ts` (nuevo), `lib/pointGuard.ts` (reescrito), `lib/mp.ts` (clave de idempotencia estable; marcar pagada solo toca `estado_pago`), `app/api/point/cobrar/route.ts` |
-| Pantallas | `app/page.tsx` (cobro manual escribe `estado_pago`), `app/cocina/page.tsx`, `app/cierre/page.tsx`, `app/reportes/page.tsx`, `app/api/reporte-semanal/route.ts` |
-| Migraciones (revisar, NO aplicadas) | `supabase/03_estados_separados.sql` + `_REVERSION`, `03b_retirar_compatibilidad.sql`, `04_pagos_point_reserva.sql` + `_REVERSION` |
-| Pruebas | `tests/*.test.mjs`, `tests/helpers-point.mjs`, `tests/register.mjs`, `tests/resolver.mjs`; `package.json` (script `test`) |
-| Documentos | `ESTADO_ACTUAL.md`, `INTEGRACION_POINT.md`, `docs/precios-reales-pos-vs-menu-2026-11-02.csv`, `docs/rotacion-secreto-cron/*`. `docs/comparacion-catalogo-pos-vs-menu-2026-11-02.csv` es de la 1.ª entrega y quedó **obsoleto** (comparaba el respaldo estático del código, no la base) |
+## 2. Decisiones del dueño (3.ª entrega) y cómo quedaron en la rama
+1. **Cobrar no retira comandas**; solo "Entregado". Sin ocultar por antigüedad: cocina muestra pendiente/en_proceso/listo siempre y etiqueta "Antigua · N h" desde 12 h (`lib/cocina.ts`, `app/cocina/page.tsx`).
+2. **585 ventas sin método → "Sin identificar"** (`estado_pago='sin_identificar'`); método e importes intactos (583 La Felicitta, $4.263.280).
+3. **Reportes**: ventas registradas / cobros recibidos / saldo pendiente (+ sin identificar, cortesías) en `lib/reportes.ts` y `app/reportes`. **Cierre**: suma cobros por fecha de cobro (`pagado_at`, o `created_at` en histórico), intervalo [desde,hasta), sin duplicados (`resumirCobros`).
+4. **Conversión histórica**: `docs/conversion-historica-estado-pago.md` (criterio y excepciones). No se deduce pagado solo por cocina.
+5. **Menú**: lista exacta en `docs/reconciliacion-menu/PROPUESTA.md` (+ `operaciones.json`, `supabase/05_reconciliar_menu_PROPUESTA.sql` y su reversión). 27 precios, 5 desactivaciones (historial conservado), 7 altas propuestas. **No aplicado.**
+6. **Seguridad**: `cierre-whatsapp` exige sesión y autorización (empresa `BOT_EMPRESA_ID`, rol admin/garzón), filtra el contenido y usa `BOT_SECRET` solo en servidor; cron con `Authorization: Bearer CRON_SECRET`; secreto retirado de `vercel.json`, rutas y del JS del navegador. Rotación coordinada en `docs/rotacion-secreto-cron/PLAN.md` (no ejecutada). **El valor antiguo sigue en el historial de Git y estuvo en el navegador: tratarlo como público.** Mi sesión lo mostró por error en salidas de comandos (incluida una más en esta entrega); no está en ningún archivo ni commit.
+7. **Compilación**: `scripts/verificar-windows.ps1` (copia temporal, variables ficticias; no toca `.env.local`). `next build` no pudo ejecutarse en esta sesión (sin SWC de Windows en la máquina virtual; el registro npm está bloqueado en la nube). `tsc` y pruebas sí pasan. El cobro Point responde 503 "Falta migración" si faltan columnas (código 42703).
+8. **Orden de publicación y reversión**: `docs/PLAN_PUBLICACION.md` (indica qué reversión pierde información).
 
-No se tocó: `.env*`, `vercel.json`, impresión, OAuth/webhook de Point, precios, productos ni ventas.
-
-## 3. Pruebas ejecutadas HOY (datos ficticios, sin red, sin cobros)
-- `npm test` → **28/28 OK**: `pointCobro` (13), `cierre` (6), `pointGuard` (2), `migracion` (7, incluidas las reversiones).
-- `tsc --noEmit` (proyecto completo) → sin errores.
-- Point: dos y cinco solicitudes simultáneas → 1 sola orden; respuesta perdida → el reintento recupera la misma orden; fallo al guardar `pagos_point` tras crear la orden → se recupera sin duplicar; error definitivo 4xx cierra el intento; 5xx/red conserva la reserva; venta pagada → 409 sin llamar a MP. Una prueba de **contraste** muestra que "mirar antes si existe" sí duplica con solicitudes simultáneas.
-- Estados: preparado/en proceso/listo/entregado **no impiden cobrar**, y una venta pagada **no sale del cierre** al cambiar el estado de cocina (en código y en SQL).
-- Migraciones en PostgreSQL en memoria (PGlite, esquema equivalente al real, filas ficticias): el backfill conserva `estado`, `metodo_pago` y `total`; es repetible; es compatible con el código antiguo (cobro antiguo = pagado; cocina `listo` sin método ≠ pagado); la reversión restaura el esquema sin perder ventas ni cobros; el índice único rechaza el segundo intento activo (23505).
-- **No ejecutado:** `next build`. El entorno de revisión no puede (los `node_modules` son de Windows/SWC y no hay acceso a npm). Ejecutar en tu PC `npm run build`, o una vista previa de Vercel desde la rama (**no** producción). **No probado:** el comportamiento real de Mercado Pago con la reserva/idempotencia nueva.
+## 3. Pruebas ejecutadas (datos ficticios, sin red, sin cobros reales)
+`npm test`: 43 pruebas (Point sin duplicados, simultáneas, respuesta perdida, fallo al guardar; cierre/reportes entre turnos; cocina; seguridad del bot; migraciones 03/04/05 y reversiones en PostgreSQL en memoria). `npx tsc --noEmit`: sin errores. `next build`: **pendiente en Windows**.
 
 ## 4. Estados reales en la base (lectura 02/11/2026)
-`ventas.estado`: `listo` 6.095, `pendiente` 2 (nunca existieron `en_proceso` ni `entregado`). `pagos_point`: `processed` 5, `canceled` 1. Hoy `listo` significa "cobrada" en todo el histórico (incluye 585 ventas `listo` con `metodo_pago` vacío, que el cierre cuenta pero no asigna a ningún método: revisar). La migración 03 marca esas 6.095 como `pagado` y deja `pagado_at` en NULL (hora real desconocida).
+`ventas.estado`: `listo` 6.095, `pendiente` 2. `pagos_point`: `processed` 5, `canceled` 1. Tras la migración 03 (propuesta): pagado / cortesía (6, $32.400) / sin identificar (583) / pendiente (2 Full Burger). Ver `docs/conversion-historica-estado-pago.md`.
 
 ## 5. Dónde se leían/escribían los estados (auditoría)
 | Lugar | Antes (8142dc7) | En la rama |
@@ -51,15 +43,13 @@ Sin cambios: `cierre-whatsapp` (no lee estados), propinas, gastos, costeo.
 
 El reporte semanal aún calcula efectivo/débito por texto y cuenta mixtos completos en el primer método (sin corregir).
 
-## 6. ⚠ Cambio de comportamiento que debes decidir antes de publicar
-Hoy cobrar saca la comanda de la pantalla de cocina (porque cobrar = `listo`). Con la separación, **cobrar ya no la saca**: seguirá apareciendo hasta que cocina la marque. Como en la base nunca se usó `en_proceso`/`entregado`, es probable que cocina no use esos botones. Mitigación incluida: la pantalla muestra solo las últimas 12 h y los estados `listo`, con botón "Entregado". Alternativas: (a) aceptarlo y capacitar; (b) que cobrar también marque `listo` en negocios sin cocina (opción por negocio); (c) ocultar las pagadas tras N minutos. **Elige antes de publicar.**
 
 ## 7. Precios reales del POS (tabla `productos`, La Felicitta, 210 filas) vs. menú publicado 411052f
 Resultado: **131 iguales · 27 con precio distinto (acordados) · 5 a retirar · 7 nuevos en el menú · 20 solo en POS · 23 solo en menú · 27 inactivos en POS.** Detalle por producto y categoría: `docs/precios-reales-pos-vs-menu-2026-11-02.csv`. No se cambió ningún precio, producto ni venta histórica.
 
 **Definición de "acordado":** cambio que aparece en los commits del menú del 02/11/2026 00:01–00:54 (entre `b7c11b5` del 22/10 y `411052f`). Esta sesión no ve la conversación donde se acordaron; si algún cambio de la lista no corresponde, avisar.
 
-### 7.1 Diferencias acordadas (el POS aún tiene el precio anterior)
+### 7.1 Diferencias acordadas (ver la lista exacta por identificador en docs/reconciliacion-menu/PROPUESTA.md) (el POS aún tiene el precio anterior)
 | Categoría | Producto | POS hoy | Menú | Dif. |
 |---|---|---|---|---|
 | Almuerzos | Chop suey | $6.990 | $6.500 | -490 |
@@ -100,23 +90,16 @@ Resultado: **131 iguales · 27 con precio distinto (acordados) · 5 a retirar ·
 - **27 productos inactivos en el POS** (Pepitos, Patacones, Pepsi, cafés grandes…): no se comparan.
 - El respaldo estático `lib/menu.ts` (solo se usa si la base no devuelve productos) está desactualizado respecto a la base; no afecta la operación normal.
 
-## 8. Secreto detectado (sin mostrar su valor) — plan en `docs/rotacion-secreto-cron/`
-Un mismo secreto corto está escrito en texto plano en `vercel.json`, `app/api/reporte-semanal/route.ts` y `app/api/cierre-whatsapp/route.ts` (y en el historial de Git). Sirve como token del cron **y** como `x-bot-secret` del bot de WhatsApp (enlace HTTP sin cifrar a una IP). Además `POST /api/cierre-whatsapp` no exige sesión. **Mi sesión mostró ese valor por error en la salida de dos comandos (el primer `cat vercel.json` del 02/11 y una búsqueda posterior); no lo copié a ningún archivo ni commit.** Tratarlo como comprometido. Preparado, **sin aplicar**: `PLAN.md` (fases A/B/C y reversión) y `sustituir-secreto-por-variables.mjs` (vista previa por defecto; probado en una copia: deja 0 ocurrencias). La rotación real exige cambiar el bot (servidor DigitalOcean) y crear `CRON_SECRET`/`BOT_SECRET` en Vercel; esta sesión no tiene ese acceso.
 
 ## 9. Riesgos y pendientes
-1. Decisión del §6 (cocina).
-2. Revisar las 585 ventas `listo` con `metodo_pago` vacío (¿cortesías, deudas, errores?).
-3. `reportes`: los totales incluyen ventas sin pagar; decidir si deben contar solo `pagado`.
-4. Reporte semanal: agrupa mixtos por texto.
-5. Sin barrido de reservas `reservado` huérfanas ni conciliación periódica con Mercado Pago.
-6. Compilación real pendiente (§3); probar en vista previa de Vercel con una base de pruebas, no la de producción.
-7. Facturación: Point/voucher ≠ emisión de facturas; verificar el modelo tributario con el SII antes de anunciarlo. Ser revendedor de equipos MP no acredita certificación del software ni alianza tecnológica.
-8. Acceso a `G:\Mi unidad\…\MesaPOS_ClaudeCode_Arranque_2026` sigue pendiente; el `CLAUDE.md` de Empresarial aún dice "Venezuela / dic-2026".
+1. Aprobar una versión concreta (este documento + `docs/PLAN_PUBLICACION.md`).
+2. Origen de las 583 ventas sin método sin demostrar; decidir si alguna se reclasifica.
+3. Ejecutar `scripts/verificar-windows.ps1` (o vista previa aislada con base de pruebas) y archivar el resultado de `next build`.
+4. Rotación del secreto: requiere acceso al bot (DigitalOcean) y a Vercel; enlace al bot por HTTP sin cifrar.
+5. Reporte semanal: agrupa mixtos por texto. Sin barrido de reservas `reservado` huérfanas ni conciliación periódica con Mercado Pago.
+6. Las 7 altas de menú son propuesta editable. `docs/comparacion-catalogo-pos-vs-menu-2026-11-02.csv` está obsoleto (usar `precios-reales-…csv`).
+7. Facturación: Point/voucher ≠ emisión de facturas; verificar con el SII. Ser revendedor de equipos MP no acredita certificación ni alianza.
+8. Acceso a `G:\Mi unidad\…\MesaPOS_ClaudeCode_Arranque_2026` sigue pendiente; su `CLAUDE.md` aún dice "Venezuela / dic-2026".
 
-## 10. Procedimiento de reversión
-- **Código:** `git checkout main && git branch -D claude/preparacion-2026-11-02`; o `git checkout punto-retorno-2026-11-02`; o restaurar `respaldos/pos-8142dc7.bundle` (`git clone respaldos/pos-8142dc7.bundle carpeta-nueva`).
-- **Base (cuando se apliquen):** primero volver a desplegar 8142dc7; luego `04_…_REVERSION.sql` y `03_…_REVERSION.sql`. Antes de aplicar: respaldo de `ventas` y `pagos_point` y ventana sin cobros activos.
-- **Vercel:** rollback al despliegue `dpl_Dbn1AG…` (8142dc7).
-
-## 11. Orden recomendado para publicar (cuando lo autorices)
-1. Decidir §6. 2. `npm run build` y `npm test` en tu PC. 3. Aplicar 03 y 04 en una base de pruebas con respaldo. 4. Vista previa de Vercel de la rama. 5. Prueba controlada con mesa "PRUEBA" y cobro bajo — casos: normal, doble clic, cocina marca `listo` antes de cobrar (debe poder cobrar), el cierre incluye la venta. 6. Recién entonces 03 → 04 → despliegue en producción fuera de horario de servicio. 7. Rotación del secreto como tarea aparte.
+## 10. Reversión
+Ver `docs/PLAN_PUBLICACION.md` (tabla de qué se pierde en cada reversión). Código: `git checkout main`, tag `punto-retorno-2026-11-02` o `respaldos/pos-8142dc7.bundle`; Vercel: rollback a `dpl_Dbn1AG…` (8142dc7).

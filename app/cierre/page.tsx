@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaIdActual, esAdmin, getSesion } from '@/lib/auth'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
-import { resumirVentasPagadas } from '@/lib/cierre'
+import { resumirCobros } from '@/lib/cierre'
 
 interface ResumenVentas {
   total: number
@@ -121,13 +121,13 @@ export default function CierrePage() {
       .select('*')
       .eq('empresa_id', empresaId)
       .eq('estado_pago', 'pagado')
-      .gte('created_at', desde)
+      .or(`pagado_at.gte.${desde},and(pagado_at.is.null,created_at.gte.${desde})`)
       .order('created_at', { ascending: true })
 
     if (!data) return
 
-    // Solo ventas PAGADAS; preparado/entregado no influye (lib/cierre.ts)
-    setResumenTurno(resumirVentasPagadas(data))
+    // Suma los COBROS recibidos desde el inicio del período (fecha de cobro); preparado/entregado no influye (lib/cierre.ts)
+    setResumenTurno(resumirCobros(data, desde))
   }
 
   async function cargarVentasHoy() {
@@ -143,12 +143,12 @@ export default function CierrePage() {
       .select('*')
       .eq('empresa_id', empresaId)
       .eq('estado_pago', 'pagado')
-      .gte('created_at', desde)
+      .or(`pagado_at.gte.${desde},and(pagado_at.is.null,created_at.gte.${desde})`)
 
     if (!data) return
 
-    // Solo ventas PAGADAS; preparado/entregado no influye (lib/cierre.ts)
-    setResumen(resumirVentasPagadas(data))
+    // Suma los COBROS recibidos desde el inicio del período (fecha de cobro); preparado/entregado no influye (lib/cierre.ts)
+    setResumen(resumirCobros(data, desde))
   }
 
   async function cargarCierres() {
@@ -326,7 +326,7 @@ export default function CierrePage() {
       try {
         await fetch('/api/cierre-whatsapp', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-bot-secret': 'lafelicitta2026' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             turno: turnoNum,
             cajero: aperturaActiva.cajero,
@@ -363,7 +363,7 @@ export default function CierrePage() {
         try {
           await fetch('/api/cierre-whatsapp', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-bot-secret': 'lafelicitta2026' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               alerta_diferencia: true,
               cajero: aperturaActiva.cajero,

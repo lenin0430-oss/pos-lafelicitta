@@ -1,4 +1,5 @@
 'use client'
+import { estadoPagoParaMetodo } from '@/lib/estados'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
@@ -228,7 +229,7 @@ export default function CajaPage() {
 
       setItems(itemsEditados)
       setEnviada(true)
-      setCobrada(data.estado_pago === 'pagado')
+      setCobrada(data.estado_pago === 'pagado' || data.estado_pago === 'cortesia')
       setTabMovil('comanda')
       mostrarMensaje('Comanda abierta para editar ✓', 'ok')
     } catch (e: unknown) {
@@ -351,7 +352,7 @@ export default function CajaPage() {
     setCobrando(true)
     try {
       const { error } = await supabase.from('ventas')
-        .update({ metodo_pago: detalleMetodoPago, estado_pago: 'pagado', pagado_at: new Date().toISOString() })
+        .update({ metodo_pago: detalleMetodoPago, estado_pago: estadoPagoParaMetodo(detalleMetodoPago), pagado_at: new Date().toISOString() })
         .eq('empresa_id', empresaId)
         .eq('id', ventaId)
       if (error) throw error

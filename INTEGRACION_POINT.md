@@ -24,18 +24,18 @@
 | Columna | Significado | Valores |
 |---|---|---|
 | `ventas.estado` | preparación / entrega (cocina) | `pendiente`, `en_proceso`, `listo`, `entregado` |
-| `ventas.estado_pago` | estado financiero | `pendiente`, `pagado` |
-Marcar preparado o entregado no impide cobrar ni quita una venta pagada del cierre (cubierto por pruebas). El cierre, el reporte semanal y Point leen `estado_pago`.
+| `ventas.estado_pago` | estado financiero | `pendiente`, `pagado`, `cortesia`, `sin_identificar` |
+Cobrar no retira la comanda de cocina (solo "Entregado" lo hace). Marcar preparado o entregado no impide cobrar ni quita una venta pagada del cierre (cubierto por pruebas). El cierre, el reporte semanal y Point leen `estado_pago`.
 
 ## Migraciones (revisar; NO aplicadas)
 | Archivo | Qué hace | Reversión |
 |---|---|---|
 | `supabase/01_…`, `02_…` | tablas existentes (ya aplicadas en producción) | — |
-| `supabase/03_estados_separados.sql` | agrega `estado_pago`/`pagado_at`, marca como `pagado` las ventas históricas `listo`, disparador de compatibilidad con el código antiguo | `03_estados_separados_REVERSION.sql` |
+| `supabase/03_estados_separados.sql` | agrega `estado_pago`/`pagado_at`, convierte el histórico (criterio en `docs/conversion-historica-estado-pago.md`), añade `estado_legacy`, disparador de compatibilidad con el código antiguo | `03_estados_separados_REVERSION.sql` |
 | `supabase/03b_retirar_compatibilidad.sql` | quita el disparador cuando ya no corra el código antiguo | — |
 | `supabase/04_pagos_point_reserva.sql` | `clave_idempotencia`, `referencia_externa`, `detalle` y el índice único de un intento activo por venta | `04_pagos_point_reserva_REVERSION.sql` |
 
-**Orden de despliegue:** respaldo → 03 → 04 → desplegar código → (más tarde) 03b. Las migraciones son aditivas y compatibles con el código actual; el código nuevo **requiere** ambas.
+**Orden de despliegue:** ver `docs/PLAN_PUBLICACION.md` (respaldo → 03 → verificar → 04 → verificar → código → 03b más tarde). Si el código se despliega sin 03/04, el cobro responde 503 "Falta migración" sin llamar a Mercado Pago. Las migraciones son aditivas y compatibles con el código actual; el código nuevo **requiere** ambas.
 
 ## Variables de entorno (solo servidor)
 `MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `MP_REDIRECT_URI`, `MP_WEBHOOK_SECRET`, `MP_TOKEN_KEY`, `APP_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`. `MP_ACCESS_TOKEN` y `MP_TERMINAL_ID` ya no se usan.

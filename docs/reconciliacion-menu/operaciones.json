@@ -1,0 +1,276 @@
+{
+  "empresa_id": "382de687-99e1-4303-bbac-783561f663f0",
+  "estado": "PROPUESTA — NO APLICADA",
+  "actualizar_precio": [
+    {
+      "id": "29d4c257-52b1-4a8c-9cfe-1fb2d0f61054",
+      "categoria": "Almuerzos",
+      "producto": "Chop suey",
+      "precio_antes": 6990,
+      "precio_despues": 6500
+    },
+    {
+      "id": "9783702e-209e-49fe-af11-57fe3d28dc96",
+      "categoria": "Almuerzos",
+      "producto": "Chuleta vetada",
+      "precio_antes": 4000,
+      "precio_despues": 4500
+    },
+    {
+      "id": "dfaf3872-c736-4e25-955e-269ab6b1fbb4",
+      "categoria": "Almuerzos",
+      "producto": "Pechuga a la plancha",
+      "precio_antes": 4000,
+      "precio_despues": 4500
+    },
+    {
+      "id": "e47d901b-215d-4687-9ab3-06692165f324",
+      "categoria": "Almuerzos",
+      "producto": "Pollo agridulce",
+      "precio_antes": 6990,
+      "precio_despues": 7500
+    },
+    {
+      "id": "2338b745-2279-4d78-8fef-d7ec99ba59c6",
+      "categoria": "Almuerzos",
+      "producto": "Pollo estofado",
+      "precio_antes": 4000,
+      "precio_despues": 4500
+    },
+    {
+      "id": "198b2dc6-e7a0-40dd-8ea5-ef9641033e32",
+      "categoria": "Arroz chino",
+      "producto": "Arroz Salteado",
+      "precio_antes": 4500,
+      "precio_despues": 6500
+    },
+    {
+      "id": "3b953208-7299-41fe-bb5a-b701008c70a2",
+      "categoria": "Cachapas",
+      "producto": "Cochino + Queso",
+      "precio_antes": 10000,
+      "precio_despues": 12000
+    },
+    {
+      "id": "f6490e96-5670-44b4-9545-90d72c7884d0",
+      "categoria": "Cachapas",
+      "producto": "Cochino Frito",
+      "precio_antes": 8500,
+      "precio_despues": 9500
+    },
+    {
+      "id": "ca25e4d5-b345-45b9-a63a-980a5df893f8",
+      "categoria": "Cachapas",
+      "producto": "Queso de Mano",
+      "precio_antes": 7500,
+      "precio_despues": 8500
+    },
+    {
+      "id": "278694d3-09e4-4274-8b77-95dddc9b58b7",
+      "categoria": "Combos a la Brasa",
+      "producto": "1 Pollo solo",
+      "precio_antes": 12000,
+      "precio_despues": 13000
+    },
+    {
+      "id": "e5d36854-785c-4c36-b735-b3681cb9dda1",
+      "categoria": "Combos a la Brasa",
+      "producto": "½ Pollo solo",
+      "precio_antes": 6000,
+      "precio_despues": 6500
+    },
+    {
+      "id": "17837d01-3a95-429b-b348-73fc4691d2f4",
+      "categoria": "Combos a la Brasa",
+      "producto": "¼ Pollo solo",
+      "precio_antes": 3000,
+      "precio_despues": 3500
+    },
+    {
+      "id": "97928b15-113f-431e-b4de-da1be60d7052",
+      "categoria": "Empanadas",
+      "producto": "Molida",
+      "precio_antes": 2500,
+      "precio_despues": 3000
+    },
+    {
+      "id": "a1a2eeaf-8c1f-437c-ba1d-47cea7a0d01f",
+      "categoria": "Empanadas",
+      "producto": "Pabellón",
+      "precio_antes": 3000,
+      "precio_despues": 3500
+    },
+    {
+      "id": "6d292e6b-9dca-4c28-8c22-baf5698eb8d3",
+      "categoria": "Papas",
+      "producto": "Bacon & Cheddar",
+      "precio_antes": 5500,
+      "precio_despues": 6500
+    },
+    {
+      "id": "8e8c1f1d-15c1-414b-b1a2-80ddb72a043c",
+      "categoria": "Papas",
+      "producto": "Nuggets 12 u.",
+      "precio_antes": 7500,
+      "precio_despues": 8500
+    },
+    {
+      "id": "3d2de1a6-5636-4896-bce6-52981c59bbbf",
+      "categoria": "Papas",
+      "producto": "Nuggets 6 u.",
+      "precio_antes": 4000,
+      "precio_despues": 4500
+    },
+    {
+      "id": "8448a7cb-2f35-4e36-bebf-f577076579a4",
+      "categoria": "Papas",
+      "producto": "Papas Normal",
+      "precio_antes": 3500,
+      "precio_despues": 3900
+    },
+    {
+      "id": "fc41a41b-bfd8-45da-88c9-bbdbd4a0f184",
+      "categoria": "Papas",
+      "producto": "Papas XL",
+      "precio_antes": 6500,
+      "precio_despues": 7500
+    },
+    {
+      "id": "4ce5ea64-e97e-4702-a18a-e0b7224a72cd",
+      "categoria": "Papas",
+      "producto": "Salchipapas Normal",
+      "precio_antes": 4500,
+      "precio_despues": 5500
+    },
+    {
+      "id": "aaf691f4-8685-42cf-893b-c8f2f0723184",
+      "categoria": "Papas",
+      "producto": "Salchipapas XL",
+      "precio_antes": 7990,
+      "precio_despues": 9990
+    },
+    {
+      "id": "5a50ccc5-6fac-4585-914d-f6fb9d388552",
+      "categoria": "Perros",
+      "producto": "El Americano",
+      "precio_antes": 3990,
+      "precio_despues": 4500
+    },
+    {
+      "id": "c65c8bc2-a491-4ba5-a277-e9df9a8519c4",
+      "categoria": "Perros",
+      "producto": "El Peluo",
+      "precio_antes": 3990,
+      "precio_despues": 4500
+    },
+    {
+      "id": "6652e6fe-1da6-4c97-b357-58fab42455fc",
+      "categoria": "Perros",
+      "producto": "El Perripollo",
+      "precio_antes": 3500,
+      "precio_despues": 4500
+    },
+    {
+      "id": "dc087307-7942-4ca1-8564-edef27c0ef46",
+      "categoria": "Tequeños",
+      "producto": "Tequeños 8cm — 12 unidades",
+      "precio_antes": 5800,
+      "precio_despues": 6800
+    },
+    {
+      "id": "c5d867cd-8fa7-4415-aaa0-969ad60aaef2",
+      "categoria": "Tequeños",
+      "producto": "Tequeños 8cm — 4 unidades",
+      "precio_antes": 2000,
+      "precio_despues": 2500
+    },
+    {
+      "id": "a15481b3-401f-488e-bc47-e20dc9847adf",
+      "categoria": "Tequeños",
+      "producto": "Tequeños 8cm — 8 unidades",
+      "precio_antes": 3900,
+      "precio_despues": 4800
+    }
+  ],
+  "desactivar": [
+    {
+      "id": "20587711-d391-42e5-9ccb-d9ca0491b9a6",
+      "categoria": "Almuerzos",
+      "producto": "Pollo al horno",
+      "precio": 4990,
+      "efecto": "activo=false, disponible=false (la fila y el historial se conservan)"
+    },
+    {
+      "id": "d5c82b31-bcfe-45ef-8bf6-33a5b00afa50",
+      "categoria": "Empanadas",
+      "producto": "Perico Queso Llanero",
+      "precio": 2500,
+      "efecto": "activo=false, disponible=false (la fila y el historial se conservan)"
+    },
+    {
+      "id": "f4c3511d-258a-4729-aa1d-3d032d8a6d92",
+      "categoria": "Promos",
+      "producto": "12 Tequeños de Queso + Salsas",
+      "precio": 5800,
+      "efecto": "activo=false, disponible=false (la fila y el historial se conservan)"
+    },
+    {
+      "id": "40c4750e-764b-485f-8a27-9af85abd48b2",
+      "categoria": "Promos",
+      "producto": "4 Tequeños + Bebida",
+      "precio": 3500,
+      "efecto": "activo=false, disponible=false (la fila y el historial se conservan)"
+    },
+    {
+      "id": "bca9416e-41ae-4498-939e-b2c9aec60f0b",
+      "categoria": "Promos",
+      "producto": "Combo Pareja",
+      "precio": 8000,
+      "efecto": "activo=false, disponible=false (la fila y el historial se conservan)"
+    }
+  ],
+  "crear": [
+    {
+      "categoria": "Almuerzos",
+      "categoria_id": "ceecb798-8a1c-49b9-8d37-8c39ff7d9c52",
+      "producto": "Pollo broaster",
+      "precio": 5000
+    },
+    {
+      "categoria": "Extras",
+      "categoria_id": "906402aa-5259-4cb9-9ebb-357dbc2bcc48",
+      "producto": "Salsa extra: Mayo ajo",
+      "precio": 500
+    },
+    {
+      "categoria": "Extras",
+      "categoria_id": "906402aa-5259-4cb9-9ebb-357dbc2bcc48",
+      "producto": "Salsa extra: Cheddar",
+      "precio": 500
+    },
+    {
+      "categoria": "Extras",
+      "categoria_id": "906402aa-5259-4cb9-9ebb-357dbc2bcc48",
+      "producto": "Salsa extra: Maíz",
+      "precio": 500
+    },
+    {
+      "categoria": "Extras",
+      "categoria_id": "906402aa-5259-4cb9-9ebb-357dbc2bcc48",
+      "producto": "Salsa extra: Tocineta",
+      "precio": 500
+    },
+    {
+      "categoria": "Extras",
+      "categoria_id": "906402aa-5259-4cb9-9ebb-357dbc2bcc48",
+      "producto": "Salsa extra: Picante",
+      "precio": 500
+    },
+    {
+      "categoria": "Extras",
+      "categoria_id": "906402aa-5259-4cb9-9ebb-357dbc2bcc48",
+      "producto": "Salsa extra: Barbecue",
+      "precio": 500
+    }
+  ]
+}

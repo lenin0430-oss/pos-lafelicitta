@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaIdActual } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import { useEmpresaNombre } from '@/lib/useEmpresaNombre'
+import { ESTADOS_VISIBLES_COCINA, antiguedad } from '@/lib/cocina'
 
 interface Venta {
   id: string
@@ -12,7 +13,7 @@ interface Venta {
   mesero: string
   items: { nombre: string; cantidad: number; nota?: string; ingredientes?: string }[]
   estado: 'pendiente' | 'en_proceso' | 'listo'
-  estado_pago?: 'pendiente' | 'pagado'
+  estado_pago?: 'pendiente' | 'pagado' | 'cortesia' | 'sin_identificar'
   created_at: string
   total: number
 }
@@ -55,9 +56,8 @@ export default function CocinaPage() {
       .from('ventas')
       .select('*')
       .eq('empresa_id', empresaId)
-      .in('estado', ['pendiente', 'en_proceso', 'listo'])
-      // Pagar ya no saca la comanda de cocina: se limita a las últimas 12 h para que no se acumulen
-      .gte('created_at', new Date(Date.now() - 12 * 3600 * 1000).toISOString())
+      // Cobrar NO retira la comanda; solo "Entregado" lo hace. No se oculta por antigüedad: se marca como antigua.
+      .in('estado', [...ESTADOS_VISIBLES_COCINA])
       .order('created_at', { ascending: true })
     if (data) setVentas(data)
   }
@@ -116,12 +116,14 @@ export default function CocinaPage() {
               {ventasFiltradas.map(venta => {
                 const mins = minutosDesde(venta.created_at)
                 const urgente = mins >= 15 && venta.estado === 'pendiente'
+                const ant = antiguedad(venta.created_at)
                 return (
                   <div key={venta.id} style={{ background: 'var(--surface)', border: `2px solid ${urgente ? 'var(--red)' : ESTADO_COLOR[venta.estado]}`, borderRadius: 14, overflow: 'hidden', transition: 'border-color .3s' }}>
                     <div style={{ background: urgente ? 'var(--red)' : ESTADO_COLOR[venta.estado], padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 1, color: '#fff' }}>#{String(venta.numero).padStart(3, '0')} — {venta.mesa}</span>
                         {venta.estado_pago === 'pagado' && <span style={{ marginLeft: 8, fontSize: 11, background: 'rgba(0,0,0,.25)', color: '#fff', padding: '2px 6px', borderRadius: 8 }}>💳 Pagado</span>}
+                        {ant.antigua && <span style={{ marginLeft: 8, fontSize: 11, background: '#000', color: '#fff', padding: '2px 6px', borderRadius: 8 }}>🕓 Antigua · {Math.floor(ant.horas)} h sin entregar</span>}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ color: 'rgba(255,255,255,.9)', fontSize: 11 }}>{mins}min</div>

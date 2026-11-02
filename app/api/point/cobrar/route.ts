@@ -20,9 +20,11 @@ export async function POST(req: Request) {
   const db = supabaseAdmin();
 
   // El total y el estado de pago los manda la base, no el navegador.
-  const { data: venta } = await db
+  const { data: venta, error: errVenta } = await db
     .from("ventas").select("total, estado, estado_pago")
     .eq("empresa_id", restauranteId).eq("id", ventaId).maybeSingle();
+  // 42703 = columna inexistente: este código se desplegó antes de aplicar la migración 03. Falla cerrado, sin tocar Mercado Pago.
+  if (errVenta?.code === "42703") return NextResponse.json({ error: "Falta aplicar la migración 03 (estado_pago). No se inició ningún cobro.", reintentable: false }, { status: 503 });
   if (!venta) return NextResponse.json({ error: "Venta no encontrada" }, { status: 404 });
 
   const { data: cuenta } = await db.from("mp_cuentas").select("terminal_id").eq("restaurante_id", restauranteId).maybeSingle();
@@ -82,6 +84,8 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ orderId: out.orderId, estado: out.estado });
   } catch (e) {
+    const code = (e as { code?: string })?.code;
+    if (code === "42703" || code === "42P01") return NextResponse.json({ error: "Falta aplicar la migración 04 (reserva de cobros). No se inició ningún cobro.", reintentable: false }, { status: 503 });
     console.error("Point cobrar (inesperado):", ventaId, (e as Error).message);
     return NextResponse.json({ error: "No se pudo iniciar el cobro. Reintenta; no se duplicará.", reintentable: true }, { status: 503 });
   }

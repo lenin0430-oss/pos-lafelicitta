@@ -1,4 +1,5 @@
 import { estaPagada } from "./estados";
+import { cobrosDelPeriodo } from "./reportes";
 
 export type ResumenVentas = {
   total: number;
@@ -43,4 +44,14 @@ export function resumirVentasPagadas(ventas: VentaCierre[]): ResumenVentas {
     else if (mp.includes("transfer")) res.transferencia += v.total;
   }
   return res;
+}
+
+// Cierre de turno/día: suma los COBROS recibidos dentro de [desde, hasta) según la fecha de cobro, no la de creación.
+// Una venta creada en un turno y cobrada en el siguiente cuenta en el siguiente, y una sola vez.
+export function resumirCobros<T extends VentaCierre & { id: string; created_at: string; pagado_at?: string | null }>(
+  ventas: T[],
+  desde: string | number | Date,
+  hasta?: string | number | Date | null
+): ResumenVentas {
+  return resumirVentasPagadas(cobrosDelPeriodo(ventas, desde, hasta));
 }
