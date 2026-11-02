@@ -1,3 +1,4 @@
+-- *** YA APLICADO EN PRODUCCIÓN (catálogo). NO EJECUTAR NI REVERTIR. Se conserva solo como registro y para sus pruebas en PGlite. ***
 -- Reversión de 05 (PROPUESTA). Restaura precios solo si siguen en el valor nuevo; reactiva lo desactivado; DESACTIVA (no borra) lo creado.
 begin;
 update productos set precio=6990 where id='29d4c257-52b1-4a8c-9cfe-1fb2d0f61054' and precio=6500;

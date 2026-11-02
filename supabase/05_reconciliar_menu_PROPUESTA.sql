@@ -1,3 +1,4 @@
+-- *** YA APLICADO EN PRODUCCIÓN (catálogo). NO EJECUTAR NI REVERTIR. Se conserva solo como registro y para sus pruebas en PGlite. ***
 -- MesaPOS · 05 — Reconciliación de menú acordada en el chat. PROPUESTA: NO APLICAR sin aprobación. Fuente única: docs/reconciliacion-menu/operaciones.json
 -- Cada UPDATE está protegido por el precio actual esperado: si alguien cambió el precio, esa fila NO se toca y el bloque aborta (todo o nada).
 -- Nunca se borran filas: lo retirado se desactiva (activo=false, disponible=false) y ventas.items conserva los nombres/precios históricos.

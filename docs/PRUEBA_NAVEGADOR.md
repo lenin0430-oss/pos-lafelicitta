@@ -1,10 +1,10 @@
 # Comprobación en navegador y siguiente paso de publicación (NO ejecutada)
 
-Base: rama `claude/preparacion-2026-11-02` en `2e1819f` (Next 15.5.28, React 18). El cambio mayor de Next exige regresión visual/funcional **antes** de publicar. Todo en una **vista previa aislada con base de pruebas**; nunca contra la base productiva ni con cobros reales.
+Base: rama `claude/preparacion-2026-11-02`, que incorpora `origin/main` = `4bcd30e` (diseño visual, dependencias corregidas y los siete precios de hamburguesas ya publicados) más las migraciones 03/04/04b, el simulador y las pruebas. **Se conservan el diseño y todos los precios publicados; esta guía no cambia catálogo ni precios.** Verificar `origin/main` al preparar cada entrega. Esta rama **no está aprobada para publicar**. Todo en una **vista previa aislada con base de pruebas**; nunca contra la base productiva ni con cobros reales.
 
 ## Entorno de prueba (a preparar; requiere tu aprobación)
-1. Proyecto Supabase **de pruebas nuevo** (no `xlzbqgvmwbskpfajehgi`; `mesapos-piloto-chile` está inactivo: no usarlo sin autorización) con el esquema actual + `01`…`04`, `03` y datos ficticios (negocio, usuarios admin/garzón/cocina, 15 productos, ventas de ejemplo incluidas `listo` con y sin método, una cortesía).
-2. Proyecto Vercel de vista previa con variables **de prueba**: Supabase de pruebas, `SESSION_SECRET`, `CRON_SECRET`, `BOT_SECRET`, `BOT_URL` (apuntando a un receptor falso, no al bot real), `BOT_EMPRESA_ID`. Sin credenciales de Mercado Pago reales; Point queda fuera (ver abajo).
+1. Proyecto Supabase **de pruebas**: `mesapos-pruebas-aislado` (ref `wcoaulvlicfimdfmwhid`). Nunca producción (`xlzbqgvmwbskpfajehgi`); `mesapos-piloto-chile` está inactivo: no usarlo sin autorización. Esquema con `01`…`04` y `03` (y `04b` para el aislamiento a nivel de base) y datos ficticios: **dos negocios** (A y B), usuarios admin/garzón/cocina de cada uno, productos, ventas de ejemplo incluidas `listo` con y sin método y una cortesía. El catálogo (`05`) **ya está aplicado en producción: no se ejecuta ni se revierte en esta prueba**; los productos de prueba se usan tal como están.
+2. Proyecto Vercel de vista previa con variables **de prueba**: Supabase de pruebas, `SESSION_SECRET`, `CRON_SECRET`, `BOT_SECRET`, `BOT_URL` (apuntando a un receptor falso, no al bot real), `BOT_EMPRESA_ID`. Sin credenciales de Mercado Pago reales: Point se simula (ver la sección «Flujo completo con Point simulado»).
 3. Alternativa local: `npm run dev` en Windows con `.env.local` de pruebas.
 
 ## Lista de comprobación (marcar al ejecutar)
@@ -18,22 +18,24 @@ Base: rama `claude/preparacion-2026-11-02` en `2e1819f` (Next 15.5.28, React 18)
 **Point (solo simulado):** ver la sección «Flujo completo con Point simulado» más abajo (simulador local, sin cobros reales). El cobro real con terminal se prueba **después**, con tu autorización, monto bajo y mesa PRUEBA.
 **Consola/red:** sin errores de hidratación ni advertencias de `cookies()`/`headers()` sin await.
 
-## Siguiente paso de publicación (cuando apruebes cada punto)
-1. Aprobar: este plan, `docs/PLAN_PUBLICACION.md`, criterio del histórico, lista de menú, corte de `06`.
-2. Montar el entorno de prueba y ejecutar la lista de arriba; archivar capturas y resultado.
-3. Ensayo completo en la base de pruebas: `03` → verificar → `06` → `04` → `05` → verificar y reversión.
-4. Producción, fuera de horario y con cierre hecho: respaldo → `03` → verificación → `06` → `04` → `05` (si se aprobó) → desplegar `main` actualizado → pruebas de humo → rotación coordinada del secreto del bot (**sigue pendiente**).
-5. Reversión según `docs/PLAN_PUBLICACION.md` (rollback Vercel a `dpl_Dbn1AG…` sigue disponible; ojo: Next 15 y 14 comparten base, no hay datos propios de Next que revertir).
+## Siguiente paso de publicación (cuando apruebes cada punto) — procedimiento unificado con `docs/PLAN_PUBLICACION.md`
+1. Aprobar: este plan, `docs/PLAN_PUBLICACION.md`, criterio del histórico y, si se desea, el corte de `06` (archivo de cocina).
+2. Montar el entorno de prueba y ejecutar la lista de arriba y la del flujo con Point simulado; archivar capturas y resultado.
+3. Ensayo completo en la base de pruebas, **cada migración en una sola transacción**: pagos y estados `03` → verificar → `04` → `04b` → verificar y reversión inversa (`04b` → `04` → `03`). `06` (archivo de cocina) es un paso aparte, solo si se aprueba su corte. **El catálogo `05` ya está aplicado: no se repite ni se revierte como parte de esta prueba.**
+4. Producción, fuera de horario y con cierre hecho: respaldo → `03` → verificación → (`06` si se aprobó) → `04` → `verificar_04b.sql` (lectura) → `04b` → desplegar el código aprobado → pruebas de humo → rotación coordinada del secreto del bot (**sigue pendiente**).
+5. Punto de retorno del código: el despliegue de producción vigente `dpl_AMbvJb44…` (`4bcd30e`) en Vercel. **Revertir código no revierte datos**: las migraciones aplicadas quedan, y las reversiones SQL son un paso aparte con el orden de `docs/PLAN_PUBLICACION.md`. El código de `4bcd30e` inserta cobros con `restaurante_id` y `venta_id` de una venta del mismo negocio, por lo que no choca con `04b` (revisado leyendo el código, no ejecutado).
 
 ## Límites conocidos
-Auditoría limpia no certifica seguridad total. No se ha ejecutado OAuth con cuenta real ni prueba física Point con Next 15.
+Auditoría limpia no certifica seguridad total. No se ha ejecutado OAuth con cuenta real. El dueño confirmó efectivo y débito con Point en el POS **publicado** (Next 15, `main`); eso **no prueba** todavía la rama nueva de estados y cobros (03/04/04b), que sigue sin ejecutarse en navegador ni con terminal físico.
 
 
 ---
 
 # Flujo completo con Point simulado: pedido → cocina → cobro → entrega → cierre (preparado 02/11/2026, NO ejecutado)
 
-Todo con datos **ficticios** y **sin cobros reales**. Mercado Pago real nunca se contacta: la app habla con `scripts/simulador-point.mjs`, que solo acepta tokens `TEST-…`.
+Todo con datos **ficticios** y **sin cobros reales**: la app habla con `scripts/simulador-point.mjs`, que solo acepta tokens `TEST-…`.
+
+**Alcance real de la protección del simulador.** `lib/mpApi.ts` desvía las llamadas al simulador solo si `MP_SIMULADOR_URL` es `http` a localhost/127.0.0.1/[::1] y **`VERCEL_ENV` no es `production`**. No bloquea por `NODE_ENV=production`: una compilación local (`next build` + `next start`) con esa variable **sí** usaría el simulador, y fuera de Vercel no hay otra barrera. Por eso: no pongas `MP_SIMULADOR_URL` en ningún despliegue, y usa **solo credenciales ficticias desde el origen** (cuenta `TEST-` creada con el script; nunca un token real, aunque el simulador lo rechace).
 
 ## 1. Entorno (local en Windows; nada se publica)
 1. **Base:** únicamente `mesapos-pruebas-aislado` (ref `wcoaulvlicfimdfmwhid`). Antes de arrancar, comprueba que `NEXT_PUBLIC_SUPABASE_URL` de `.env.local` contiene ese ref. **Nunca** uses la llave de servicio de producción. Las llaves las pones tú en `.env.local`; no las pegues en el chat.
@@ -72,6 +74,7 @@ Para cada caso: ejecuta los pasos, captura la pantalla, y pega los bloques A–D
 Todos los casos con captura + bloques A–D; C1–C4 siempre vacíos; simulador con el número de órdenes indicado; ningún error 500 ni de hidratación en consola; ninguna petición a `api.mercadopago.com` (comprobar en la pestaña Red: solo `127.0.0.1:4010` desde el servidor — en el navegador no se ven llamadas a Mercado Pago).
 
 ## 4. Lo que esta prueba NO cubre
+Las pruebas automáticas contra el simulador (§5) usan repositorios falsos y estados simulados: **no demuestran** por sí solas el flujo navegador → sesión → API → Supabase → webhook → cierre; eso solo lo demuestra ejecutar esta guía con la base de pruebas.
 Terminal físico, OAuth real, comportamiento real de Mercado Pago ante idempotencia y estados, emisión tributaria y cobros reales. El simulador reproduce el contrato que usa la app, no a Mercado Pago: el comportamiento real se prueba aparte, con tu autorización, monto bajo y mesa PRUEBA.
 
 ## 5. Automatizado hoy (sin navegador)
