@@ -162,3 +162,6 @@ Estado: **propuesta probada en PGlite y en PostgreSQL 16 local; NO aplicada en n
 - Gastos: alta solo por `/api/gastos`; garzón ≥ $30.000 exige aprobación de admin de un solo uso (negocio+empleado+importe+operación). Ventas: acciones y campos por rol, total = suma de líneas, precios contra catálogo vigente (Pollo broaster 5.500, Pollo al horno 5.000), Point solo con evidencia del proveedor. Login: límite persistente por IP y cuenta. Alta de negocios deshabilitada. Hash de PIN preparado (PIN_MODO=legacy; no se cambió ningún PIN).
 - SQL nuevo `07b` (orden 07b → 07a → 07), 37 comprobaciones en PG16; TS 42/42; `tsc` limpio; `next build` pendiente en Windows.
 - Lectura de producción: ver §9 de `docs/PERMISOS_PLAN.md` de esa rama.
+
+## Permisos — segunda revisión de Codex (02/11/2026, noche) — Claude
+- Rama `claude/permisos-2026-11-02`, ver commit más reciente. Nuevo SQL `07c` (cobro manual/edición atómicos con Point; orden 07b → 07c → 07a → 07), 20 comprobaciones con dos conexiones reales en PG16 (incluye control que reproduce la falla). Update/delete de ventas, caja, gastos, propinas y productos exigen un único id. Catálogo: solo productos activos y disponibles; «Pabellón» activo a dos precios en producción se acepta con ambos. TS 51/51. NO publicada; producción no modificada.
