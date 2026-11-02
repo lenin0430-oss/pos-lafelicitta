@@ -22,7 +22,7 @@ estado(){ echo "$(S "select coalesce(nullif(metodo_pago,''),'∅')||'/'||(select
 echo "== CONTROL: el diseño anterior (leer Point, luego escribir) SÍ deja un cobro manual y uno Point juntos"
 nueva
 ( $P -d $DB -c "select 1 from pagos_point where venta_id='$V'" >/dev/null; sleep 1.2; $P -d $DB -c "update ventas set metodo_pago='Efectivo', estado='listo' where id='$V' and metodo_pago=''" >/dev/null ) &
-( sleep 0.5; $P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado) values ('$V','$E','created')" >/dev/null ) & wait
+( sleep 0.5; $P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado,monto) values ('$V','$E','created',10000)" >/dev/null ) & wait
 chk "sin 07c: queda Efectivo Y un Point activo (la vulnerabilidad se reproduce)" "$(estado)" "Efectivo/1"
 
 echo "== con 07c + 04 + 04b"
@@ -31,27 +31,38 @@ chk "las tres migraciones se cargan y 07c es idempotente" "$($P -d $DB -f $D/07c
 
 echo "-- A) gana la RESERVA Point (transacción abierta 1,5 s); el cobro manual espera y responde point_en_curso"
 nueva; cargar 04_pagos_point_reserva.sql 04b_pagos_point_aislamiento.sql 07c_cobro_manual_atomico.sql
-( $P -d $DB -c "begin; insert into pagos_point (venta_id,restaurante_id,estado) values ('$V','$E','reservado'); select pg_sleep(1.5); commit" >/dev/null ) &
+( $P -d $DB -c "begin; insert into pagos_point (venta_id,restaurante_id,estado,monto) values ('$V','$E','reservado',10000); select pg_sleep(1.5); commit" >/dev/null ) &
 ( sleep 0.5; echo "$($P -d $DB -c "select cobrar_venta_manual('$E','$V','Efectivo')")" > /tmp/r_$$ ) & wait
 chk "cobro manual → point_en_curso" "$(cat /tmp/r_$$)" point_en_curso; chk "estado final: venta sin cobrar, 1 reserva" "$(estado)" "∅/1"
 
 echo "-- B) gana el COBRO MANUAL (transacción abierta 1,5 s); la reserva Point espera y se rechaza"
 nueva; cargar 04_pagos_point_reserva.sql 04b_pagos_point_aislamiento.sql 07c_cobro_manual_atomico.sql
 ( $P -d $DB -c "begin; select cobrar_venta_manual('$E','$V','Efectivo'); select pg_sleep(1.5); commit" >/dev/null ) &
-( sleep 0.5; $P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado) values ('$V','$E','reservado')" 2>&1 | tr '\n' ' ' > /tmp/r_$$ ) & wait
-grep -q "ya tiene medio de pago" /tmp/r_$$ && ok "reserva Point rechazada: 'La venta ya tiene medio de pago'" || ko "la reserva no fue rechazada: $(cat /tmp/r_$$)"
+( sleep 0.5; $P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado,monto) values ('$V','$E','reservado',10000)" 2>&1 | tr '\n' ' ' > /tmp/r_$$ ) & wait
+grep -q "VENTA_YA_COBRADA" /tmp/r_$$ && ok "reserva Point rechazada: 'VENTA_YA_COBRADA'" || ko "la reserva no fue rechazada: $(cat /tmp/r_$$)"
 chk "estado final: Efectivo y 0 cobros Point" "$(estado)" "Efectivo/0"
 
 echo "-- C) EDITAR COMANDA vs reserva Point (ambos órdenes)"
 nueva; cargar 04_pagos_point_reserva.sql 04b_pagos_point_aislamiento.sql 07c_cobro_manual_atomico.sql
-( $P -d $DB -c "begin; insert into pagos_point (venta_id,restaurante_id,estado) values ('$V','$E','reservado'); select pg_sleep(1.5); commit" >/dev/null ) &
+( $P -d $DB -c "begin; insert into pagos_point (venta_id,restaurante_id,estado,monto) values ('$V','$E','reservado',10000); select pg_sleep(1.5); commit" >/dev/null ) &
 ( sleep 0.5; echo "$($P -d $DB -c "select editar_comanda_venta('$E','$V',15000,'[{\"nombre\":\"H\",\"cantidad\":3,\"precio_unit\":5000}]'::jsonb)")" > /tmp/r_$$ ) & wait
 chk "editar con Point en curso → point_en_curso" "$(cat /tmp/r_$$)" point_en_curso; chk "total intacto" "$(S "select total from ventas where id='$V'")" 10000
+for monto in 10000 15000; do
+  nueva; cargar 04_pagos_point_reserva.sql 04b_pagos_point_aislamiento.sql 07c_cobro_manual_atomico.sql
+  ( $P -d $DB -c "begin; select editar_comanda_venta('$E','$V',15000,'[{\"nombre\":\"H\",\"cantidad\":3,\"precio_unit\":5000}]'::jsonb); select pg_sleep(1.5); commit" >/dev/null ) &
+  ( sleep 0.5; $P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado,monto) values ('$V','$E','reservado',$monto)" 2>&1 | tr '\n' ' ' > /tmp/r_$$ ) & wait
+  if [ $monto = 10000 ]; then
+    grep -q "MONTO_NO_COINCIDE" /tmp/r_$$ && ok "edición 10000→15000 primero: la reserva por el monto ANTIGUO (10000) se rechaza (P0409 MONTO_NO_COINCIDE)" || ko "reserva por 10000 aceptada sobre venta de 15000: $(cat /tmp/r_$$)"
+    chk "…y no queda ninguna reserva (cero cobros al proveedor)" "$(S "select count(*) from pagos_point")" 0
+  else
+    chk "edición primero y reserva por el total NUEVO (15000): se acepta" "$(S "select total||'/'||(select count(*) from pagos_point) from ventas where id='$V'")" "15000/1"
+  fi
+done
+echo "-- C2) la reserva gana el bloqueo (monto vigente 10000) y la edición espera: edición → point_en_curso, total intacto"
 nueva; cargar 04_pagos_point_reserva.sql 04b_pagos_point_aislamiento.sql 07c_cobro_manual_atomico.sql
-( $P -d $DB -c "begin; select editar_comanda_venta('$E','$V',15000,'[{\"nombre\":\"H\",\"cantidad\":3,\"precio_unit\":5000}]'::jsonb); select pg_sleep(1.5); commit" >/dev/null ) &
-( sleep 0.5; $P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado,monto) values ('$V','$E','reservado',10000)" >/dev/null 2>&1 ) & wait
-chk "editar primero: la reserva espera y queda creada con la venta ya editada (el servidor Point lee el total nuevo antes de cobrar)" "$(S "select total||'/'||(select count(*) from pagos_point) from ventas where id='$V'")" "15000/1"
-
+( $P -d $DB -c "begin; insert into pagos_point (venta_id,restaurante_id,estado,monto) values ('$V','$E','reservado',10000); select pg_sleep(1.5); commit" >/dev/null ) &
+( sleep 0.5; echo "$($P -d $DB -c "select editar_comanda_venta('$E','$V',15000,'[{\"nombre\":\"H\",\"cantidad\":3,\"precio_unit\":5000}]'::jsonb)")" > /tmp/r_$$ ) & wait
+chk "reserva primero: edición bloqueada" "$(cat /tmp/r_$$)" point_en_curso
 echo "-- D) dos cobros manuales simultáneos: exactamente uno gana"
 nueva; cargar 04_pagos_point_reserva.sql 04b_pagos_point_aislamiento.sql 07c_cobro_manual_atomico.sql; rm -f /tmp/d_$$
 for i in 1 2 3 4 5 6; do ( $P -d $DB -c "select cobrar_venta_manual('$E','$V','Efectivo')" >> /tmp/d_$$ ) & done; wait
@@ -62,7 +73,7 @@ malos=0
 for i in $(seq 1 30); do
   nueva; cargar 04_pagos_point_reserva.sql 04b_pagos_point_aislamiento.sql 07c_cobro_manual_atomico.sql
   ( sleep 0.0$((RANDOM%9)); $P -d $DB -c "select cobrar_venta_manual('$E','$V','Efectivo')" >/dev/null ) &
-  ( sleep 0.0$((RANDOM%9)); $P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado) values ('$V','$E','reservado')" >/dev/null 2>&1 ) & wait
+  ( sleep 0.0$((RANDOM%9)); $P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado,monto) values ('$V','$E','reservado',10000)" >/dev/null 2>&1 ) & wait
   r=$(estado); case "$r" in Efectivo/0|∅/1) ;; *) malos=$((malos+1)); echo "   caso inválido: $r";; esac
 done
 chk "30 carreras sin estado incompatible" "$malos" 0
@@ -71,7 +82,7 @@ echo "-- F) reglas del cobro: mixto, otro negocio, Point cancelado no bloquea, f
 nueva; cargar 04_pagos_point_reserva.sql 04b_pagos_point_aislamiento.sql 07c_cobro_manual_atomico.sql
 chk "mixto que no suma → mixto_no_suma" "$(S "select cobrar_venta_manual('$E','$V','Mixto: Efectivo \$4.000 + Débito \$5.000', 9000)")" mixto_no_suma
 chk "otro negocio → no_encontrada" "$(S "select cobrar_venta_manual('bbbbbbbb-0000-0000-0000-00000000000b','$V','Efectivo')")" no_encontrada
-$P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado) values ('$V','$E','canceled')" >/dev/null
+$P -d $DB -c "insert into pagos_point (venta_id,restaurante_id,estado,monto) values ('$V','$E','canceled',10000)" >/dev/null
 chk "Point cancelado no bloquea" "$(S "select cobrar_venta_manual('$E','$V','Efectivo')")" ok
 chk "venta ya cobrada no admite edición" "$(S "select editar_comanda_venta('$E','$V',1,'[{\"nombre\":\"x\",\"cantidad\":1,\"precio_unit\":1}]'::jsonb)")" ya_cobrada
 chk "edición con total que no suma → total_no_coincide" "$(S "select editar_comanda_venta('$E','$V',2,'[{\"nombre\":\"x\",\"cantidad\":1,\"precio_unit\":1}]'::jsonb)")" total_no_coincide

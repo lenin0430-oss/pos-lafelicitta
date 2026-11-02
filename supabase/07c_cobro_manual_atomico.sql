@@ -3,6 +3,7 @@
 -- entre ambos quedaba junto a un cobro manual. Ahora todo ocurre dentro de UNA transacción que bloquea la venta (FOR UPDATE):
 --   · cobrar_venta_manual / editar_comanda_venta: bloquean la venta, comprueban "sin medio de pago" y "sin cobro Point en curso o aprobado", y escriben.
 --   · trigger pagos_point_bloquea_venta (BEFORE INSERT en pagos_point): bloquea la MISMA venta y rechaza la reserva si ya tiene medio de pago.
+--   Además compara pagos_point.monto con el total VIGENTE de la venta bajo ese bloqueo (si cambió → SQLSTATE P0409 'MONTO_NO_COINCIDE', el servidor responde 409 sin llamar al proveedor).
 --   Si gana el cobro manual, la reserva Point espera y luego se rechaza; si gana la reserva, el cobro manual espera y luego responde 'point_en_curso'.
 -- PROPUESTA: NO APLICADA. Solo agrega objetos (no modifica filas). Compatible con 04b (trigger con FOR SHARE): ambos coexisten sin deadlock.
 -- Orden en la base: 07b → 07c → 07a → 07. Reversión: 07c_cobro_manual_atomico_REVERSION.sql
@@ -12,10 +13,15 @@ create or replace function public.pagos_point_bloquea_venta() returns trigger
 language plpgsql security invoker set search_path = public, pg_temp as $$
 declare v record;
 begin
-  select id, metodo_pago into v from public.ventas where id::text = new.venta_id and empresa_id::text = new.restaurante_id::text for update;
+  select id, total, metodo_pago into v from public.ventas where id::text = new.venta_id and empresa_id::text = new.restaurante_id::text for update;
   if not found then return new; end if;            -- inexistente/otro negocio: lo rechaza 04b (no se duplica la regla)
   if coalesce(v.metodo_pago, '') <> '' then
-    raise exception 'La venta ya tiene medio de pago' using errcode = '23514';
+    raise exception 'VENTA_YA_COBRADA: la venta ya tiene medio de pago' using errcode = 'P0409';
+  end if;
+  -- El importe se valida BAJO el bloqueo de la venta: si la comanda se editó entre la lectura del servidor y esta reserva, se rechaza (409)
+  -- antes de llamar al proveedor. Una lectura previa fuera de esta transacción no basta.
+  if new.monto is distinct from round(v.total)::integer then
+    raise exception 'MONTO_NO_COINCIDE: la reserva es por % y la venta vale %', new.monto, round(v.total)::integer using errcode = 'P0409';
   end if;
   return new;
 end $$;
