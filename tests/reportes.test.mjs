@@ -48,6 +48,8 @@ test("etiqueta: sin identificar", () => {
 test("cocina: visible hasta 'entregado', sin importar pago ni antigüedad; la antigua solo se etiqueta", () => {
   for (const e of ["pendiente", "en_proceso", "listo"]) assert.ok(visibleEnCocina({ estado: e }));
   assert.ok(!visibleEnCocina({ estado: "entregado" }));
+  assert.ok(!visibleEnCocina({ estado: "listo", cocina_archivada_at: "2026-11-02T00:00:00Z" }), "archivada sale de pantalla");
+  assert.ok(visibleEnCocina({ estado: "pendiente", cocina_archivada_at: null }));
   const a = antiguedad("2026-11-01T00:00:00Z", Date.parse("2026-11-02T00:00:00Z"));
   assert.ok(a.antigua); assert.equal(a.horas, 24);
   assert.ok(!antiguedad("2026-11-01T20:00:00Z", Date.parse("2026-11-02T00:00:00Z")).antigua);

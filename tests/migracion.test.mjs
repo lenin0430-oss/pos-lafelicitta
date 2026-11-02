@@ -51,16 +51,35 @@ test("03: backfill conserva importes/métodos y aplica el criterio (sin deducir 
   assert.equal(ep[9], "pendiente");
 });
 
-test("03: 'listo' antiguo pasa a 'entregado' (con copia); el 'listo' reciente y lo no listo no cambian", T, async () => {
+test("03: NO cambia ningún estado de cocina (se conservan los originales)", T, async () => {
+  const db = await nuevaBase();
+  const antes = await val(db, "select numero, estado from ventas order by numero");
+  await db.exec(sql("03_estados_separados.sql"));
+  assert.deepEqual(await val(db, "select numero, estado from ventas order by numero"), antes);
+  assert.equal((await val(db, "select count(*)::int n from ventas where cocina_archivada_at is not null"))[0].n, 0);
+});
+
+test("06 (propuesta): archivar cocina no cambia estados, no oculta pendientes/en proceso ni lo de hoy; es reversible", T, async () => {
   const db = await nuevaBase();
   await db.exec(sql("03_estados_separados.sql"));
-  const r = Object.fromEntries((await val(db, "select numero, estado, estado_legacy from ventas")).map((x) => [x.numero, x]));
-  for (const n of [1, 2, 3, 4, 7]) { assert.equal(r[n].estado, "entregado"); assert.equal(r[n].estado_legacy, "listo"); }
-  assert.equal(r[8].estado, "listo"); assert.equal(r[8].estado_legacy, null);
-  assert.equal(r[5].estado, "pendiente"); assert.equal(r[9].estado, "en_proceso");
-  // cocina (pendiente/en_proceso/listo) solo conserva las vivas, sin filtrar por antigüedad (la de 30 h sigue visible)
-  const viva = (await val(db, "select numero from ventas where estado in ('pendiente','en_proceso','listo') order by numero")).map((x) => x.numero);
-  assert.deepEqual(viva, [5, 6, 8, 9]);
+  const antes = await val(db, "select numero, estado, estado_pago, metodo_pago, total from ventas order by numero");
+  await db.exec(sql("06_archivar_cocina_historica_PROPUESTA.sql"));
+  assert.deepEqual(await val(db, "select numero, estado, estado_pago, metodo_pago, total from ventas order by numero"), antes, "solo cambia la marca de archivo");
+  const arch = (await val(db, "select numero from ventas where cocina_archivada_at is not null order by numero")).map((x) => x.numero);
+  assert.deepEqual(arch, [1, 2, 3, 4, 7], "solo 'listo' de días anteriores");
+  const visibles = (await val(db, "select numero from ventas where estado in ('pendiente','en_proceso','listo') and cocina_archivada_at is null order by numero")).map((x) => x.numero);
+  assert.deepEqual(visibles, [5, 6, 8, 9], "pendiente de 30 h, en_proceso y listo/pendiente de hoy siguen visibles");
+  await db.exec(sql("06_archivar_cocina_historica_PROPUESTA_REVERSION.sql"));
+  assert.equal((await val(db, "select count(*)::int n from ventas where cocina_archivada_at is not null"))[0].n, 0);
+});
+
+test("03: Point con evidencia del proveedor se puede distinguir de lo inferido por método", T, async () => {
+  const db = await nuevaBase();
+  await db.query("update pagos_point set venta_id = (select id::text from ventas where numero=2) where mp_order_id='ORD-F1'");
+  await db.exec(sql("03_estados_separados.sql"));
+  const r = await val(db, "select v.numero from ventas v join pagos_point p on p.venta_id=v.id::text and p.estado='processed' where v.estado_pago='pagado'");
+  assert.deepEqual(r.map((x) => x.numero), [2]);
+  assert.equal((await val(db, "select count(*)::int n from ventas where estado_pago='pagado' and pagado_at is not null"))[0].n, 0, "no se inventan fechas de cobro");
 });
 
 test("03: totales invariantes: registradas = pagado + cortesía + sin identificar + pendiente", T, async () => {
@@ -75,9 +94,9 @@ test("03: totales invariantes: registradas = pagado + cortesía + sin identifica
 test("03: es repetible (idempotente)", T, async () => {
   const db = await nuevaBase();
   await db.exec(sql("03_estados_separados.sql"));
-  const a = await val(db, "select numero, estado, estado_pago, estado_legacy from ventas order by numero");
+  const a = await val(db, "select numero, estado, estado_pago from ventas order by numero");
   await db.exec(sql("03_estados_separados.sql"));
-  assert.deepEqual(await val(db, "select numero, estado, estado_pago, estado_legacy from ventas order by numero"), a);
+  assert.deepEqual(await val(db, "select numero, estado, estado_pago from ventas order by numero"), a);
 });
 
 test("03: entregado/listo en cocina no quita ni agrega pagos; el cierre usa estado_pago", T, async () => {
@@ -120,7 +139,7 @@ test("03: compatibilidad con el código ANTIGUO durante el despliegue", T, async
   assert.equal((await val(db, "select estado_pago from ventas where numero=8888"))[0].estado_pago, "pendiente");
 });
 
-test("03: reversión restaura el estado de cocina original y no pierde ventas, importes ni métodos", T, async () => {
+test("03: reversión no altera el histórico y no pierde ventas, importes ni métodos", T, async () => {
   const db = await nuevaBase();
   const antes = await snapshot(db);
   await db.exec(sql("03_estados_separados.sql"));
@@ -129,7 +148,7 @@ test("03: reversión restaura el estado de cocina original y no pierde ventas, i
   await db.query("update ventas set metodo_pago='Débito', estado_pago='pagado', estado='entregado', pagado_at=now() where numero=6");
   await db.exec(sql("03_estados_separados_REVERSION.sql"));
   const cols = (await val(db, "select column_name from information_schema.columns where table_name='ventas'")).map((c) => c.column_name);
-  assert.ok(!["estado_pago", "pagado_at", "estado_legacy"].some((c) => cols.includes(c)));
+  assert.ok(!["estado_pago", "pagado_at", "cocina_archivada_at"].some((c) => cols.includes(c)));
   const r = Object.fromEntries((await val(db, "select numero, estado, metodo_pago, total from ventas")).map((x) => [x.numero, x]));
   const a = Object.fromEntries(antes.map((x) => [x.numero, x]));
   for (const n of [1, 2, 3, 4, 7, 8, 9]) { assert.equal(r[n].estado, a[n].estado, `venta ${n} vuelve a su estado original`); assert.equal(r[n].total, a[n].total); }

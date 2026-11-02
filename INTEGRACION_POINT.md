@@ -31,7 +31,7 @@ Cobrar no retira la comanda de cocina (solo "Entregado" lo hace). Marcar prepara
 | Archivo | Qué hace | Reversión |
 |---|---|---|
 | `supabase/01_…`, `02_…` | tablas existentes (ya aplicadas en producción) | — |
-| `supabase/03_estados_separados.sql` | agrega `estado_pago`/`pagado_at`, convierte el histórico (criterio en `docs/conversion-historica-estado-pago.md`), añade `estado_legacy`, disparador de compatibilidad con el código antiguo | `03_estados_separados_REVERSION.sql` |
+| `supabase/03_estados_separados.sql` | agrega `estado_pago`/`pagado_at`, clasifica el histórico por inferencia (criterio en `docs/conversion-historica-estado-pago.md`) sin tocar `ventas.estado`, añade `cocina_archivada_at`, disparador de compatibilidad con el código antiguo | `03_estados_separados_REVERSION.sql` |
 | `supabase/03b_retirar_compatibilidad.sql` | quita el disparador cuando ya no corra el código antiguo | — |
 | `supabase/04_pagos_point_reserva.sql` | `clave_idempotencia`, `referencia_externa`, `detalle` y el índice único de un intento activo por venta | `04_pagos_point_reserva_REVERSION.sql` |
 

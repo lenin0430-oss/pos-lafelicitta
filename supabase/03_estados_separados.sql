@@ -8,7 +8,7 @@ begin;
 
 alter table ventas add column if not exists estado_pago   text not null default 'pendiente';
 alter table ventas add column if not exists pagado_at     timestamptz;
-alter table ventas add column if not exists estado_legacy text;   -- copia del estado de cocina previo a esta migración (para la reversión)
+alter table ventas add column if not exists cocina_archivada_at timestamptz;  -- marca de archivo de cocina (solo la usa 06); NO es un estado de entrega
 
 alter table ventas drop constraint if exists ventas_estado_pago_chk;
 alter table ventas add constraint ventas_estado_pago_chk
@@ -23,7 +23,8 @@ alter table ventas add constraint ventas_estado_pago_chk
 --   · método vacío           → 'sin_identificar' (no se inventa método ni se asume cobro; importes intactos)
 -- Cualquier otro estado de cocina (pendiente, en_proceso, entregado…) → queda 'pendiente'.
 -- pagado_at queda NULL en el histórico (hora real desconocida); los informes usan created_at como respaldo.
--- No se modifican metodo_pago, total, created_at ni items.
+-- Esta clasificación es INFERIDA del registro anterior (metodo_pago); no es evidencia del proveedor, salvo los pagos Point cruzados con pagos_point (ver docs).
+-- No se modifican metodo_pago, total, created_at ni items ni estado.
 update ventas set estado_pago = case
     when btrim(coalesce(metodo_pago,'')) ~* '^cortes[ií]a$' then 'cortesia'
     when btrim(coalesce(metodo_pago,'')) <> ''              then 'pagado'
@@ -31,11 +32,8 @@ update ventas set estado_pago = case
   end
 where estado = 'listo' and estado_pago = 'pendiente';
 
--- Cocina: 'listo' antiguo significaba "cobrada y cerrada". Para que la pantalla de cocina no muestre miles de comandas
--- viejas (ya no se oculta por antigüedad), las 'listo' de más de 12 h pasan a 'entregado'; el estado anterior se guarda
--- en estado_legacy. Las 'listo' recientes se dejan tal cual: el personal las retira con "Entregado".
-update ventas set estado_legacy = estado, estado = 'entregado'
-where estado = 'listo' and created_at < now() - interval '12 hours' and estado_legacy is null;
+-- ventas.estado NO se modifica: se conservan los estados originales (incluidas las 6.095 'listo' históricas).
+-- Que la pantalla de cocina no muestre comandas históricas se resuelve aparte y sin afirmar entregas: ver 06_archivar_cocina_historica_PROPUESTA.sql.
 
 create index if not exists idx_ventas_empresa_pago_fecha on ventas (empresa_id, estado_pago, created_at);
 create index if not exists idx_ventas_empresa_pagado_at  on ventas (empresa_id, pagado_at) where pagado_at is not null;

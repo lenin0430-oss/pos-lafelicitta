@@ -58,6 +58,7 @@ export default function CocinaPage() {
       .eq('empresa_id', empresaId)
       // Cobrar NO retira la comanda; solo "Entregado" lo hace. No se oculta por antigüedad: se marca como antigua.
       .in('estado', [...ESTADOS_VISIBLES_COCINA])
+      .is('cocina_archivada_at', null)
       .order('created_at', { ascending: true })
     if (data) setVentas(data)
   }

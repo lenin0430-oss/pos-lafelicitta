@@ -2,8 +2,9 @@
 export const ESTADOS_VISIBLES_COCINA = ["pendiente", "en_proceso", "listo"] as const;
 export const UMBRAL_ANTIGUA_H = 12;
 
-export const visibleEnCocina = (v: { estado?: string | null }) =>
-  (ESTADOS_VISIBLES_COCINA as readonly string[]).includes(v.estado ?? "pendiente");
+// Una comanda archivada (06) solo sale de la pantalla; su estado no cambia y no se considera entregada.
+export const visibleEnCocina = (v: { estado?: string | null; cocina_archivada_at?: string | null }) =>
+  !v.cocina_archivada_at && (ESTADOS_VISIBLES_COCINA as readonly string[]).includes(v.estado ?? "pendiente");
 
 // Solo etiqueta; NUNCA oculta.
 export function antiguedad(createdAt: string, ahora: number = Date.now()) {
