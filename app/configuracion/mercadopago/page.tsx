@@ -51,7 +51,7 @@ export default function ConfigMercadoPago() {
           <h2>Tus Point</h2>
           {(info.terminales ?? []).length === 0 && <p>No encontramos Point en tu cuenta.</p>}
           {(info.terminales ?? []).map((t) => (
-            <div key={t.id} style={{ border: "1px solid #ccc", borderRadius: 8, padding: 12, marginBottom: 8 }}>
+            <div key={t.id} style={{ border: "1px solid var(--border-strong)", borderRadius: 8, padding: 12, marginBottom: 8 }}>
               <div><strong>Serie:</strong> {t.id.split("__").pop()}</div>
               <div><strong>Modo:</strong> {t.operating_mode === "PDV" ? "Cobra desde MesaPOS" : "Manual"}</div>
               {info.elegido === t.id ? <p>✔ Elegido para cobrar</p> : <button onClick={() => elegir(t.id)}>Usar este Point</button>}

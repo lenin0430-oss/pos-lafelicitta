@@ -156,9 +156,9 @@ export default function StockPage() {
             <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--gold)' }}>📦 Control de Stock</h1>
             <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>{items.length} insumos · Valor en bodega: <strong style={{ color: 'var(--gold)' }}>{fmt(valorTotal)}</strong> · Comprado hoy: <strong style={{ color: 'var(--green)' }}>{fmt(gastoHoy)}</strong>{perdidaMermas > 0 && <> · Pérdida mermas: <strong style={{ color: 'var(--red)' }}>{fmt(perdidaMermas)}</strong></>}</p>
           </div>
-          {agotados.length > 0 && <div style={{ marginBottom: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(220,50,50,.15)', border: '1px solid var(--red)', fontSize: 13, color: 'var(--red)', fontWeight: 600 }}>🔴 AGOTADO: {agotados.map(i => i.nombre).join(', ')}</div>}
-          {bajos.length > 0 && <div style={{ marginBottom: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(212,168,67,.1)', border: '1px solid var(--gold)', fontSize: 13, color: 'var(--gold)' }}>⚠️ Stock bajo: {bajos.map(i => `${i.nombre} (${i.stock_actual} ${i.unidad})`).join(', ')}</div>}
-          {mensaje && <div style={{ marginBottom: 12, padding: '8px 14px', borderRadius: 8, background: mensaje.tipo==='ok'?'rgba(76,175,125,.15)':'rgba(220,50,50,.15)', border: `1px solid ${mensaje.tipo==='ok'?'var(--green)':'var(--red)'}`, fontSize: 13, color: mensaje.tipo==='ok'?'var(--green)':'var(--red)' }}>{mensaje.txt}</div>}
+          {agotados.length > 0 && <div style={{ marginBottom: 10, padding: '10px 14px', borderRadius: 10, background: 'var(--red-bg)', border: '1px solid var(--red)', fontSize: 13, color: 'var(--red)', fontWeight: 600 }}>🔴 AGOTADO: {agotados.map(i => i.nombre).join(', ')}</div>}
+          {bajos.length > 0 && <div style={{ marginBottom: 10, padding: '10px 14px', borderRadius: 10, background: 'var(--gold-bg)', border: '1px solid var(--gold)', fontSize: 13, color: 'var(--gold)' }}>⚠️ Stock bajo: {bajos.map(i => `${i.nombre} (${i.stock_actual} ${i.unidad})`).join(', ')}</div>}
+          {mensaje && <div style={{ marginBottom: 12, padding: '8px 14px', borderRadius: 8, background: mensaje.tipo==='ok'?'var(--green-bg)':'var(--red-bg)', border: `1px solid ${mensaje.tipo==='ok'?'var(--green)':'var(--red)'}`, fontSize: 13, color: mensaje.tipo==='ok'?'var(--green)':'var(--red)' }}>{mensaje.txt}</div>}
           <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
             {([['stock','📦 Stock'],['comprar','🛒 Compra del día'],['mermas','⚠️ Mermas'],['historial','📋 Historial']] as const).map(([t, label]) => (<button key={t} onClick={() => setTab(t)} style={{ padding: '10px 16px', border: 'none', background: 'transparent', color: tab===t?'var(--gold)':'var(--muted)', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, borderBottom: tab===t?'2px solid var(--gold)':'2px solid transparent', marginBottom: -1, whiteSpace: 'nowrap' }}>{label}</button>))}
           </div>
@@ -166,7 +166,7 @@ export default function StockPage() {
             <div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
                 <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar insumo..." style={{ ...inp, flex: 1 }} />
-                <button onClick={() => setMostrarFormNuevo(!mostrarFormNuevo)} style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap', fontSize: 13 }}>+ Nuevo insumo</button>
+                <button onClick={() => setMostrarFormNuevo(!mostrarFormNuevo)} style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap', fontSize: 13 }}>+ Nuevo insumo</button>
               </div>
               {mostrarFormNuevo && (
                 <div style={{ background: 'var(--surface)', border: '1px solid var(--gold)', borderRadius: 12, padding: 16, marginBottom: 20 }}>
@@ -180,7 +180,7 @@ export default function StockPage() {
                     <div><label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Stock inicial</label><input type="number" value={formStockInicial} onChange={e => setFormStockInicial(e.target.value)} placeholder="0" style={inp} /></div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={crearInsumo} disabled={guardando} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>{guardando?'...':editandoId?'✓ Guardar':'✓ Crear insumo'}</button>
+                    <button onClick={crearInsumo} disabled={guardando} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>{guardando?'...':editandoId?'✓ Guardar':'✓ Crear insumo'}</button>
                     <button onClick={() => { setMostrarFormNuevo(false); setEditandoId(null); setFormNombre(''); setFormPrecio('') }} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)' }}>Cancelar</button>
                   </div>
                 </div>
@@ -228,9 +228,9 @@ export default function StockPage() {
                     <div><label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Cantidad {compraItem&&`(${items.find(i=>i.id===compraItem)?.unidad})`}</label><input type="number" value={compraCantidad} onChange={e => setCompraCantidad(e.target.value)} placeholder="Ej: 5" style={inp} min={0} step={0.1} /></div>
                     <div><label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Precio total ($)</label><input type="number" value={compraPrecio} onChange={e => setCompraPrecio(e.target.value)} placeholder="Ej: 8500" style={inp} /></div>
                   </div>
-                  {compraCantidad && compraPrecio && parseFloat(compraCantidad)>0 && <div style={{ padding: '8px 12px', background: 'rgba(212,168,67,.1)', border: '1px solid var(--gold)', borderRadius: 8, fontSize: 13 }}>💡 Precio/unidad: <strong style={{ color: 'var(--gold)' }}>{fmt(parseFloat(compraPrecio)/parseFloat(compraCantidad))}</strong></div>}
+                  {compraCantidad && compraPrecio && parseFloat(compraCantidad)>0 && <div style={{ padding: '8px 12px', background: 'var(--gold-bg)', border: '1px solid var(--gold)', borderRadius: 8, fontSize: 13 }}>💡 Precio/unidad: <strong style={{ color: 'var(--gold)' }}>{fmt(parseFloat(compraPrecio)/parseFloat(compraCantidad))}</strong></div>}
                   <div><label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Nota</label><input value={compraNota} onChange={e => setCompraNota(e.target.value)} placeholder="Ej: Feria, Mayorista..." style={inp} /></div>
-                  <button onClick={registrarCompra} disabled={guardando} style={{ padding: '12px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 14 }}>{guardando?'Registrando...':'✓ Registrar compra'}</button>
+                  <button onClick={registrarCompra} disabled={guardando} style={{ padding: '12px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 14 }}>{guardando?'Registrando...':'✓ Registrar compra'}</button>
                 </div>
               </div>
               {comprasHoy.length>0 && <div>
@@ -250,7 +250,7 @@ export default function StockPage() {
                 <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: 'var(--gold)' }}>⚠️ Registrar merma o ajuste</h2>
                 <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>Registra lo que se botó, se consumió o cualquier diferencia de stock.</p>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                  {[['merma','🗑 Merma'],['consumo_interno','🍽 Consumo'],['ajuste','🔧 Ajuste']].map(([v,label]) => (<button key={v} onClick={() => setMermaTipo(v as any)} style={{ flex: 1, padding: '9px 8px', borderRadius: 8, border: `1px solid ${mermaTipo===v?'var(--gold)':'var(--border)'}`, background: mermaTipo===v?'rgba(212,168,67,.15)':'transparent', color: mermaTipo===v?'var(--gold)':'var(--muted)', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 12 }}>{label}</button>))}
+                  {[['merma','🗑 Merma'],['consumo_interno','🍽 Consumo'],['ajuste','🔧 Ajuste']].map(([v,label]) => (<button key={v} onClick={() => setMermaTipo(v as any)} style={{ flex: 1, padding: '9px 8px', borderRadius: 8, border: `1px solid ${mermaTipo===v?'var(--gold)':'var(--border)'}`, background: mermaTipo===v?'var(--gold-bg)':'transparent', color: mermaTipo===v?'var(--gold)':'var(--muted)', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 12 }}>{label}</button>))}
                 </div>
                 <div style={{ display: 'grid', gap: 10 }}>
                   <div><label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Insumo</label>
@@ -260,7 +260,7 @@ export default function StockPage() {
                     </select>
                   </div>
                   <div><label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Cantidad {mermaItem&&`(${items.find(i=>i.id===mermaItem)?.unidad})`}</label><input type="number" value={mermaCantidad} onChange={e => setMermaCantidad(e.target.value)} placeholder="0.5" style={inp} min={0} step={0.01} /></div>
-                  {mermaItem&&mermaCantidad && <div style={{ padding: '8px 12px', background: 'rgba(220,50,50,.08)', border: '1px solid var(--red)', borderRadius: 8, fontSize: 13, color: 'var(--red)' }}>💸 Pérdida estimada: {fmt((items.find(i=>i.id===mermaItem)?.precio_ultimo||0)*parseFloat(mermaCantidad))}</div>}
+                  {mermaItem&&mermaCantidad && <div style={{ padding: '8px 12px', background: 'var(--red-bg)', border: '1px solid var(--red)', borderRadius: 8, fontSize: 13, color: 'var(--red)' }}>💸 Pérdida estimada: {fmt((items.find(i=>i.id===mermaItem)?.precio_ultimo||0)*parseFloat(mermaCantidad))}</div>}
                   <div><label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Motivo</label><input value={mermaMotivo} onChange={e => setMermaMotivo(e.target.value)} placeholder="Se venció, se cayó..." style={inp} /></div>
                   <button onClick={registrarMerma} disabled={guardando} style={{ padding: '12px', borderRadius: 10, border: 'none', background: 'var(--red)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 14 }}>{guardando?'Registrando...':'✓ Registrar'}</button>
                 </div>
@@ -270,7 +270,7 @@ export default function StockPage() {
           {tab === 'historial' && (
             <div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-                {([['todos','Todos'],['compras','🛒 Compras'],['movimientos','⚠️ Mermas']] as const).map(([v,label]) => (<button key={v} onClick={() => setHistorialFiltro(v)} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${historialFiltro===v?'var(--gold)':'var(--border)'}`, background: historialFiltro===v?'var(--gold)':'transparent', color: historialFiltro===v?'#000':'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{label}</button>))}
+                {([['todos','Todos'],['compras','🛒 Compras'],['movimientos','⚠️ Mermas']] as const).map(([v,label]) => (<button key={v} onClick={() => setHistorialFiltro(v)} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${historialFiltro===v?'var(--gold)':'var(--border)'}`, background: historialFiltro===v?'var(--gold)':'transparent', color: historialFiltro===v?'var(--on-accent)':'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{label}</button>))}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {historialFiltrado.map((entrada, idx) => {
@@ -278,7 +278,7 @@ export default function StockPage() {
                     const c = entrada.data as Compra
                     const unidad = items.find(i=>i.id===c.insumo_id)?.unidad??'und'
                     return (<div key={`c-${c.id}-${idx}`} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
-                      <div><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', background: 'rgba(76,175,125,.12)', border: '1px solid var(--green)', borderRadius: 4, padding: '1px 6px' }}>🛒 COMPRA</span><span style={{ fontWeight: 600, fontSize: 13 }}>{c.insumo_nombre}</span></div><div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>+{c.cantidad} {unidad} · {fmt(c.precio_unitario)}/{unidad} · {new Date(c.fecha).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'2-digit'})}</div></div>
+                      <div><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 4, padding: '1px 6px' }}>🛒 COMPRA</span><span style={{ fontWeight: 600, fontSize: 13 }}>{c.insumo_nombre}</span></div><div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>+{c.cantidad} {unidad} · {fmt(c.precio_unitario)}/{unidad} · {new Date(c.fecha).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'2-digit'})}</div></div>
                       <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--green)' }}>+{fmt(c.precio_total)}</div>
                     </div>)
                   } else {
@@ -286,8 +286,8 @@ export default function StockPage() {
                     const cfg = TIPO_CONFIG[m.tipo]??{label:m.tipo,color:'var(--muted)'}
                     const item = items.find(i=>i.id===m.insumo_id)
                     const perdida = item?item.precio_ultimo*m.cantidad:0
-                    return (<div key={`m-${m.id}-${idx}`} style={{ background: 'var(--surface)', border: `1px solid ${m.tipo==='merma'?'rgba(220,50,50,.3)':'var(--border)'}`, borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
-                      <div><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ fontSize: 10, fontWeight: 700, color: cfg.color, background: m.tipo==='merma'?'rgba(220,50,50,.1)':'rgba(212,168,67,.1)', border: `1px solid ${cfg.color}`, borderRadius: 4, padding: '1px 6px' }}>{cfg.label.toUpperCase()}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{m.insumo_nombre}</span></div><div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>-{m.cantidad} {item?.unidad??'und'} · {m.motivo} · {new Date(m.fecha).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'2-digit'})}</div></div>
+                    return (<div key={`m-${m.id}-${idx}`} style={{ background: 'var(--surface)', border: `1px solid ${m.tipo==='merma'?'var(--red)':'var(--border)'}`, borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
+                      <div><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ fontSize: 10, fontWeight: 700, color: cfg.color, background: m.tipo==='merma'?'var(--red-bg)':'var(--gold-bg)', border: `1px solid ${cfg.color}`, borderRadius: 4, padding: '1px 6px' }}>{cfg.label.toUpperCase()}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{m.insumo_nombre}</span></div><div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>-{m.cantidad} {item?.unidad??'und'} · {m.motivo} · {new Date(m.fecha).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'2-digit'})}</div></div>
                       {perdida>0 && <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--red)' }}>-{fmt(perdida)}</div>}
                     </div>)
                   }

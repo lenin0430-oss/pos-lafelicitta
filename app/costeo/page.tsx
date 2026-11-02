@@ -307,8 +307,8 @@ export default function CosteoPage() {
                 borderRadius: 8,
                 background:
                   mensaje.tipo === 'ok'
-                    ? 'rgba(76,175,125,.15)'
-                    : 'rgba(220,50,50,.15)',
+                    ? 'var(--green-bg)'
+                    : 'var(--red-bg)',
                 border: `1px solid ${
                   mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'
                 }`,
@@ -648,7 +648,7 @@ export default function CosteoPage() {
                             style={{
                               marginTop: 10,
                               padding: '6px 10px',
-                              background: 'rgba(220,50,50,.1)',
+                              background: 'var(--red-bg)',
                               border: '1px solid var(--red)',
                               borderRadius: 7,
                               fontSize: 12,
@@ -860,7 +860,7 @@ export default function CosteoPage() {
                         borderRadius: 8,
                         border: 'none',
                         background: 'var(--gold)',
-                        color: '#000',
+                        color: 'var(--on-accent)',
                         fontWeight: 700,
                         cursor: 'pointer',
                         fontFamily: 'var(--font)',
@@ -876,7 +876,7 @@ export default function CosteoPage() {
                       style={{
                         marginTop: 8,
                         padding: '6px 10px',
-                        background: 'rgba(212,168,67,.1)',
+                        background: 'var(--gold-bg)',
                         border: '1px solid var(--gold)',
                         borderRadius: 8,
                         fontSize: 12,
@@ -965,7 +965,7 @@ export default function CosteoPage() {
                       borderRadius: 10,
                       border: 'none',
                       background: 'var(--gold)',
-                      color: '#000',
+                      color: 'var(--on-accent)',
                       fontWeight: 700,
                       cursor: guardando ? 'not-allowed' : 'pointer',
                       fontFamily: 'var(--font)',
@@ -1008,7 +1008,7 @@ export default function CosteoPage() {
                     style={{
                       marginTop: 12,
                       padding: '8px 12px',
-                      background: 'rgba(212,168,67,.1)',
+                      background: 'var(--gold-bg)',
                       border: '1px solid var(--gold)',
                       borderRadius: 8,
                       fontSize: 12,

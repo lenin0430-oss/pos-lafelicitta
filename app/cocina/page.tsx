@@ -22,9 +22,9 @@ const ESTADO_LABEL: Record<string, string> = {
   listo: '🟢 Listo',
 }
 const ESTADO_COLOR: Record<string, string> = {
-  pendiente: '#d94f3d',
-  en_proceso: '#e8a32c',
-  listo: '#4caf7d',
+  pendiente: 'var(--red)',
+  en_proceso: 'var(--amber)',
+  listo: 'var(--green)',
 }
 
 export default function CocinaPage() {
@@ -81,7 +81,7 @@ export default function CocinaPage() {
           <span style={{ fontFamily: 'var(--display)', fontSize: 20, letterSpacing: 3, color: 'var(--gold)' }}>{empresaNombre}</span>
           <nav style={{ display: 'flex', gap: 4, marginLeft: 16 }}>
             {[['/', '🧾 Caja'], ['/cocina', '🍳 Cocina'], ['/reportes', '📊 Reportes']].map(([href, label]) => (
-              <a key={href} href={href} style={{ padding: '5px 14px', borderRadius: 6, background: href === '/cocina' ? 'var(--gold)' : 'transparent', color: href === '/cocina' ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, textDecoration: 'none', border: '1px solid ' + (href === '/cocina' ? 'var(--gold)' : 'var(--border)') }}>{label}</a>
+              <a key={href} href={href} style={{ padding: '5px 14px', borderRadius: 6, background: href === '/cocina' ? 'var(--gold)' : 'transparent', color: href === '/cocina' ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 600, textDecoration: 'none', border: '1px solid ' + (href === '/cocina' ? 'var(--gold)' : 'var(--border)') }}>{label}</a>
             ))}
           </nav>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -95,7 +95,7 @@ export default function CocinaPage() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center' }}>
             <span style={{ fontFamily: 'var(--display)', fontSize: 13, letterSpacing: 2, color: 'var(--muted)', marginRight: 8 }}>FILTRAR:</span>
             {[['pendiente', '🔴 Nuevos'], ['en_proceso', '🟡 En proceso'], ['todos', 'Todos']].map(([val, label]) => (
-              <button key={val} onClick={() => setFiltro(val as any)} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid ' + (filtro === val ? 'var(--gold)' : 'var(--border)'), background: filtro === val ? 'var(--gold)' : 'transparent', color: filtro === val ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              <button key={val} onClick={() => setFiltro(val as any)} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid ' + (filtro === val ? 'var(--gold)' : 'var(--border)'), background: filtro === val ? 'var(--gold)' : 'transparent', color: filtro === val ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                 {label}
               </button>
             ))}
@@ -120,7 +120,7 @@ export default function CocinaPage() {
                         <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 1, color: '#fff' }}>#{String(venta.numero).padStart(3, '0')} — {venta.mesa}</span>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ color: 'rgba(255,255,255,.9)', fontSize: 11 }}>{mins}min</div>
+                        <div style={{ color: 'var(--on-accent)', fontSize: 11 }}>{mins}min</div>
                         {urgente && <div style={{ fontSize: 10, color: '#fff', fontWeight: 700 }}>⚠️ DEMORADO</div>}
                       </div>
                     </div>
@@ -144,7 +144,7 @@ export default function CocinaPage() {
                           ✏️ Editar
                         </a>
                         {venta.estado === 'pendiente' && (
-                          <button onClick={() => cambiarEstado(venta.id, 'en_proceso')} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: '#e8a32c', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                          <button onClick={() => cambiarEstado(venta.id, 'en_proceso')} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: 'var(--amber)', color: 'var(--on-accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                             🍳 En proceso
                           </button>
                         )}

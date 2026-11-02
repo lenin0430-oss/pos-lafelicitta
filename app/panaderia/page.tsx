@@ -121,7 +121,7 @@ export default function PanaderiaPage() {
         <div style={{ maxWidth: 820, margin: '0 auto', padding: '22px 14px' }}>
           <h1 style={{ color: 'var(--gold)', fontSize: 24, fontWeight: 800, margin: 0 }}>Panadería</h1>
           <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 6 }}>Pan brioche calculado por unidad. Huevo base: $250/unidad.</p>
-          {mensaje && <div style={{ margin: '12px 0', padding: '10px 14px', borderRadius: 8, background: mensaje.tipo === 'ok' ? 'rgba(76,175,125,.15)' : 'rgba(220,50,50,.15)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>{mensaje.txt}</div>}
+          {mensaje && <div style={{ margin: '12px 0', padding: '10px 14px', borderRadius: 8, background: mensaje.tipo === 'ok' ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>{mensaje.txt}</div>}
           <button onClick={actualizarPreciosBase} disabled={guardando} style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1px solid var(--gold)', background: 'transparent', color: 'var(--gold)', fontWeight: 900, cursor: 'pointer', margin: '12px 0' }}>{guardando ? 'Procesando...' : 'Actualizar precios base de panadería'}</button>
           {RECETAS.map(receta => {
             const calc = calcular(receta)
@@ -137,7 +137,7 @@ export default function PanaderiaPage() {
                   </div>)}
                 </div>
                 <div style={{ marginTop: 16, padding: 14, borderRadius: 12, background: 'var(--bg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ color: 'var(--muted)' }}>Costo estimado por pan</span><strong style={{ color: 'var(--gold)', fontSize: 24 }}>{fmt(calc.costoTotal)}</strong></div>
-                <button onClick={() => guardarReceta(receta)} disabled={guardando} style={{ marginTop: 14, width: '100%', padding: '12px 14px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 900, cursor: 'pointer' }}>{guardando ? 'Guardando...' : 'Subir receta ' + receta.nombre + ' a Costeo'}</button>
+                <button onClick={() => guardarReceta(receta)} disabled={guardando} style={{ marginTop: 14, width: '100%', padding: '12px 14px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontWeight: 900, cursor: 'pointer' }}>{guardando ? 'Guardando...' : 'Subir receta ' + receta.nombre + ' a Costeo'}</button>
               </div>
             )
           })}

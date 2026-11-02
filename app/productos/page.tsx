@@ -128,7 +128,7 @@ export default function ProductosPage() {
           <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>{productos.length} productos · {productos.filter(p => p.activo).length} activos</p>
 
           {mensaje && (
-            <div style={{ margin: '12px 0', padding: '9px 14px', borderRadius: 8, background: mensaje.tipo === 'ok' ? 'rgba(76,175,125,.15)' : 'rgba(220,50,50,.15)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>
+            <div style={{ margin: '12px 0', padding: '9px 14px', borderRadius: 8, background: mensaje.tipo === 'ok' ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>
               {mensaje.txt}
             </div>
           )}
@@ -152,7 +152,7 @@ export default function ProductosPage() {
                   {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
               </div>
-              <button onClick={crearProducto} disabled={creando} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 800, height: 38, cursor: 'pointer' }}>
+              <button onClick={crearProducto} disabled={creando} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontWeight: 800, height: 38, cursor: 'pointer' }}>
                 {creando ? 'Creando...' : 'Crear'}
               </button>
             </div>
@@ -196,7 +196,7 @@ export default function ProductosPage() {
                     style={{
                       padding: '8px 12px', borderRadius: 8, border: 'none',
                       background: hayCambio ? 'var(--gold)' : 'var(--surface2)',
-                      color: hayCambio ? '#000' : 'var(--muted)',
+                      color: hayCambio ? 'var(--on-accent)' : 'var(--muted)',
                       fontWeight: 700, cursor: hayCambio ? 'pointer' : 'default', fontSize: 13,
                     }}
                   >

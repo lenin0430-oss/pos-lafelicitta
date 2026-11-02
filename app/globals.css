@@ -1,26 +1,92 @@
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #0f0e0c;
-  --surface: #1a1916;
-  --surface2: #242220;
-  --border: #2e2c29;
-  --gold: #c9a84c;
-  --gold-light: #e8c97a;
-  --red: #d94f3d;
-  --green: #4caf7d;
-  --blue: #4a9fd4;
-  --text: #f0ece4;
-  --muted: #7a7670;
+  /* Identidad MesaPOS: azul marino, azul, naranja y fondos claros */
+  --navy: #0B2545;
+  --navy-2: #123A6B;
+  --brand-blue: #1D5FD1;
+  --brand-orange: #B6390A;
+
+  --bg: #F3F6FB;
+  --surface: #FFFFFF;
+  --surface2: #E8EEF7;
+  --border: #C4D0E2;
+  --border-strong: #7C8DA8;
+
+  /* Nombres heredados: --gold = color de acción principal (naranja MesaPOS) */
+  --gold: var(--brand-orange);
+  --gold-light: #9A3412;
+  --red: #B91C1C;
+  --green: #166534;
+  --blue: #1D5FD1;
+  --amber: #9A4A06;
+
+  --text: #0B1B33;
+  --muted: #4B5B76;
+  --on-accent: #FFFFFF;      /* texto sobre botones/etiquetas de color sólido */
+  --on-navy: #FFFFFF;
+  --on-navy-muted: #C9D6EC;
+  --accent-on-navy: #FF8A3D; /* naranja claro para detalles sobre azul marino */
+
+  /* fondos suaves (tintes) para avisos y estados */
+  --gold-bg: #FEF1E8;
+  --green-bg: #E6F6EC;
+  --red-bg: #FBE1E1;
+  --blue-bg: #DCE8FB;
+  --amber-bg: #FDF1D3;
+  --green-text: #166534;
+  --red-text: #991B1B;
+  --amber-text: #92400E;
+
   --font: 'DM Sans', sans-serif;
   --mono: 'DM Mono', monospace;
   --display: 'Bebas Neue', sans-serif;
 }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+input, select, textarea { border-color: var(--border-strong); }
 html, body {
   font-family: var(--font);
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+}
+
+/* Encabezado de caja: marca y sesión estables; navegación en su propia fila al estrecharse. */
+:root { --pos-header-height: 68px; }
+.pos-header { height: var(--pos-header-height); background: var(--navy); border-bottom: 3px solid var(--brand-orange); position: sticky; top: 0; z-index: 100; display: grid; grid-template-columns: minmax(160px, 1fr) auto minmax(160px, 1fr); align-items: center; gap: 12px; padding: 6px 14px; }
+.pos-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pos-brand img { flex: 0 0 48px; }
+.pos-brand-copy { display: flex; flex-direction: column; line-height: 1; min-width: 0; }
+.pos-brand-copy > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pos-header-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.pos-header-nav a { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
+.pos-header-status { display: flex; justify-content: flex-end; gap: 10px; align-items: center; min-width: 0; }
+.pos-header-clock { font-family: var(--mono); font-size: 12px; color: var(--on-navy-muted); white-space: nowrap; flex-shrink: 0; }
+.session-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.session-bar button { white-space: nowrap; flex-shrink: 0; }
+.pos-header .session-bar span, .pos-header .session-bar button { color: var(--on-navy-muted) !important; }
+.pos-header .session-bar button { min-height: 36px; border-color: var(--on-navy-muted) !important; }
+@media (max-width: 1199px) {
+  :root { --pos-header-height: 116px; }
+  .pos-header { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 54px 44px; gap: 0 12px; }
+  .pos-header-nav { grid-column: 1 / -1; grid-row: 2; overflow-x: auto; }
+  .pos-header-status { grid-column: 2; grid-row: 1; }
+  .pos-header-status > span:not(.pos-header-clock) { display: none; }
+}
+@media (max-width: 600px) {
+  .pos-header { padding-left: 10px; padding-right: 10px; gap: 0 8px; }
+  .pos-brand { gap: 7px; }
+  .pos-brand img { width: 38px !important; height: 38px !important; flex-basis: 38px; }
+  .pos-brand-copy > span:first-child { font-size: 18px !important; letter-spacing: 1px !important; }
+  .pos-brand-copy > span:last-child { font-size: 9px !important; letter-spacing: 1px !important; }
+  .pos-header-status { flex-direction: column; align-items: flex-end; gap: 2px; max-width: 145px; }
+  .pos-header .session-name { max-width: 84px; }
+  .pos-header .session-bar { gap: 5px !important; }
+  .pos-header .session-bar button { min-height: 28px; }
+  .pos-header-clock { font-size: 10px; }
 }
 
 /* ---- PRINT 58mm COMANDA COCINA ---- */

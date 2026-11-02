@@ -175,7 +175,7 @@ export default function GastosPage() {
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>Registro por turno y cajera</div>
           {mensaje && (
             <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, fontSize: 13,
-              background: mensaje.tipo === 'ok' ? 'rgba(76,175,125,0.1)' : 'rgba(220,53,69,0.1)',
+              background: mensaje.tipo === 'ok' ? 'var(--green-bg)' : 'var(--red-bg)',
               border: '1px solid ' + (mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'),
               color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)' }}>
               {mensaje.txt}
@@ -208,13 +208,13 @@ export default function GastosPage() {
             <div style={{ marginBottom: 16 }}>
             <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 8 }}>Sale de caja</label>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setAfectoCaja(true)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (afectoCaja ? 'var(--gold)' : 'var(--border)'), background: afectoCaja ? 'var(--gold)' : 'transparent', color: afectoCaja ? '#000' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: afectoCaja ? 700 : 400 }}>Si - sale de caja</button>
-              <button onClick={() => setAfectoCaja(false)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (!afectoCaja ? 'var(--gold)' : 'var(--border)'), background: !afectoCaja ? 'var(--gold)' : 'transparent', color: !afectoCaja ? '#000' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: !afectoCaja ? 700 : 400 }}>No - solo registro</button>
+              <button onClick={() => setAfectoCaja(true)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (afectoCaja ? 'var(--gold)' : 'var(--border)'), background: afectoCaja ? 'var(--gold)' : 'transparent', color: afectoCaja ? 'var(--on-accent)' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: afectoCaja ? 700 : 400 }}>Si - sale de caja</button>
+              <button onClick={() => setAfectoCaja(false)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (!afectoCaja ? 'var(--gold)' : 'var(--border)'), background: !afectoCaja ? 'var(--gold)' : 'transparent', color: !afectoCaja ? 'var(--on-accent)' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: !afectoCaja ? 700 : 400 }}>No - solo registro</button>
             </div>
           </div>
           <button onClick={intentarGuardar} disabled={guardando} style={{
               width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: 'pointer',
-              background: 'var(--gold)', color: '#000', fontSize: 15, fontWeight: 700, fontFamily: 'var(--font)'
+              background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 15, fontWeight: 700, fontFamily: 'var(--font)'
             }}>
               {guardando ? 'Guardando...' : 'Guardar gasto'}
             </button>
@@ -231,7 +231,7 @@ export default function GastosPage() {
                 Cancelar
               </button>
               <button onClick={verificarPin} disabled={pinAdmin.length < 4}
-                style={{ padding: 12, borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', cursor: 'pointer', fontWeight: 700, fontFamily: 'var(--font)', opacity: pinAdmin.length < 4 ? 0.5 : 1 }}>
+                style={{ padding: 12, borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', cursor: 'pointer', fontWeight: 700, fontFamily: 'var(--font)', opacity: pinAdmin.length < 4 ? 0.5 : 1 }}>
                 Autorizar
               </button>
             </div>
