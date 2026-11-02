@@ -156,3 +156,9 @@ Estado: **propuesta probada en PGlite y en PostgreSQL 16 local; NO aplicada en n
 - Evidencia: 20 pruebas TS; 77 + 22 comprobaciones por rol en PostgreSQL 16 real (anon, cajero, otro negocio, dueño, control positivo, reversión con huella idéntica). Tipos (`tsc`) sin errores.
 - Pendiente: prueba en navegador (login, ventas, cocina, cierre, Point) con bandera ON + 07 en proyecto de pruebas; repetir en PG17; revisión de políticas/ACL de todas las tablas y funciones en producción (lectura, requiere autorización); dependencias de mesapos-app y bot; decisión sobre `/admin/nueva-empresa` y `PLATAFORMA_EMPRESA_ID`; rotación/hash de PIN; revisión de trazas.
 - Hallazgos por código (sin afirmar explotación): PIN tratado como texto plano; RPC de login ejecutables por anon en el proyecto de pruebas; nueva-empresa sin separación entre negocios; `reporte-semanal` con token fijo y respaldo con clave anon.
+
+## Permisos — correcciones a la revisión de Codex (02/11/2026, noche) — Claude
+- Rama `claude/permisos-2026-11-02`, commit 8bbb98f (sobre 4a617fa). NO publicada. Producción no modificada.
+- Gastos: alta solo por `/api/gastos`; garzón ≥ $30.000 exige aprobación de admin de un solo uso (negocio+empleado+importe+operación). Ventas: acciones y campos por rol, total = suma de líneas, precios contra catálogo vigente (Pollo broaster 5.500, Pollo al horno 5.000), Point solo con evidencia del proveedor. Login: límite persistente por IP y cuenta. Alta de negocios deshabilitada. Hash de PIN preparado (PIN_MODO=legacy; no se cambió ningún PIN).
+- SQL nuevo `07b` (orden 07b → 07a → 07), 37 comprobaciones en PG16; TS 42/42; `tsc` limpio; `next build` pendiente en Windows.
+- Lectura de producción: ver §9 de `docs/PERMISOS_PLAN.md` de esa rama.
