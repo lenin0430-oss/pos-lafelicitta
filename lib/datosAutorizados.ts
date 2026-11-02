@@ -1,3 +1,5 @@
+import { reglasVentas, reglasPropinas, reglasCaja, reglasGenericas, type Accion, type Chequeo, type Fila } from "./reglasNegocio";
+
 // Reglas PURAS (sin red ni base de datos) de la "puerta de datos" del servidor (app/api/datos).
 // El navegador ya no habla con las tablas privadas: manda una solicitud (tabla + pasos de consulta) y el servidor
 //  - toma el negocio y el rol de la COOKIE firmada (nunca de lo que diga el navegador),
@@ -8,9 +10,11 @@
 export type Rol = "admin" | "garzon";
 export type Paso = { m: string; a: unknown[] };
 export type Solicitud = { tabla: string; pasos: Paso[] };
-export type SesionDatos = { rol: Rol; empresa_id: string };
+export type SesionDatos = { rol: Rol; empresa_id: string; nombre?: string };
 export type Operacion = "select" | "insert" | "update" | "delete";
-export type Plan = { ok: true; tabla: string; operacion: Operacion; pasos: Paso[] } | { ok: false; status: number; error: string };
+export type Plan =
+  | { ok: true; tabla: string; operacion: Operacion; pasos: Paso[]; accion: Accion; chequeos: Chequeo[]; reglas: Paso[] }
+  | { ok: false; status: number; error: string };
 
 const A: Rol[] = ["admin"];
 const AG: Rol[] = ["admin", "garzon"];
@@ -22,7 +26,8 @@ export const REGLAS: Record<string, Regla> = {
   ventas: { clave: "empresa_id", ops: { select: AG, insert: AG, update: AG, delete: A } },
   aperturas_caja: { clave: "empresa_id", ops: { select: AG, insert: A, update: A } },
   cierres_caja: { clave: "empresa_id", ops: { select: A, insert: A } },
-  gastos: { clave: "empresa_id", ops: { select: AG, insert: AG, delete: A } },
+  // Gastos: el alta NO es genérica; la hace el caso de uso /api/gastos (aprobación de admin verificada en el servidor).
+  gastos: { clave: "empresa_id", ops: { select: AG, delete: A } },
   propinas: { clave: "empresa_id", ops: { select: AG, insert: AG, delete: A } },
   productos: { clave: "empresa_id", ops: { select: AG, insert: A, update: A }, embeds: ["categorias"] },
   categorias: { clave: "empresa_id", ops: { select: AG, insert: A, update: A } },
@@ -35,7 +40,9 @@ export const REGLAS: Record<string, Regla> = {
   stock_compras: { clave: "empresa_id", ops: todoAdmin },
   stock_movimientos: { clave: "empresa_id", ops: todoAdmin },
 };
-// Alta de negocios nuevos (app/admin/nueva-empresa): SOLO si la sesión es admin del negocio de plataforma (PLATAFORMA_EMPRESA_ID).
+// Alta de negocios nuevos (app/admin/nueva-empresa): DESHABILITADA mientras no exista una administración de plataforma definida y probada.
+// Aunque se defina PLATAFORMA_EMPRESA_ID, nada se habilita sin cambiar esta constante en una revisión de código.
+export const ALTA_NEGOCIOS_HABILITADA = false;
 export const REGLAS_PLATAFORMA: Record<string, { ops: Operacion[] }> = {
   empresas: { ops: ["insert", "delete"] },
   usuarios: { ops: ["insert"] },
@@ -71,6 +78,17 @@ export function columnasValidas(cols: unknown, embeds: string[] = []): boolean {
   });
 }
 
+function reglasPorTabla(tabla: string, op: "insert" | "update", sesion: SesionDatos, filas: Fila[]) {
+  if (["propinas", "aperturas_caja", "cierres_caja"].includes(tabla) && filas.length !== 1) return { ok: false as const, status: 400, error: "Un solo registro por operación" };
+  if (tabla === "ventas") return reglasVentas(op, sesion.rol, filas);
+  if (tabla === "propinas" && op === "insert") return reglasPropinas(filas[0], sesion);
+  if (tabla === "propinas") return { ok: false as const, status: 403, error: "Operación no permitida" };
+  if (tabla === "aperturas_caja" || tabla === "cierres_caja") return reglasCaja(tabla, op, filas[0], sesion);
+  const r = reglasGenericas(tabla, filas);
+  if (r.ok && op === "insert" && filas.length > 1 && !["productos", "categorias", "insumos", "recetas", "stock_insumos", "stock_compras", "stock_movimientos"].includes(tabla)) return { ok: false as const, status: 400, error: "Un solo registro por operación" };
+  return r;
+}
+
 export function planificar(
   sesion: SesionDatos | null,
   sol: unknown,
@@ -87,7 +105,7 @@ export function planificar(
   const operacion = pasos[0].m as Operacion;
   if (!OPERACIONES.includes(operacion)) return falla(400, "La consulta debe empezar por select, insert, update o delete");
 
-  const esPlataforma = !!opts.plataformaEmpresaId && sesion.rol === "admin" && sesion.empresa_id === opts.plataformaEmpresaId;
+  const esPlataforma = ALTA_NEGOCIOS_HABILITADA && !!opts.plataformaEmpresaId && sesion.rol === "admin" && sesion.empresa_id === opts.plataformaEmpresaId;
   const regla = REGLAS[tabla];
   const reglaPlat = esPlataforma ? REGLAS_PLATAFORMA[tabla] : undefined;
   const viaPlataforma = !!reglaPlat && reglaPlat.ops.includes(operacion) && !(regla?.ops[operacion]?.includes(sesion.rol));
@@ -98,6 +116,7 @@ export function planificar(
   const filtros: Paso[] = [], mods: Paso[] = [];
   let retorno: Paso | null = null;
   let payload: unknown;
+  let accion: Accion = "generica", chequeos: Chequeo[] = [], extra: Paso[] = [];
   let cuerpo: Paso = { m: operacion, a: [] };
 
   // --- primer paso ---
@@ -122,7 +141,13 @@ export function planificar(
         } else salida.push(f);
       } else salida.push(f);
     }
-    cuerpo = { m: "insert", a: [Array.isArray(payload) ? salida : salida[0]] };
+    let filasFinal: Fila[] = salida;
+    if (!viaPlataforma) {
+      const r = reglasPorTabla(tabla, "insert", sesion, salida);
+      if (!r.ok) return falla(r.status, r.error);
+      filasFinal = r.valor.filas; accion = r.valor.accion; chequeos = r.valor.chequeos;
+    }
+    cuerpo = { m: "insert", a: [Array.isArray(payload) ? filasFinal : filasFinal[0]] };
   } else if (operacion === "update") {
     payload = p0.a[0];
     if (!esObjeto(payload) || p0.a.length > 1 || !Object.keys(payload).every((k) => IDENT.test(k))) return falla(400, "Datos inválidos");
@@ -130,7 +155,13 @@ export function planificar(
     if ("empresa_id" in payload && payload.empresa_id !== sesion.empresa_id) return falla(403, "Negocio no autorizado");
     if ("id" in payload) return falla(403, "No se puede cambiar el id");
     const { empresa_id: _e, ...resto } = payload as Record<string, unknown>;
-    cuerpo = { m: "update", a: [resto] };
+    let cambios: Fila = resto;
+    if (!viaPlataforma) {
+      const r = reglasPorTabla(tabla, "update", sesion, [resto]);
+      if (!r.ok) return falla(r.status, r.error);
+      cambios = r.valor.filas[0]; accion = r.valor.accion; chequeos = r.valor.chequeos; extra = r.valor.filtrosExtra;
+    }
+    cuerpo = { m: "update", a: [cambios] };
   } else if (p0.a.length) return falla(400, "delete no admite argumentos");
 
   // --- pasos siguientes ---
@@ -173,8 +204,8 @@ export function planificar(
   mods.sort((x, y) => Number(x.m === "single" || x.m === "maybeSingle") - Number(y.m === "single" || y.m === "maybeSingle"));
 
   const scope: Paso[] = (viaPlataforma || operacion === "insert") ? [] : [{ m: "eq", a: [clave, sesion.empresa_id] }];
-  const final: Paso[] = [cuerpo, ...filtros, ...scope, ...(retorno ? [retorno] : []), ...mods];
-  return { ok: true, tabla, operacion, pasos: final };
+  const final: Paso[] = [cuerpo, ...filtros, ...extra, ...scope, ...(retorno ? [retorno] : []), ...mods];
+  return { ok: true, tabla, operacion, pasos: final, accion, chequeos, reglas: extra };
 }
 
 // Repite los pasos ya validados sobre un cliente de Supabase con llave de servicio (inyectado: se puede probar con un doble).

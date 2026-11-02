@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 process.env.SESSION_SECRET = "secreto-de-prueba-para-sesiones-0123456789";
 const { crearToken, COOKIE_SESION } = await import("../lib/restaurante.ts");
 const { atenderDatos } = await import("../lib/datosServidor.ts");
-const { verificarPinAdmin, _limpiar, MAX_INTENTOS } = await import("../lib/verificarPinAdmin.ts");
 const { crearClienteDatos } = await import("../lib/clienteDatos.ts");
 
 const A = "aaaaaaaa-0000-0000-0000-00000000000a", B = "bbbbbbbb-0000-0000-0000-00000000000b";
@@ -47,25 +46,6 @@ test("cuerpo inválido o enorme se rechaza", async () => {
   assert.equal((await atenderDatos(req("{no es json", { c }), { db })).status, 400);
   assert.equal((await atenderDatos(req("x".repeat(300000), { c }), { db })).status, 413);
 });
-test("la puerta de plataforma solo se abre con PLATAFORMA_EMPRESA_ID", async () => {
-  const { db } = grabador(); const s = { tabla: "empresas", pasos: [{ m: "insert", a: [{ nombre: "N" }] }] };
-  assert.equal((await atenderDatos(req(s, { c: cookie("admin") }), { db })).status, 403);
-  assert.equal((await atenderDatos(req(s, { c: cookie("admin") }), { db, plataformaEmpresaId: A })).status, 200);
-  assert.equal((await atenderDatos(req(s, { c: cookie("garzon") }), { db, plataformaEmpresaId: A })).status, 403);
-});
-
-test("PIN de admin: se verifica en el servidor, con límite de intentos, sin devolver datos", async () => {
-  _limpiar(); let consultas = 0;
-  const db = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => (consultas++, { data: consultas === 1 ? null : { nombre: "Dueña" } }) }) }) }) }) }) };
-  const s = { empresa_id: A, nombre: "Caja" };
-  assert.equal((await verificarPinAdmin(db, s, "abcd")).status, 400);
-  assert.equal((await verificarPinAdmin(db, s, "1234")).status, 401);
-  const ok = await verificarPinAdmin(db, s, "1234"); assert.deepEqual(ok, { status: 200, body: { ok: true, nombre: "Dueña" } });
-  _limpiar(); db.from = () => ({ select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }) }) }) });
-  for (let i = 0; i < MAX_INTENTOS; i++) assert.equal((await verificarPinAdmin(db, s, "0000")).status, 401);
-  assert.equal((await verificarPinAdmin(db, s, "0000")).status, 429);
-});
-
 test("cliente del navegador: con sesión todo va a /api/datos; sin sesión solo la carta pública va directo; canal de tiempo real es nulo", async () => {
   const envios = [], directo = [];
   globalThis.fetch = async (url, init) => { envios.push({ url, cuerpo: JSON.parse(init.body) }); return new Response(JSON.stringify({ data: [{ id: 1 }], error: null, count: null }), { status: 200 }); };

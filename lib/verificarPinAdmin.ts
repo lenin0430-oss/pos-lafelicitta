@@ -1,26 +1,29 @@
-// Comprobación del PIN de administrador para autorizar un gasto (antes se hacía leyendo `usuarios` desde el navegador).
-// Con limitador simple por sesión; en producción conviene además un límite persistente (ver docs/PERMISOS_PLAN.md).
-const intentos = new Map<string, { n: number; hasta: number }>();
-export const MAX_INTENTOS = 5, VENTANA_MS = 5 * 60 * 1000;
+// El PIN de un administrador autoriza UNA operación concreta: se emite una aprobación de un solo uso (lib/aprobaciones.ts).
+// Límite persistente de intentos por negocio+empleado (lib/limiteLogin.ts); el PIN nunca se registra.
+import { buscarAdminPorPin } from "./credenciales";
+import { emitirAprobacion, huellaGasto } from "./aprobaciones";
+import { POLITICAS, evento, registrarFallo, segundosBloqueado } from "./limiteLogin";
+import { validarGasto } from "./reglasNegocio";
 
-export function limitar(clave: string, ahora = Date.now()): boolean {
-  const r = intentos.get(clave);
-  if (!r || r.hasta < ahora) { intentos.set(clave, { n: 1, hasta: ahora + VENTANA_MS }); return true; }
-  r.n++; return r.n <= MAX_INTENTOS;
-}
-export function reiniciar(clave: string) { intentos.delete(clave); }
-export const _limpiar = () => intentos.clear();
+type Db = { from: (t: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any };
+export type Resp = { status: number; body: { ok: boolean; aprobacion?: string; expira_s?: number; error?: string } };
 
-export async function verificarPinAdmin(
-  db: { from: (t: string) => any },
-  s: { empresa_id: string; nombre: string },
-  pin: unknown
-): Promise<{ status: number; body: { ok: boolean; nombre?: string; error?: string } }> {
-  const clave = `${s.empresa_id}:${s.nombre}`;
+export async function aprobarGasto(db: Db, s: { empresa_id: string; nombre: string }, b: any): Promise<Resp> {
+  const pin = b?.pin;
   if (typeof pin !== "string" || !/^\d{4,8}$/.test(pin)) return { status: 400, body: { ok: false, error: "PIN inválido" } };
-  if (!limitar(clave)) return { status: 429, body: { ok: false, error: "Demasiados intentos. Espera unos minutos." } };
-  const { data } = await db.from("usuarios").select("nombre").eq("empresa_id", s.empresa_id).eq("pin", pin).eq("rol", "admin").maybeSingle();
-  if (!data) return { status: 401, body: { ok: false, error: "PIN admin incorrecto" } };
-  reiniciar(clave);
-  return { status: 200, body: { ok: true, nombre: data.nombre } };
+  const g = validarGasto({ categoria: b.categoria, descripcion: b.descripcion, monto: b.monto });
+  if (!g.ok) return { status: 400, body: { ok: false, error: g.error } };
+  const clave = `pin-admin:${s.empresa_id}:${s.nombre}`;
+  const espera = await segundosBloqueado(db, [clave]);
+  if (espera) return { status: 429, body: { ok: false, error: "Demasiados intentos. Espera unos minutos." } };
+  const aprobador = await buscarAdminPorPin(db, s.empresa_id, pin);
+  if (!aprobador) {
+    const e2 = await registrarFallo(db, [{ clave, politica: POLITICAS.pinAdminGasto }]);
+    await evento(db, { tipo: "aprobacion_gasto", resultado: "pin_incorrecto", empresa_id: s.empresa_id, actor: s.nombre });
+    return e2 ? { status: 429, body: { ok: false, error: "Demasiados intentos. Espera unos minutos." } } : { status: 401, body: { ok: false, error: "PIN admin incorrecto" } };
+  }
+  const em = await emitirAprobacion(db, { empresa_id: s.empresa_id, tipo: "gasto", actor: s.nombre, aprobador, monto: g.valor.monto, huella: huellaGasto(g.valor.categoria, g.valor.descripcion) });
+  if (!em.ok) return { status: 503, body: { ok: false, error: "Aprobaciones no disponibles (falta aplicar supabase/07b)" } };
+  await evento(db, { tipo: "aprobacion_gasto", resultado: "ok", empresa_id: s.empresa_id, actor: s.nombre });
+  return { status: 200, body: { ok: true, aprobacion: em.token, expira_s: em.expira_s } };
 }
