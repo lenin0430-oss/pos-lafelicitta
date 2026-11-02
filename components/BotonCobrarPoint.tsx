@@ -51,7 +51,15 @@ export default function BotonCobrarPoint({ ventaId, monto, onPagado }: Props) {
 
   return (
     <div>
-      <button onClick={cobrar} disabled={ocupado}>
+      <button
+        onClick={cobrar}
+        disabled={ocupado}
+        style={{
+          width: "100%", padding: 14, borderRadius: 10, border: "none",
+          background: ocupado ? "#555" : "#009ee3", color: "#fff",
+          fontSize: 15, fontWeight: 700, cursor: ocupado ? "wait" : "pointer",
+        }}
+      >
         {ocupado ? "Cobrando…" : `Cobrar con Point $${monto.toLocaleString("es-CL")}`}
       </button>
       {estado && estado !== "enviando" && <p>{TEXTO[estado] ?? estado}</p>}
