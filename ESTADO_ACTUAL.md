@@ -92,7 +92,7 @@ Resultado: **131 iguales · 27 con precio distinto (acordados) · 5 a retirar ·
 
 
 ## 9. Riesgos y pendientes
-0. **Dependencias (npm audit, 4 avisos: next crítica; postcss, nanoid, source-map-js altas):** Codex confirmó ca814dc en Windows (tsc, next build, 45/45 sin omisiones). La actualización NO se pudo hacer desde esta sesión (el registro npm está bloqueado por política en la nube y en la máquina virtual; no se evita). Preparado: `scripts/actualizar-dependencias-windows.ps1` (next 14.2.35 exacto, audit antes/después en `docs/auditoria/`, sin `--force`). `package.json`/`package-lock.json` siguen sin cambios. Falta comprobar si 14.2.35 resuelve los 4 avisos; si postcss/nanoid/source-map-js quedan anidados en next, decidir un `overrides` puntual con el audit en la mano. `verificar-windows.ps1` ahora avisa "VERIFICACIÓN INCOMPLETA" (código 2) si hay pruebas omitidas.
+0. **Dependencias:** resuelto por Codex en Windows (commit `2e1819f`): Next 15.5.28, override `next → postcss 8.5.32`, `cookies()` con await; npm audit 0 vulnerabilidades, tsc, 45/45 sin omisiones y `next build` aprobados. Cambio mayor de Next: falta la regresión en navegador (`docs/PRUEBA_NAVEGADOR.md`). Auditoría limpia no certifica seguridad total.
 1. Aprobar una versión concreta (este documento + `docs/PLAN_PUBLICACION.md`).
 2. Origen de las 583 ventas sin método sin demostrar; decidir si alguna se reclasifica.
 3. Ejecutar `scripts/verificar-windows.ps1` (o vista previa aislada con base de pruebas) y archivar el resultado de `next build`.
