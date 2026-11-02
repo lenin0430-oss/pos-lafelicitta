@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/mp'
 import { cronAutorizado } from '@/lib/seguridadBot'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 const EMPRESA_ID = '382de687-99e1-4303-bbac-783561f663f0'
 
@@ -18,6 +14,8 @@ export async function GET(request: Request) {
   if (!cronAutorizado(request.headers.get('authorization'), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
+  // Llave de servicio del servidor (SUPABASE_SERVICE_ROLE_KEY): ya no se usa la llave pública como respaldo.
+  const supabase = supabaseAdmin()
 
   try {
     // Rango: lunes pasado a domingo pasado

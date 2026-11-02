@@ -51,7 +51,21 @@ export async function iniciarCobroPoint(
     return { ok: false, status: 409, error: "El total cambió. Presiona «Actualizar cocina» y reintenta." };
   }
 
-  const { reserva } = await pagos.reservar({ restauranteId: e.restauranteId, ventaId: e.ventaId, monto: e.monto });
+  // La base valida empresa, estado de pago E IMPORTE bajo el bloqueo de la venta (supabase/07c): P0409 = la venta cambió o ya está cobrada.
+  // Se responde 409 estable ANTES de llamar al proveedor; el navegador debe refrescar la comanda y reintentar con el total vigente.
+  let reservado: { reserva: Reserva; creada: boolean };
+  try {
+    reservado = await pagos.reservar({ restauranteId: e.restauranteId, ventaId: e.ventaId, monto: e.monto });
+  } catch (err) {
+    const x = err as { code?: string; message?: string };
+    if (x?.code === "P0409") {
+      return /VENTA_YA_COBRADA/.test(x.message ?? "")
+        ? { ok: false, status: 409, error: "La venta ya está cobrada", reintentable: false }
+        : { ok: false, status: 409, error: "El total de la venta cambió. Presiona «Actualizar cocina» y reintenta.", reintentable: false };
+    }
+    throw err;
+  }
+  const { reserva } = reservado;
 
   if (reserva.monto !== e.monto) {
     return { ok: false, status: 409, error: "Hay un cobro Point en curso con otro monto para esta venta. Cancélalo en el Point primero." };

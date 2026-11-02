@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, DATOS_VIA_SERVIDOR } from '@/lib/supabase'
 import { getEmpresaIdActual } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import { useEmpresaNombre } from '@/lib/useEmpresaNombre'
@@ -41,11 +41,13 @@ export default function CocinaPage() {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     }, 1000)
 
+    // Con los datos por el servidor no hay tiempo real: se consulta cada 5 s (solo con la pestaña visible).
+    const sondeo = DATOS_VIA_SERVIDOR ? setInterval(() => { if (document.visibilityState === 'visible') cargarVentas() }, 5000) : null
     const canal = supabase.channel('cocina')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ventas' }, () => cargarVentas())
       .subscribe()
 
-    return () => { supabase.removeChannel(canal); clearInterval(tick) }
+    return () => { supabase.removeChannel(canal); clearInterval(tick); if (sondeo) clearInterval(sondeo) }
   }, [])
 
   async function cargarVentas() {
