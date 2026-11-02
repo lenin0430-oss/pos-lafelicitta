@@ -49,6 +49,7 @@ export const REGLAS_PLATAFORMA: Record<string, { ops: Operacion[] }> = {
   mesas: { ops: ["insert"] },
 };
 
+export const TABLAS_POR_ID = ["ventas", "aperturas_caja", "cierres_caja", "gastos", "propinas", "productos"];
 const IDENT = /^[a-z_][a-z0-9_]{0,62}$/;
 const FILTROS = ["eq", "neq", "gt", "gte", "lt", "lte", "in", "is"];
 const MODIFICADORES = ["order", "limit", "range", "single", "maybeSingle"];
@@ -196,6 +197,13 @@ export function planificar(
     } else if (p.m === "single" || p.m === "maybeSingle") {
       mods.push({ m: p.m, a: [] });
     } else return falla(400, `Método no permitido: ${p.m}`);
+  }
+  // Tablas con dinero o precios: update/delete SOLO sobre UNA fila identificada por id (nada de filtros amplios ni lotes).
+  // Una limitación de lectura (p. ej. "se revisaron 50 filas") no puede ampliar lo que se escribe.
+  if ((operacion === "update" || operacion === "delete") && !viaPlataforma && TABLAS_POR_ID.includes(tabla)) {
+    const propios = filtros.filter((f) => !(f.a[0] === clave));
+    const ok = propios.length === 1 && propios[0].m === "eq" && propios[0].a[0] === "id" && (typeof propios[0].a[1] === "string" || typeof propios[0].a[1] === "number") && String(propios[0].a[1]).length > 0;
+    if (!ok) return falla(400, "Esta operación exige exactamente un filtro por id de un registro del negocio");
   }
   if (!viaPlataforma) {
     if ((operacion === "update" || operacion === "delete") && filtrosPropios === 0) return falla(400, "update/delete requieren un filtro (por ejemplo por id)");

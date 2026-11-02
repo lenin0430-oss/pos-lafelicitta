@@ -1,7 +1,7 @@
 // Núcleo de la puerta de datos (sin Next ni Supabase reales: se inyectan para poder probarlo).
 import { sesionDelServidor } from "./restaurante";
 import { ejecutarPlan, planificar } from "./datosAutorizados";
-import { verificarContexto } from "./contextoNegocio";
+import { ejecutarAccionSql, verificarContexto } from "./contextoNegocio";
 
 export type Deps = { db: { from: (t: string) => any }; plataformaEmpresaId?: string | null };
 const MAX_BYTES = 256 * 1024;
@@ -25,6 +25,7 @@ export async function atenderDatos(req: Request, deps: Deps): Promise<{ status: 
   try {
     const v = await verificarContexto(deps.db, sesion.empresa_id, plan);
     if (!v.ok) return { status: v.status, body: { data: null, error: { message: v.error, code: String(v.status) } } };
+    if (plan.accion === "ventas.cobro_manual" || plan.accion === "ventas.editar_comanda") return await ejecutarAccionSql(deps.db as any, sesion.empresa_id, plan);
     // Condiciones adicionales (p. ej. "sin medio de pago aún") viajan como filtros del update: comprobación y escritura atómicas.
     const pasos = v.filtrosExtra.length ? [plan.pasos[0], ...v.filtrosExtra, ...plan.pasos.slice(1)] : plan.pasos;
     return { status: 200, body: await ejecutarPlan(deps.db, { ...plan, pasos }) };

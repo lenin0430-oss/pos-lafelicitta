@@ -4,6 +4,7 @@
 import { ESTADOS_POINT_TERMINADOS_SIN_COBRO, parseMixto, type Chequeo } from "./reglasNegocio";
 import type { Plan } from "./datosAutorizados";
 
+const ACCIONES_SQL = ["ventas.cobro_manual", "ventas.editar_comanda"];
 type Db = { from: (t: string) => any };
 export type Veredicto = { ok: true; filtrosExtra: { m: string; a: unknown[] }[] } | { ok: false; status: number; error: string };
 const fallo = (status: number, error: string): Veredicto => ({ ok: false, status, error });
@@ -17,7 +18,10 @@ function filtrosDelPlan(plan: Extract<Plan, { ok: true }>) {
 function aplicar(q: any, pasos: { m: string; a: unknown[] }[]) { for (const p of pasos) q = q[p.m](...p.a); return q; }
 
 export async function verificarContexto(db: Db, empresaId: string, plan: Extract<Plan, { ok: true }>): Promise<Veredicto> {
-  const chequeos = plan.chequeos as Chequeo[];
+  let chequeos = plan.chequeos as Chequeo[];
+  // En cobro manual y edición de comanda, "sin medio de pago", "sin Point en curso" y "mixto = total" los hace la función SQL (07c)
+  // dentro de la misma transacción que escribe; aquí solo queda el catálogo (que no depende de carreras con cobros).
+  if (ACCIONES_SQL.includes(plan.accion)) chequeos = chequeos.filter((c) => c === "catalogo");
   if (chequeos.length === 0) return { ok: true, filtrosExtra: [] };
   const extra: { m: string; a: unknown[] }[] = [];
 
@@ -67,22 +71,57 @@ export async function verificarContexto(db: Db, empresaId: string, plan: Extract
   return { ok: true, filtrosExtra: [] };
 }
 
-// Cada línea debe existir en el catálogo del negocio con su precio vigente. Líneas idénticas a las ya guardadas se toleran
-// (editar una comanda vieja no debe fallar porque el precio cambió después). DATOS_CATALOGO=suma relaja a "solo total = suma de líneas".
+// Cada línea nueva debe corresponder a un producto ACTIVO y DISPONIBLE del negocio, con su precio vigente (activo !== false y disponible !== false).
+// - Un producto inactivo (aunque tenga el mismo nombre y un precio histórico) NO sirve para una venta nueva.
+// - Nombres repetidos entre productos activos (p. ej. "Pabellón" en Empanadas y en Arepas) aceptan cualquiera de sus precios VIGENTES.
+// - Líneas idénticas (nombre + precio) a las ya guardadas EN ESA VENTA se toleran al editarla; no hay excepción global por nombre.
+// - Catálogo vacío: se rechaza (no hay contra qué validar) salvo DATOS_CATALOGO_VACIO=permitir (solo para negocios que aún usan el menú de respaldo).
+// DATOS_CATALOGO=suma relaja todo a "total = suma de líneas".
 export async function verificarCatalogo(db: Db, empresaId: string, nuevas: any[], previas: any[]): Promise<Veredicto> {
   if ((process.env.DATOS_CATALOGO ?? "estricto") === "suma") return { ok: true, filtrosExtra: [] };
-  const r = await db.from("productos").select("nombre,precio").eq("empresa_id", empresaId).limit(5000);
-  if (r.error) return fallo(500, "Error interno");
   const norm = (s: unknown) => String(s ?? "").trim().toLowerCase();
-  const precios = new Map<string, Set<number>>();
-  for (const p of r.data ?? []) { const k = norm(p.nombre); if (!precios.has(k)) precios.set(k, new Set()); precios.get(k)!.add(Number(p.precio)); }
-  if (precios.size === 0) return { ok: true, filtrosExtra: [] }; // negocio sin catálogo en la base (usa el menú de respaldo): no hay contra qué comparar
   const antes = new Set(previas.map((l) => `${norm(l.nombre)}|${Number(l.precio_unit)}`));
+  if (nuevas.every((l) => antes.has(`${norm(l.nombre)}|${Number(l.precio_unit)}`))) return { ok: true, filtrosExtra: [] };
+  const r = await db.from("productos").select("nombre,precio,activo,disponible").eq("empresa_id", empresaId).limit(5000);
+  if (r.error) return fallo(500, "Error interno");
+  const filas: any[] = r.data ?? [];
+  if (filas.length === 5000) return fallo(500, "Catálogo demasiado grande para validar");
+  if (filas.length === 0) return process.env.DATOS_CATALOGO_VACIO === "permitir" ? { ok: true, filtrosExtra: [] } : fallo(422, "El negocio no tiene catálogo de productos para validar precios");
+  const precios = new Map<string, Set<number>>();
+  for (const p of filas) {
+    if (p.activo === false || p.disponible === false) continue;
+    const k = norm(p.nombre); if (!precios.has(k)) precios.set(k, new Set()); precios.get(k)!.add(Number(p.precio));
+  }
   for (const l of nuevas) {
     if (antes.has(`${norm(l.nombre)}|${Number(l.precio_unit)}`)) continue;
     const ps = precios.get(norm(l.nombre));
-    if (!ps) return fallo(422, `Producto fuera del catálogo: ${String(l.nombre).slice(0, 60)}`);
+    if (!ps) return fallo(422, `Producto inexistente o inactivo: ${String(l.nombre).slice(0, 60)}`);
     if (!ps.has(Number(l.precio_unit))) return fallo(422, `El precio de "${String(l.nombre).slice(0, 60)}" no coincide con el catálogo vigente`);
   }
   return { ok: true, filtrosExtra: [] };
+}
+
+// Cobro manual y edición de comanda: UNA transacción SQL (07c) que bloquea la venta; ver supabase/07c_cobro_manual_atomico.sql.
+const MAPA_SQL: Record<string, { status: number; error: string }> = {
+  no_encontrada: { status: 404, error: "Venta no encontrada" },
+  ya_cobrada: { status: 409, error: "La venta ya tiene medio de pago" },
+  point_en_curso: { status: 409, error: "La venta tiene un cobro con Point en curso o aprobado" },
+  mixto_no_suma: { status: 422, error: "El detalle del pago mixto no suma el total de la venta" },
+  total_no_coincide: { status: 422, error: "El total no coincide con las líneas del pedido" },
+  items_invalidos: { status: 400, error: "items inválidos" },
+};
+export async function ejecutarAccionSql(db: Db & { rpc: (fn: string, a: Record<string, unknown>) => any }, empresaId: string, plan: Extract<Plan, { ok: true }>) {
+  const ventaId = plan.pasos.slice(1).find((p) => p.m === "eq" && p.a[0] === "id" && !plan.reglas.includes(p))?.a[1];
+  if (ventaId === undefined) return { status: 400, body: { data: null, error: { message: "Falta el id de la venta", code: "400" } } };
+  const c = (plan.pasos[0].a[0] ?? {}) as Record<string, any>;
+  const r = plan.accion === "ventas.cobro_manual"
+    ? await db.rpc("cobrar_venta_manual", { p_empresa: empresaId, p_venta: String(ventaId), p_medio: c.metodo_pago, p_mixto_suma: parseMixto(c.metodo_pago)?.suma ?? null })
+    : await db.rpc("editar_comanda_venta", { p_empresa: empresaId, p_venta: String(ventaId), p_total: c.total, p_items: c.items, p_mesa: c.mesa ?? null, p_mesero: c.mesero ?? null, p_personas: c.personas ?? null });
+  if (r.error) {
+    const falta = /does not exist|42883|PGRST202|schema cache/i.test(`${r.error.code ?? ""} ${r.error.message ?? ""}`);
+    return { status: falta ? 503 : 500, body: { data: null, error: { message: falta ? "Falta aplicar supabase/07c (cobro atómico)" : "Error interno", code: falta ? "503" : "500" } } };
+  }
+  if (r.data === "ok") return { status: 200, body: { data: [{ id: ventaId }], count: null, status: 200, error: null } };
+  const m = MAPA_SQL[String(r.data)] ?? { status: 500, error: "Error interno" };
+  return { status: m.status, body: { data: null, error: { message: m.error, code: String(m.status) } } };
 }

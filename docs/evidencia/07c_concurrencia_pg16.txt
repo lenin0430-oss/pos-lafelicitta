@@ -1,0 +1,31 @@
+== CONTROL: el diseño anterior (leer Point, luego escribir) SÍ deja un cobro manual y uno Point juntos
+  OK   sin 07c: queda Efectivo Y un Point activo (la vulnerabilidad se reproduce)
+== con 07c + 04 + 04b
+  OK   las tres migraciones se cargan y 07c es idempotente
+-- A) gana la RESERVA Point (transacción abierta 1,5 s); el cobro manual espera y responde point_en_curso
+  OK   cobro manual → point_en_curso
+  OK   estado final: venta sin cobrar, 1 reserva
+-- B) gana el COBRO MANUAL (transacción abierta 1,5 s); la reserva Point espera y se rechaza
+  OK   reserva Point rechazada: 'La venta ya tiene medio de pago'
+  OK   estado final: Efectivo y 0 cobros Point
+-- C) EDITAR COMANDA vs reserva Point (ambos órdenes)
+  OK   editar con Point en curso → point_en_curso
+  OK   total intacto
+  OK   editar primero: la reserva espera y queda creada con la venta ya editada (el servidor Point lee el total nuevo antes de cobrar)
+-- D) dos cobros manuales simultáneos: exactamente uno gana
+  OK   6 cobros simultáneos: 1 ok
+  OK   los otros 5 → ya_cobrada
+-- E) 30 carreras al azar cobro manual vs reserva Point: NUNCA queda cobro manual junto a un Point activo
+  OK   30 carreras sin estado incompatible
+-- F) reglas del cobro: mixto, otro negocio, Point cancelado no bloquea, función cerrada a anon/authenticated
+  OK   mixto que no suma → mixto_no_suma
+  OK   otro negocio → no_encontrada
+  OK   Point cancelado no bloquea
+  OK   venta ya cobrada no admite edición
+  OK   edición con total que no suma → total_no_coincide
+  OK   anon no ejecuta cobrar_venta_manual
+  OK   authenticated no ejecuta cobrar_venta_manual
+== reversión
+  OK   reversión quita funciones y trigger
+
+RESULTADO: TODO OK

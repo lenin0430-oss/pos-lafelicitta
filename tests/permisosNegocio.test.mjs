@@ -9,7 +9,7 @@ const { planificar } = await import("../lib/datosAutorizados.ts");
 const { registrarGasto } = await import("../lib/gastosServidor.ts");
 const { aprobarGasto } = await import("../lib/verificarPinAdmin.ts");
 const { _limpiarMemoria } = await import("../lib/limiteLogin.ts");
-const { crearDb, rpcsSeguridad } = await import("./fakeDb.mjs");
+const { crearDb, rpcsSeguridad, rpcsVentas } = await import("./fakeDb.mjs");
 
 const A = "aaaaaaaa-0000-0000-0000-00000000000a", B = "bbbbbbbb-0000-0000-0000-00000000000b";
 const garzon = { rol: "garzon", empresa_id: A, nombre: "Gaston" }, admin = { rol: "admin", empresa_id: A, nombre: "Ana" };
@@ -29,7 +29,7 @@ const base = () => crearDb({
   usuarios: [{ empresa_id: A, nombre: "Ana", rol: "admin", pin: "9999", activo: true }, { empresa_id: B, nombre: "Beto", rol: "admin", pin: "1111", activo: true }],
   aperturas_caja: [{ id: "ap1", empresa_id: A, estado: "abierta", created_at: "2026-11-02T10:00:00Z" }],
   gastos: [], propinas: [], aperturas: [], aprobaciones_operacion: [], intentos_login: [], eventos_seguridad: [],
-}, rpcsSeguridad());
+}, { ...rpcsSeguridad(), ...rpcsVentas() });
 const datos = (db, s, x) => atenderDatos(req(x, s), { db });
 
 // ---------------- GASTOS ----------------
@@ -115,7 +115,7 @@ test("VENTAS: cobro manual — no se puede cobrar dos veces, ni sobre Point en c
   const cobro = (id, mp = "Efectivo") => datos(db, garzon, sol("ventas", ["update", { metodo_pago: mp, estado: "listo" }], ["eq", "id", id]));
   assert.equal((await cobro("vpagada", "Débito")).status, 409, "ya pagada"); assert.equal(db.T.ventas[1].metodo_pago, "Efectivo");
   assert.equal((await cobro("v1")).status, 200);
-  assert.equal(db.log.filter((l) => l.tabla === "ventas" && l.op === "update").at(-1).filtros.some((f) => f[0] === "eq" && f[1] === "metodo_pago" && f[2] === ""), true, "el filtro atómico 'sin medio de pago' viaja en el update");
+  assert.equal(db.log.filter((l) => l.tabla === "ventas" && l.op === "update").length, 0, "el cobro manual NO es un update genérico: va por la función SQL transaccional (07c)");
   db.T.ventas[0].metodo_pago = "";
   assert.equal((await cobro("vpp")).status, 409, "cobro Point en curso");
   assert.equal((await cobro("v1", "Point")).status, 403); assert.equal((await cobro("v1", "point")).status, 403); assert.equal((await cobro("v1", "Mercado Pago")).status, 403);
@@ -172,9 +172,9 @@ test("VENTAS: editar comanda — solo antes de cobrar, líneas existentes tolera
   assert.equal(db.T.ventas[0].mesa, "M2");
   db.T.productos[0].precio = 6000; // el catálogo sube: la comanda ya enviada con 5000 sigue pudiendo editarse
   assert.equal((await edit("v1", { total: 15500, items: [linea("Hamburguesa", 2, 5000), linea("Pollo broaster", 1, 5500)] })).status, 200);
-  assert.equal((await edit("vpagada", { total: 1, items: [linea("Hamburguesa", 1, 1)] })).status, 409, "pagada: no se edita");
+  assert.equal((await edit("vpagada", { total: 5000, items: [linea("Pollo al horno", 1, 5000)] })).status, 409, "pagada: no se edita");
   assert.equal(db.T.ventas[1].total, 5000);
-  assert.equal((await edit("vpp", { total: 5000, items: [linea("Hamburguesa", 1, 5000)] })).status, 409, "Point en curso");
+  assert.equal((await edit("vpp", { total: 5000, items: [linea("Pollo al horno", 1, 5000)] })).status, 409, "Point en curso");
 });
 test("PROPINAS y CAJA: autor y fecha del servidor, campos limitados, venta del mismo negocio", async () => {
   const db = base();

@@ -58,3 +58,29 @@ export function rpcsSeguridad() {
     _intentos: intentos,
   };
 }
+// Réplica en JS de cobrar_venta_manual / editar_comanda_venta de 07c (el bloqueo real se prueba en PostgreSQL: tests/concurrencia_cobro_pg.sh).
+export function rpcsVentas(registro = []) {
+  const TERMINADOS = ["canceled", "cancelled", "failed", "expired", "refunded"];
+  const comunes = (a, T) => {
+    const v = (T.ventas ?? []).find((x) => String(x.id) === a.p_venta && String(x.empresa_id) === a.p_empresa);
+    if (!v) return { v: null, cod: "no_encontrada" };
+    if ((v.metodo_pago ?? "") !== "") return { v, cod: "ya_cobrada" };
+    if ((T.pagos_point ?? []).some((p) => p.venta_id === a.p_venta && !TERMINADOS.includes(String(p.estado ?? "").toLowerCase()))) return { v, cod: "point_en_curso" };
+    return { v, cod: "ok" };
+  };
+  return {
+    cobrar_venta_manual: (a, T) => {
+      registro.push(["cobrar_venta_manual", a]);
+      const { v, cod } = comunes(a, T); if (cod !== "ok") return { data: cod, error: null };
+      if (a.p_mixto_suma != null && a.p_mixto_suma !== Math.round(v.total)) return { data: "mixto_no_suma", error: null };
+      v.metodo_pago = a.p_medio; v.estado = "listo"; return { data: "ok", error: null };
+    },
+    editar_comanda_venta: (a, T) => {
+      registro.push(["editar_comanda_venta", a]);
+      const suma = a.p_items.reduce((s, i) => s + i.cantidad * i.precio_unit, 0); if (suma !== a.p_total) return { data: "total_no_coincide", error: null };
+      const { v, cod } = comunes(a, T); if (cod !== "ok") return { data: cod, error: null };
+      v.total = a.p_total; v.items = a.p_items; if (a.p_mesa != null) v.mesa = a.p_mesa; if (a.p_mesero != null) v.mesero = a.p_mesero; if (a.p_personas != null) v.personas = a.p_personas;
+      return { data: "ok", error: null };
+    },
+  };
+}
