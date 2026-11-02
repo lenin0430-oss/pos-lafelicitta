@@ -129,17 +129,11 @@ export default function GastosPage() {
   }
 
   async function verificarPin() {
-    // Verificar PIN admin en Supabase
-    const empresaId = await getEmpresaIdActual()
-    const { data } = await supabase
-      .from('usuarios')
-      .select('nombre')
-      .eq('empresa_id', empresaId)
-      .eq('pin', pinAdmin)
-      .eq('rol', 'admin')
-      .maybeSingle()
+    // Verificar PIN admin en el SERVIDOR (ya no se lee la tabla usuarios desde el navegador).
+    const r = await fetch('/api/admin/verificar-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pinAdmin }) })
+    const data = r.ok ? await r.json().catch(() => null) : null
 
-    if (data && gastosPendiente) {
+    if (data?.ok && gastosPendiente) {
       await guardarGasto(gastosPendiente.categoria, gastosPendiente.descripcion, gastosPendiente.monto)
     } else {
       mostrarMensaje('PIN admin incorrecto', 'err')
