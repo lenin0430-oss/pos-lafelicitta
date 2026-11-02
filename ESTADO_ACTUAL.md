@@ -110,3 +110,9 @@ Ver `docs/PLAN_PUBLICACION.md` (tabla de qué se pierde en cada reversión). Có
 - Nuevo: `lib/rotacionSecretoBot.ts`, `tests/rotacionBot.test.mjs` (rotación completa con bot falso: el secreto anterior se rechaza), `tests/cobrosCierre.test.mjs` (cierre conciliado por método y turno, webhook repetido, firma inválida, cron sin Bearer), `docs/ROTACION_SECRETO_BOT.md`, `scripts/verificar-rotacion-bot.mjs`, `docs/PLAN_PUBLICACION.md` corregido (rotación coordinada con el despliegue POS+bot).
 - Pruebas: 58/58 en Node (VM), sin omitidas. Pendiente repetir en Windows (`scripts/verificar-windows.ps1`: tsc + build).
 - Migraciones 03/04/06 en el proyecto de PRUEBAS (`mesapos-pruebas-aislado`): en curso; el servidor Supabase pidió una confirmación de usuario que no se contestó (no aplicadas aún).
+
+## 2026-11-02 (mediodía) · Precios de hamburguesas y referencia 4bcd30e (Claude)
+- Codex subió 7 hamburguesas +$1.000 (POS y menú digital): La Felicitta 4.500; Especial de Carne 6.000; Doble 8.500; La Pelua 9.500; Triple 10.990; XL La Estrella 8.500; XL La Luna 8.500. Respaldo: `consolidacion\respaldo-burgers-2026-11-02.json`; registro: `consolidacion\ACTUALIZACION_BURGERS_2026-11-02.md`. Reversión solo de esos 7 y condicionada al precio nuevo (no reactivar ni tocar ventas).
+- Lectura de solo consulta (producción, SELECT, 2026-11-02): los 7 precios coinciden con la lista; mi verificación del catálogo sigue exacta (27 precios / 5 desactivados / 7 altas / 217 productos). Ventas: 6.099 y suma 36.523.310 = antes 36.521.310 + 2 ventas nuevas por $2.000 (pruebas del sistema real); sin otras variaciones.
+- Rama de preparación fusionada con origin/main 4bcd30e (548f025; sin conflictos; solo cambió `lib/menu.ts`). El catálogo NO se vuelve a aplicar.
+- Pendiente: `lib/menu.ts` es un catálogo estático de respaldo; revisar si sus precios coinciden con los 27 cambios del catálogo (no se tocó).
