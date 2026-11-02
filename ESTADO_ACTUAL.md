@@ -165,3 +165,9 @@ Estado: **propuesta probada en PGlite y en PostgreSQL 16 local; NO aplicada en n
 
 ## Permisos — segunda revisión de Codex (02/11/2026, noche) — Claude
 - Rama `claude/permisos-2026-11-02`, ver commit más reciente. Nuevo SQL `07c` (cobro manual/edición atómicos con Point; orden 07b → 07c → 07a → 07), 20 comprobaciones con dos conexiones reales en PG16 (incluye control que reproduce la falla). Update/delete de ventas, caja, gastos, propinas y productos exigen un único id. Catálogo: solo productos activos y disponibles; «Pabellón» activo a dos precios en producción se acepta con ambos. TS 51/51. NO publicada; producción no modificada.
+
+## 2026-11-02 — Importe de reserva Point bajo bloqueo + candidata conjunta permisos/Point
+- Rama permisos `claude/permisos-2026-11-02` @ 62ede08: el trigger `pagos_point_bloquea_venta` (07c) compara `pagos_point.monto` con `round(total)` de la venta ya bloqueada (`FOR UPDATE`); si difiere rechaza con `P0409 MONTO_NO_COINCIDE` y `pointCobro` responde 409 antes de llamar al proveedor.
+- Candidata conjunta `claude/candidata-permisos-point-2026-11-02` @ 7e04fcb (permisos + Point + estados separados). Detalle y orden de aplicación/reversión: `docs/CANDIDATA_PERMISOS_POINT.md`.
+- Evidencia local: 139/139 pruebas TS, `tsc --noEmit` limpio, PG16 concurrencia conjunta 28 OK, ensayo Point con orquestación real y proveedor simulado OK (monto viejo: 409, 0 llamadas al proveedor, 0 reservas).
+- No publicado, sin SQL en producción. Pendiente: `next build` en Windows (posible `experimental.cpus=1`), `tests/concurrencia_cobro_pg.sh` y `tests/ensayo_point_pg.mjs` con PostgreSQL por Codex, PG17, prueba en navegador con dos negocios, confirmar que mesapos-app/bot no usan pedidos/pedido_items/mesas/configuracion_empresa con clave pública antes del paso 07, y operaciones pendientes de aprobación en el proyecto de pruebas.
