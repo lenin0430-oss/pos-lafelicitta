@@ -31,13 +31,13 @@ npx tsc --noEmit
 if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: falló tsc (código $LASTEXITCODE)" -ForegroundColor Red; exit 1 }
 Write-Host "== pruebas =="
 if ($PgliteJs -and (Test-Path $PgliteJs)) { $env:PGLITE_JS = (Resolve-Path $PgliteJs).Path } else { Remove-Item Env:PGLITE_JS -ErrorAction SilentlyContinue }
-$salida = npm test 2>&1 | Tee-Object -Variable pruebasLog
+$salida = node --import ./tests/register.mjs --test --test-reporter=tap tests/*.test.mjs 2>&1 | Tee-Object -Variable pruebasLog
 $codigoPruebas = $LASTEXITCODE
 $pruebasLog | ForEach-Object { Write-Host $_ }
 if ($codigoPruebas -ne 0) { Write-Host "ERROR: fallaron las pruebas (código $codigoPruebas)" -ForegroundColor Red; exit 1 }
 $omitidas = 0
 $m = [regex]::Match(($pruebasLog -join "`n"), '# skipped (\d+)')
-if ($m.Success) { $omitidas = [int]$m.Groups[1].Value }
+if ($m.Success) { $omitidas = [int]$m.Groups[1].Value } else { Write-Host 'ERROR: no se pudo comprobar el resumen de pruebas'; exit 2 }
 $incompleta = ($omitidas -gt 0)
 if ($incompleta) { Write-Host "AVISO: $omitidas prueba(s) omitida(s) (migraciones sin PGlite). Indica -PgliteJs <ruta>\index.js o define PGLITE_JS." -ForegroundColor Yellow }
 Write-Host "== audit (informativo) =="

@@ -14,7 +14,7 @@ export async function GET(req: Request) {
 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const raw = cookies().get("mp_oauth")?.value;
+  const raw = (await cookies()).get("mp_oauth")?.value;
   if (!code || !state || !raw) return volver("error");
 
   let guardado: { state: string; verifier: string; restauranteId: string };

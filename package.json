@@ -9,15 +9,20 @@
     "test": "node --import ./tests/register.mjs --test tests/*.test.mjs"
   },
   "dependencies": {
-    "next": "14.2.3",
+    "@supabase/supabase-js": "^2.43.4",
+    "next": "15.5.28",
     "react": "^18",
-    "react-dom": "^18",
-    "@supabase/supabase-js": "^2.43.4"
+    "react-dom": "^18"
   },
   "devDependencies": {
-    "typescript": "^5",
     "@types/node": "^20",
     "@types/react": "^18",
-    "@types/react-dom": "^18"
+    "@types/react-dom": "^18",
+    "typescript": "^5"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.32"
+    }
   }
 }
