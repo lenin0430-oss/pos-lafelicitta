@@ -54,13 +54,13 @@ export const MENU: Producto[] = [
   { id: 'parrilla-familiar', nombre: 'Parrilla Familiar', precio: 35990, categoria: 'Parrilla', ingredientes: 'Vacuno, pollo, cerdo, 3 chorizos, 3 prietas + 2 agregados a elección' },
 
   // ── BURGERS ──────────────────────────────────────────────────
-  { id: 'burger-felicitta', nombre: 'La Felicitta', precio: 3500, categoria: 'Burgers', ingredientes: 'Carne de la casa, papas hilo, tomate, lechuga, ketchup, mostaza, mayo' },
-  { id: 'burger-especial-carne', nombre: 'Especial de Carne', precio: 5000, categoria: 'Burgers', ingredientes: 'Carne, queso gouda, huevo, papas hilo, cebolla, tomate, lechuga + salsa' },
-  { id: 'burger-doble', nombre: 'Doble', precio: 7500, categoria: 'Burgers', ingredientes: 'Doble proteína, doble queso cheddar, cebolla morada, pepinillo, tocino' },
-  { id: 'burger-pelua', nombre: 'La Pelua', precio: 8500, categoria: 'Burgers', ingredientes: 'Carne mechada, huevo, tocino ahumado, lechuga, tomate, cebolla morada, queso gouda' },
-  { id: 'burger-triple', nombre: 'Triple', precio: 9990, categoria: 'Burgers', ingredientes: 'Triple proteína, tocino ahumado, lechuga, tomate, cebolla morada, queso cheddar' },
-  { id: 'burger-estrella-xl', nombre: 'XL La Estrella', precio: 7500, categoria: 'Burgers', ingredientes: '200g carne, lechuga, tomate, cebolla + salsas. Incluye papas.' },
-  { id: 'burger-luna-xl', nombre: 'XL La Luna', precio: 7500, categoria: 'Burgers', ingredientes: '200g carne, tocineta, huevo, queso gouda, lechuga, tomate, cebolla morada. Incluye papas.' },
+  { id: 'burger-felicitta', nombre: 'La Felicitta', precio: 4500, categoria: 'Burgers', ingredientes: 'Carne de la casa, papas hilo, tomate, lechuga, ketchup, mostaza, mayo' },
+  { id: 'burger-especial-carne', nombre: 'Especial de Carne', precio: 6000, categoria: 'Burgers', ingredientes: 'Carne, queso gouda, huevo, papas hilo, cebolla, tomate, lechuga + salsa' },
+  { id: 'burger-doble', nombre: 'Doble', precio: 8500, categoria: 'Burgers', ingredientes: 'Doble proteína, doble queso cheddar, cebolla morada, pepinillo, tocino' },
+  { id: 'burger-pelua', nombre: 'La Pelua', precio: 9500, categoria: 'Burgers', ingredientes: 'Carne mechada, huevo, tocino ahumado, lechuga, tomate, cebolla morada, queso gouda' },
+  { id: 'burger-triple', nombre: 'Triple', precio: 10990, categoria: 'Burgers', ingredientes: 'Triple proteína, tocino ahumado, lechuga, tomate, cebolla morada, queso cheddar' },
+  { id: 'burger-estrella-xl', nombre: 'XL La Estrella', precio: 8500, categoria: 'Burgers', ingredientes: '200g carne, lechuga, tomate, cebolla + salsas. Incluye papas.' },
+  { id: 'burger-luna-xl', nombre: 'XL La Luna', precio: 8500, categoria: 'Burgers', ingredientes: '200g carne, tocineta, huevo, queso gouda, lechuga, tomate, cebolla morada. Incluye papas.' },
 
   // ── PERROS ───────────────────────────────────────────────────
   { id: 'perro-luka', nombre: 'El de Luka', precio: 1000, categoria: 'Perros', ingredientes: '15cm · salchicha, repollo, papas hilo, ketchup, mayo, mostaza' },
