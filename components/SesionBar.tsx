@@ -13,8 +13,8 @@ export default function SesionBar() {
   if (!sesion) return null
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+    <div className="session-bar" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <span className="session-name" title={sesion.nombre} style={{ fontSize: 12, color: 'var(--muted)' }}>
         {sesion.rol === 'admin' ? '🔐' : '👤'} {sesion.nombre}
       </span>
       <button

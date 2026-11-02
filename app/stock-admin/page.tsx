@@ -129,10 +129,10 @@ export default function StockAdminPage() {
         <div style={{ maxWidth: 980, margin: '0 auto', padding: '20px 14px' }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: 'var(--gold)' }}>Administrador de insumos</h1>
           <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>{items.length} insumos cargados · {faltantes} faltantes del catalogo base</p>
-          {mensaje && <div style={{ margin: '12px 0', padding: '9px 14px', borderRadius: 8, background: mensaje.tipo === 'ok' ? 'rgba(76,175,125,.15)' : 'rgba(220,50,50,.15)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>{mensaje.txt}</div>}
+          {mensaje && <div style={{ margin: '12px 0', padding: '9px 14px', borderRadius: 8, background: mensaje.tipo === 'ok' ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>{mensaje.txt}</div>}
 
           <div style={{ display: 'flex', gap: 8, margin: '14px 0', flexWrap: 'wrap' }}>
-            <button onClick={cargarBase} disabled={guardando} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 800, cursor: 'pointer' }}>{guardando ? 'Procesando...' : 'Cargar insumos base La Felicitta'}</button>
+            <button onClick={cargarBase} disabled={guardando} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontWeight: 800, cursor: 'pointer' }}>{guardando ? 'Procesando...' : 'Cargar insumos base La Felicitta'}</button>
             <a href="/stock" style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', color: 'var(--muted)', textDecoration: 'none', fontWeight: 700 }}>Volver a Stock</a>
           </div>
 
@@ -165,7 +165,7 @@ export default function StockAdminPage() {
                 <label style={label}>Precio unitario</label>
                 <input type="number" value={form.precio_ultimo} onChange={e => setForm({ ...form, precio_ultimo: e.target.value })} placeholder="Ej: 1500" style={inp} />
               </div>
-              <button onClick={guardar} disabled={guardando} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 800, height: 38 }}>{editandoId ? 'Actualizar' : 'Guardar'}</button>
+              <button onClick={guardar} disabled={guardando} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontWeight: 800, height: 38 }}>{editandoId ? 'Actualizar' : 'Guardar'}</button>
               {editandoId && <button onClick={limpiar} style={{ padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', height: 38 }}>Cancelar</button>}
             </div>
             <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10, marginBottom: 0 }}>Precio unitario = precio de compra dividido entre cantidad comprada. Ejemplo: 25 kg por $15.500 = $620 por kg.</p>

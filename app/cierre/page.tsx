@@ -483,7 +483,7 @@ export default function CierrePage() {
 
           <div style={{ padding: 16, maxWidth: 600, margin: '0 auto' }}>
             {mensaje && (
-              <div style={{ padding: '10px 16px', borderRadius: 8, marginBottom: 12, background: mensaje.tipo === 'ok' ? 'rgba(76,175,125,.15)' : 'rgba(217,79,61,.15)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>
+              <div style={{ padding: '10px 16px', borderRadius: 8, marginBottom: 12, background: mensaje.tipo === 'ok' ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>
                 {mensaje.txt}
               </div>
             )}
@@ -506,7 +506,7 @@ export default function CierrePage() {
             )}
 
             {/* ESTADO CAJA ACTUAL */}
-            <div style={{ background: aperturaActiva ? 'rgba(76,175,125,.08)' : 'rgba(217,79,61,.08)', border: `1px solid ${aperturaActiva ? 'var(--green)' : 'var(--red)'}`, borderRadius: 14, padding: 16, marginBottom: 16 }}>
+            <div style={{ background: aperturaActiva ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${aperturaActiva ? 'var(--green)' : 'var(--red)'}`, borderRadius: 14, padding: 16, marginBottom: 16 }}>
               {aperturaActiva ? (
                 <>
                   <div style={{ fontSize: 11, color: 'var(--green)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10, fontWeight: 600 }}>
@@ -558,7 +558,7 @@ export default function CierrePage() {
             <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: 'var(--surface)', borderRadius: 10, padding: 4, border: '1px solid var(--border)' }}>
               {(isAdmin ? [['nuevo', '🔒 Cerrar Turno'], ['historial', '📋 Historial']] : [['nuevo', '🔒 Cerrar Turno']]).map(([val, label]) => (
                 <button key={val} onClick={() => setTab(val as 'nuevo' | 'historial')}
-                  style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: tab === val ? 'var(--gold)' : 'transparent', color: tab === val ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                  style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: tab === val ? 'var(--gold)' : 'transparent', color: tab === val ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                   {label}
                 </button>
               ))}
@@ -587,10 +587,10 @@ export default function CierrePage() {
                       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
                         <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ventas del turno</div>
                         {[
-                          { label: '💵 Efectivo', valor: resumenTurno.efectivo, color: '#4caf7d' },
-                          { label: '💳 Débito', valor: resumenTurno.debito, color: '#4a9fd4' },
-                          { label: '📱 QR MercadoPago', valor: resumenTurno.qr, color: '#9b59b6' },
-                          { label: '🏦 Transferencia', valor: resumenTurno.transferencia, color: '#e8a32c' },
+                          { label: '💵 Efectivo', valor: resumenTurno.efectivo, color: 'var(--green)' },
+                          { label: '💳 Débito', valor: resumenTurno.debito, color: 'var(--blue)' },
+                          { label: '📱 QR MercadoPago', valor: resumenTurno.qr, color: '#6D28D9' },
+                          { label: '🏦 Transferencia', valor: resumenTurno.transferencia, color: 'var(--amber)' },
                         ].map(item => (
                           <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
                             <span style={{ fontSize: 14, color: item.color }}>{item.label}</span>
@@ -599,8 +599,8 @@ export default function CierrePage() {
                         ))}
                         {gastosAfectoCajaDisplay > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
-                            <span style={{ fontSize: 14, color: '#e8584a' }}>🧾 Gastos de caja</span>
-                            <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600, color: '#e8584a' }}>-{fmt(gastosAfectoCajaDisplay)}</span>
+                            <span style={{ fontSize: 14, color: 'var(--red)' }}>🧾 Gastos de caja</span>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600, color: 'var(--red)' }}>-{fmt(gastosAfectoCajaDisplay)}</span>
                           </div>
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', alignItems: 'center' }}>
@@ -625,12 +625,12 @@ export default function CierrePage() {
                         </div>
                       ))}
                       {isAdmin && totalFisico > 0 && (
-                        <div style={{ background: diferencia === 0 ? 'rgba(76,175,125,.1)' : diferencia > 0 ? 'rgba(74,159,212,.1)' : 'rgba(217,79,61,.1)', border: `1px solid ${diferencia === 0 ? 'var(--green)' : diferencia > 0 ? '#4a9fd4' : 'var(--red)'}`, borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
+                        <div style={{ background: diferencia === 0 ? 'var(--green-bg)' : diferencia > 0 ? 'var(--blue-bg)' : 'var(--red-bg)', border: `1px solid ${diferencia === 0 ? 'var(--green)' : diferencia > 0 ? 'var(--blue)' : 'var(--red)'}`, borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: 13, color: 'var(--muted)' }}>
                               {diferencia === 0 ? '✅ Cuadra perfecto' : diferencia > 0 ? '📈 Sobrante' : '📉 Faltante'}
                             </span>
-                            <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: diferencia === 0 ? 'var(--green)' : diferencia > 0 ? '#4a9fd4' : 'var(--red)' }}>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: diferencia === 0 ? 'var(--green)' : diferencia > 0 ? 'var(--blue)' : 'var(--red)' }}>
                               {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}
                             </span>
                           </div>
@@ -649,7 +649,7 @@ export default function CierrePage() {
                     <button
                       onClick={cerrarTurnoActual}
                       disabled={cerrando || (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico)}
-                      style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'var(--surface2)' : 'var(--gold)', color: !efectivoFisico ? 'var(--muted)' : '#000', fontSize: 16, fontWeight: 700, cursor: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 0.5 : 1 }}>
+                      style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'var(--surface2)' : 'var(--gold)', color: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'var(--muted)' : 'var(--on-accent)', fontSize: 16, fontWeight: 700, cursor: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 0.5 : 1 }}>
                       {cerrando ? 'Cerrando...' : `🔒 Cerrar Turno ${turnoActualNum} e Imprimir`}
                     </button>
                   </>
@@ -673,7 +673,7 @@ export default function CierrePage() {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--gold)' }}>{fmt(c.ventas_total)}</div>
-                        <div style={{ fontSize: 11, color: c.diferencia === 0 ? 'var(--green)' : c.diferencia > 0 ? '#4a9fd4' : 'var(--red)', fontFamily: 'var(--mono)' }}>
+                        <div style={{ fontSize: 11, color: c.diferencia === 0 ? 'var(--green)' : c.diferencia > 0 ? 'var(--blue)' : 'var(--red)', fontFamily: 'var(--mono)' }}>
                           {c.diferencia >= 0 ? '+' : ''}{fmt(c.diferencia)}
                         </div>
                       </div>

@@ -177,8 +177,8 @@ export default function ReportesPage() {
   const aperturaHoy = aperturas.length > 0 ? aperturas[aperturas.length - 1] : null
 
   const METODO_COLOR: Record<string, string> = {
-    'Efectivo': '#4CAF7D', 'Débito': '#D4A843', 'Transferencia': '#64B5F6',
-    'Crédito': '#CE93D8', 'Cortesía': '#F48FB1',
+    'Efectivo': 'var(--green)', 'Débito': 'var(--amber)', 'Transferencia': '#1D5FD1',
+    'Crédito': '#7E22CE', 'Cortesía': '#BE185D',
   }
 
   const card = (titulo: string, valor: string, sub?: string, color?: string) => (
@@ -198,7 +198,7 @@ export default function ReportesPage() {
           <span style={{ fontFamily: 'var(--display)', fontSize: 20, letterSpacing: 3, color: 'var(--gold)' }}>{empresaNombre}</span>
           <nav style={{ display: 'flex', gap: 4, marginLeft: 16 }}>
             {[['/', '🧾 Caja'], ['/cocina', '🍳 Cocina'], ['/reportes', '📊 Reportes']].map(([href, label]) => (
-              <a key={href} href={href} style={{ padding: '5px 14px', borderRadius: 6, background: href === '/reportes' ? 'var(--gold)' : 'transparent', color: href === '/reportes' ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, textDecoration: 'none', border: '1px solid ' + (href === '/reportes' ? 'var(--gold)' : 'var(--border)') }}>{label}</a>
+              <a key={href} href={href} style={{ padding: '5px 14px', borderRadius: 6, background: href === '/reportes' ? 'var(--gold)' : 'transparent', color: href === '/reportes' ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 600, textDecoration: 'none', border: '1px solid ' + (href === '/reportes' ? 'var(--gold)' : 'var(--border)') }}>{label}</a>
             ))}
           </nav>
         </header>
@@ -208,12 +208,12 @@ export default function ReportesPage() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 24, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 2, marginRight: 8 }}>REPORTES</span>
             {(['hoy', 'semana', 'mes'] as Periodo[]).map(p => (
-              <button key={p} onClick={() => setPeriodo(p)} style={{ padding: '6px 16px', borderRadius: 20, border: '1px solid ' + (periodo === p ? 'var(--gold)' : 'var(--border)'), background: periodo === p ? 'var(--gold)' : 'transparent', color: periodo === p ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              <button key={p} onClick={() => setPeriodo(p)} style={{ padding: '6px 16px', borderRadius: 20, border: '1px solid ' + (periodo === p ? 'var(--gold)' : 'var(--border)'), background: periodo === p ? 'var(--gold)' : 'transparent', color: periodo === p ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                 {p === 'hoy' ? 'Hoy' : p === 'semana' ? 'Últimos 7 días' : 'Este mes'}
               </button>
             ))}
             {/* Filtro por día específico */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid ' + (periodo === 'dia' ? 'var(--gold)' : 'var(--border)'), borderRadius: 20, padding: '3px 12px', background: periodo === 'dia' ? 'rgba(212,168,67,.12)' : 'transparent' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid ' + (periodo === 'dia' ? 'var(--gold)' : 'var(--border)'), borderRadius: 20, padding: '3px 12px', background: periodo === 'dia' ? 'var(--gold-bg)' : 'transparent' }}>
               <span style={{ fontSize: 13, color: periodo === 'dia' ? 'var(--gold)' : 'var(--muted)', fontWeight: 600 }}>📅</span>
               <input
                 type="date"
@@ -385,7 +385,7 @@ export default function ReportesPage() {
                                   <option value="">Seleccionar</option>
                                   {['Efectivo', 'Débito', 'Crédito', 'Transferencia', 'Mixto', 'Cortesía'].map(m => <option key={m} value={m}>{m}</option>)}
                                 </select>
-                                <button onClick={() => corregirPago(v.id)} style={{ padding: '5px 8px', borderRadius: 6, border: 'none', background: 'var(--green)', color: '#000', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Guardar</button>
+                                <button onClick={() => corregirPago(v.id)} style={{ padding: '5px 8px', borderRadius: 6, border: 'none', background: 'var(--green)', color: 'var(--on-accent)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Guardar</button>
                                 <button onClick={() => { setEditandoPago(null); setNuevoPago('') }} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 11, cursor: 'pointer' }}>Cancelar</button>
                               </div>
                             ) : (
@@ -398,7 +398,7 @@ export default function ReportesPage() {
                           <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', fontWeight: 600 }}>{fmt(v.total)}</td>
                           <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{new Date(v.created_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                           <td style={{ padding: '9px 12px' }}>
-                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: (v.estado_pago === 'pagado' || v.estado_pago === 'cortesia') ? 'rgba(76,175,125,.15)' : 'rgba(201,168,76,.1)', color: v.estado_pago === 'pagado' ? 'var(--green)' : 'var(--gold)', border: `1px solid ${v.estado === 'listo' ? 'var(--green)' : 'var(--gold)'}` }}>
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: (v.estado_pago === 'pagado' || v.estado_pago === 'cortesia') ? 'var(--green-bg)' : 'var(--gold-bg)', color: v.estado_pago === 'pagado' ? 'var(--green)' : 'var(--gold)', border: `1px solid ${v.estado === 'listo' ? 'var(--green)' : 'var(--gold)'}` }}>
                               {v.estado} · {v.estado_pago === 'pagado' ? 'pagado' : v.estado_pago === 'cortesia' ? 'cortesía' : v.estado_pago === 'sin_identificar' ? 'sin identificar' : 'sin pagar'}
                             </span>
                           </td>

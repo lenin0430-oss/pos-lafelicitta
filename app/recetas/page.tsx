@@ -14,7 +14,7 @@ export default function RecetasPage() {
             <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 16px' }}>
               Las recetas ahora se crean y editan desde la pantalla de Costeo para evitar duplicar insumos.
             </p>
-            <Link href="/costeo" style={{ display: 'block', textAlign: 'center', padding: '12px 14px', borderRadius: 10, background: 'var(--gold)', color: '#000', fontWeight: 700, textDecoration: 'none', fontSize: 15 }}>
+            <Link href="/costeo" style={{ display: 'block', textAlign: 'center', padding: '12px 14px', borderRadius: 10, background: 'var(--gold)', color: 'var(--on-accent)', fontWeight: 700, textDecoration: 'none', fontSize: 15 }}>
               Ir a Costeo →
             </Link>
           </div>

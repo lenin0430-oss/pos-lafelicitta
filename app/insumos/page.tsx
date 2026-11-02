@@ -90,7 +90,7 @@ export default function InsumosPage() {
         <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>Ingredientes y precios de compra</p>
 
         {mensaje && (
-          <div style={{ background: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', color: '#000', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600 }}>
+          <div style={{ background: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', color: 'var(--on-accent)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600 }}>
             {mensaje.txt}
           </div>
         )}
@@ -110,7 +110,7 @@ export default function InsumosPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={guardar} disabled={guardando} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+            <button onClick={guardar} disabled={guardando} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
               {guardando ? 'Guardando...' : editandoId ? '✓ Actualizar' : '+ Agregar insumo'}
             </button>
             {editandoId && <button onClick={limpiar} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}>Cancelar</button>}

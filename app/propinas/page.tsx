@@ -109,7 +109,7 @@ export default function PropinasPage() {
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>Registro diario por empleado</div>
           {mensaje && (
             <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, fontSize: 13,
-              background: mensaje.tipo === 'ok' ? 'rgba(76,175,125,0.1)' : 'rgba(220,53,69,0.1)',
+              background: mensaje.tipo === 'ok' ? 'var(--green-bg)' : 'var(--red-bg)',
               border: '1px solid ' + (mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'),
               color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)' }}>
               {mensaje.txt}
@@ -140,7 +140,7 @@ export default function PropinasPage() {
                   padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13,
                   border: '1px solid ' + (m === metodo ? 'var(--gold)' : 'var(--border)'),
                   background: m === metodo ? 'var(--gold)' : 'transparent',
-                  color: m === metodo ? '#000' : 'var(--muted)'
+                  color: m === metodo ? 'var(--on-accent)' : 'var(--muted)'
                 }}>{m}</button>
               ))}
             </div>
@@ -151,7 +151,7 @@ export default function PropinasPage() {
           </div>
           <button onClick={registrarPropina} disabled={guardando} style={{
             width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: 'pointer',
-            background: 'var(--gold)', color: '#000', fontSize: 15, fontWeight: 700, fontFamily: 'var(--font)'
+            background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 15, fontWeight: 700, fontFamily: 'var(--font)'
           }}>
             {guardando ? 'Guardando...' : 'Registrar propina'}
           </button>

@@ -429,8 +429,8 @@ export default function CajaPage() {
   const qtyBtn: React.CSSProperties = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font)', padding: 0 }
 
   const estadoBadge = cobrada
-    ? { label: '✓ COBRADA', bg: 'var(--green)', color: '#000' }
-    : enviada ? { label: '🍳 EN COCINA', bg: '#D4A843', color: '#000' }
+    ? { label: '✓ COBRADA', bg: 'var(--green)', color: 'var(--on-accent)' }
+    : enviada ? { label: '🍳 EN COCINA', bg: 'var(--amber)', color: 'var(--on-accent)' }
     : null
 
   const panelMenuJSX = (
@@ -452,13 +452,13 @@ export default function CajaPage() {
         </div>
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar producto..." style={{ ...inp, background: 'var(--surface)' }} />
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔒 Cerrar Turno</button>
+          <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔒 Cerrar Turno</button>
           <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: 'var(--green)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔓 Abrir Turno</button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, padding: '10px 14px', overflowX: 'auto', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         {categorias.map(cat => (
-          <button key={cat} onClick={() => setCategoriaActiva(cat)} style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva ? '#000' : 'var(--muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}>{cat}</button>
+          <button key={cat} onClick={() => setCategoriaActiva(cat)} style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (cat === categoriaActiva ? 'var(--gold)' : 'var(--border)'), background: cat === categoriaActiva ? 'var(--gold)' : 'transparent', color: cat === categoriaActiva ? 'var(--on-accent)' : 'var(--muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}>{cat}</button>
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, alignContent: 'start' as const }}>
@@ -484,17 +484,17 @@ export default function CajaPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: 'linear-gradient(180deg, rgba(212,168,67,.28), rgba(212,168,67,.10))', border: '1px solid rgba(255,214,107,.50)', boxShadow: '0 0 18px rgba(212,168,67,.18)' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: 'var(--navy)', border: '1px solid var(--navy)' }}>
             <span style={{ fontSize: 20 }}>🧾</span>
-            <span style={{ fontFamily: 'var(--display)', fontSize: 21, letterSpacing: 2.4, color: '#FFD66B', fontWeight: 900, textShadow: '0 0 12px rgba(255,214,107,.25)' }}>
+            <span style={{ fontFamily: 'var(--display)', fontSize: 21, letterSpacing: 2.4, color: 'var(--on-navy)', fontWeight: 900 }}>
               COMANDA #{String(enviada ? ordenNum - 1 : ordenNum).padStart(3,'0')}
             </span>
           </div>
           {estadoBadge && <span style={{ fontSize: 11, background: estadoBadge.bg, color: estadoBadge.color, borderRadius: 8, padding: '2px 8px', fontWeight: 700 }}>{estadoBadge.label}</span>}
         </div>
-        <button onClick={nuevaComanda} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: 'linear-gradient(180deg, rgba(212,168,67,.28), rgba(212,168,67,.10))', border: '1px solid rgba(255,214,107,.50)', boxShadow: '0 0 18px rgba(212,168,67,.18)', cursor: 'pointer', fontFamily: 'var(--font)' }}>
+        <button onClick={nuevaComanda} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: 'var(--navy)', border: '1px solid var(--navy)', cursor: 'pointer', fontFamily: 'var(--font)' }}>
             <span style={{ fontSize: 20 }}>➕</span>
-            <span style={{ fontFamily: 'var(--display)', fontSize: 21, letterSpacing: 2.4, color: '#FFD66B', fontWeight: 900, textShadow: '0 0 12px rgba(255,214,107,.25)' }}>
+            <span style={{ fontFamily: 'var(--display)', fontSize: 21, letterSpacing: 2.4, color: 'var(--on-navy)', fontWeight: 900 }}>
               NUEVA
             </span>
           </button>
@@ -529,9 +529,9 @@ export default function CajaPage() {
         ))}
       </div>
 
-      {enviada && !cobrada && !esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(212,168,67,0.08)', border: '1px solid var(--gold)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', textAlign: 'center' }}>🍳 En cocina — puedes editar y presionar Actualizar cocina</div>}
-      {enviada && !cobrada && esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(0,200,100,0.08)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>🔄 Edita la comanda y actualiza cocina</div>}
-      {cobrada && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'rgba(76,175,125,0.08)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>✅ Cobrada — haz clic en "Nueva" para la siguiente</div>}
+      {enviada && !cobrada && !esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'var(--gold-bg)', border: '1px solid var(--gold)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', textAlign: 'center' }}>🍳 En cocina — puedes editar y presionar Actualizar cocina</div>}
+      {enviada && !cobrada && esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>🔄 Edita la comanda y actualiza cocina</div>}
+      {cobrada && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>✅ Cobrada — haz clic en "Nueva" para la siguiente</div>}
 
       <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', marginBottom: 4, fontSize: 13, color: 'var(--muted)' }}>
@@ -543,12 +543,12 @@ export default function CajaPage() {
         <div style={{ display: 'flex', gap: 8 }}>
           {/* PASO 1: Enviar a cocina */}
           <button onClick={enviarACocina} disabled={guardando || items.length === 0 || cobrada}
-            style={{ flex: 1, minHeight: 58, padding: '14px 12px', borderRadius: 14, border: items.length === 0 || cobrada ? '1px solid rgba(255,255,255,.08)' : '1px solid #FFD66B', background: items.length === 0 || cobrada ? 'rgba(255,255,255,.03)' : 'linear-gradient(180deg, #FFD66B, #D4A843)', color: items.length === 0 || cobrada ? 'rgba(255,255,255,.25)' : '#111', fontSize: 17, fontWeight: 900, cursor: items.length === 0 || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', boxShadow: items.length === 0 || cobrada ? 'none' : '0 0 18px rgba(212,168,67,.24)', letterSpacing: .2 }}>
+            style={{ flex: 1, minHeight: 58, padding: '14px 12px', borderRadius: 14, border: items.length === 0 || cobrada ? '1px solid var(--border-strong)' : '1px solid var(--gold)', background: items.length === 0 || cobrada ? 'var(--surface2)' : 'var(--gold)', color: items.length === 0 || cobrada ? 'var(--muted)' : 'var(--on-accent)', fontSize: 17, fontWeight: 900, cursor: items.length === 0 || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', letterSpacing: .2 }}>
             {guardando ? '...' : enviada ? '🔄 Actualizar cocina' : '🖨 Enviar a cocina'}
           </button>
           {/* PASO 2: Cobrar */}
           <button onClick={abrirCobro} disabled={!enviada || cobrada}
-            style={{ flex: 1, minHeight: 58, padding: '14px 12px', borderRadius: 14, border: !enviada ? '1px solid rgba(255,255,255,.08)' : cobrada ? '1px solid var(--green)' : '1px solid #4CAF7D', background: cobrada ? 'linear-gradient(180deg, #65d89a, #4CAF7D)' : !enviada ? 'rgba(255,255,255,.03)' : 'linear-gradient(180deg, #65d89a, #4CAF7D)', color: !enviada ? 'rgba(255,255,255,.25)' : '#06140b', fontSize: 17, fontWeight: 900, cursor: !enviada || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', boxShadow: !enviada ? 'none' : '0 0 18px rgba(76,175,125,.24)', letterSpacing: .2 }}>
+            style={{ flex: 1, minHeight: 58, padding: '14px 12px', borderRadius: 14, border: !enviada ? '1px solid var(--border-strong)' : '1px solid var(--green)', background: !enviada ? 'var(--surface2)' : 'var(--green)', color: !enviada ? 'var(--muted)' : 'var(--on-accent)', fontSize: 17, fontWeight: 900, cursor: !enviada || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', letterSpacing: .2 }}>
             {cobrada ? '✓ Cobrada' : '💳 Cobrar'}
           </button>
         </div>
@@ -565,7 +565,7 @@ export default function CajaPage() {
           <div style={{ fontFamily: 'var(--display)', fontSize: 24, letterSpacing: 3, color: 'var(--gold)', marginBottom: 8 }}>CAJA CERRADA</div>
           <div style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', marginBottom: 32, maxWidth: 280 }}>El administrador no ha abierto la caja hoy.</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 280 }}>
-            <button onClick={() => window.location.href = '/cierre'} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: '#000', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔓 Abrir Caja (Admin)</button>
+            <button onClick={() => window.location.href = '/cierre'} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔓 Abrir Caja (Admin)</button>
             <button onClick={verificarApertura} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔄 Verificar nuevamente</button>
             <button onClick={() => { localStorage.removeItem('lf_sesion'); window.location.href = '/login' }} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>🚪 Cambiar usuario</button>
           </div>
@@ -612,8 +612,8 @@ export default function CajaPage() {
       </div>
 
       {/* HEADER */}
-      <header className="no-print" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 14px', height: 52, position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <header className="no-print pos-header">
+        <div className="pos-brand">
   <img
     src={empresaLogo}
     alt={empresaNombre}
@@ -622,35 +622,35 @@ export default function CajaPage() {
       height: 48,
       objectFit: 'contain',
       borderRadius: 999,
-      boxShadow: '0 0 16px rgba(212,168,67,.18)'
+      background: '#fff', border: '2px solid #fff'
     }}
   />
-  <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
-    <span style={{ fontFamily: 'var(--display)', fontSize: 22, letterSpacing: 3, color: 'var(--gold)', fontWeight: 900 }}>
+  <div className="pos-brand-copy">
+    <span style={{ fontFamily: 'var(--display)', fontSize: 22, letterSpacing: 3, color: 'var(--on-navy)', fontWeight: 900 }}>
       {empresaNombre}
     </span>
-    <span style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', letterSpacing: 2, marginTop: 4 }}>
+    <span style={{ fontSize: 11, color: 'var(--on-navy-muted)', letterSpacing: 2, marginTop: 4 }}>
       POS · CAJA
     </span>
   </div>
 </div>
-        <nav style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+        <nav className="pos-header-nav" aria-label="Navegación principal">
           {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/propinas', '💰'], ['/reportes', '📊']].map(([href, icon]) => (
-            <a key={href} href={href} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? '#000' : 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
+            <a key={href} href={href} aria-label={({'/':'Caja','/cocina':'Cocina','/gastos':'Gastos','/propinas':'Propinas','/reportes':'Reportes'} as Record<string,string>)[href]} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? 'var(--on-accent)' : 'var(--on-navy-muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
           ))}
-          {esAdmin && <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--green)', fontSize: 18, textDecoration: 'none' }}>🔓</a>}
+          {esAdmin && <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: '#86EFAC', fontSize: 18, textDecoration: 'none' }}>🔓</a>}
           {esAdmin && <a href="/configuracion/mercadopago" title="Mercado Pago" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>💳</a>}
         </nav>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 12 }}>
+        <div className="pos-header-status">
           {mensaje && <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--gold)' }}>{hora}</span>
+          <span className="pos-header-clock">{hora}</span>
           <SesionBar />
         </div>
       </header>
 
       {/* DESKTOP */}
       <div className="no-print desktop-layout" style={{ display: 'none' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', height: 'calc(100vh - 52px)', overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', height: 'calc(100dvh - var(--pos-header-height))', overflow: 'hidden' }}>
           <div style={{ borderRight: '1px solid var(--border)', overflow: 'hidden' }}>{panelMenuJSX}</div>
           <div style={{ overflow: 'hidden' }}>{panelComandaJSX}</div>
         </div>
@@ -658,20 +658,20 @@ export default function CajaPage() {
 
       {/* MOBILE */}
       <div className="no-print mobile-layout" style={{ display: 'none' }}>
-        <div style={{ display: 'flex', background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 52, zIndex: 99 }}>
+        <div style={{ display: 'flex', background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 'var(--pos-header-height)', zIndex: 99 }}>
           <button onClick={() => setTabMovil('menu')} style={{ flex: 1, padding: '12px', border: 'none', background: 'transparent', color: tabMovil === 'menu' ? 'var(--gold)' : 'var(--muted)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', borderBottom: tabMovil === 'menu' ? '2px solid var(--gold)' : '2px solid transparent' }}>🍽️ Menú</button>
           <button onClick={() => setTabMovil('comanda')} style={{ flex: 1, padding: '12px', border: 'none', background: 'transparent', color: tabMovil === 'comanda' ? 'var(--gold)' : 'var(--muted)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', borderBottom: tabMovil === 'comanda' ? '2px solid var(--gold)' : '2px solid transparent', position: 'relative' }}>
-            🧾 Comanda {totalItems > 0 && <span style={{ background: enviada ? (cobrada ? 'var(--green)' : '#D4A843') : 'var(--gold)', color: '#000', borderRadius: 10, fontSize: 11, fontWeight: 700, padding: '1px 6px', marginLeft: 4 }}>{totalItems}</span>}
+            🧾 Comanda {totalItems > 0 && <span style={{ background: enviada ? (cobrada ? 'var(--green)' : 'var(--amber)') : 'var(--gold)', color: 'var(--on-accent)', borderRadius: 10, fontSize: 11, fontWeight: 700, padding: '1px 6px', marginLeft: 4 }}>{totalItems}</span>}
           </button>
         </div>
-        <div style={{ height: 'calc(100vh - 104px)', overflow: 'hidden' }}>
+        <div style={{ height: 'calc(100dvh - var(--pos-header-height) - 52px)', overflow: 'hidden' }}>
           {tabMovil === 'menu' ? panelMenuJSX : panelComandaJSX}
         </div>
       </div>
 
       {/* MODAL COBRO */}
       {modalCobro && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(11,37,69,0.65)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, fontFamily: 'var(--font)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
@@ -690,7 +690,7 @@ export default function CajaPage() {
               </label>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {[...metodosPago, 'Mixto'].map(m => (
-                  <button key={m} onClick={() => seleccionarMetodoPago(m)} style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? '#000' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
+                  <button key={m} onClick={() => seleccionarMetodoPago(m)} style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
                 ))}
               </div>
             </div>
@@ -748,7 +748,7 @@ export default function CajaPage() {
               )}
             </div>
             <button onClick={confirmarCobro} disabled={cobrando || !pagoValido}
-              style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: pagoValido ? 'var(--green)' : 'var(--surface2)', color: pagoValido ? '#000' : 'var(--muted)', fontSize: 15, fontWeight: 700, cursor: pagoValido ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)', opacity: pagoValido ? 1 : 0.5 }}>
+              style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: pagoValido ? 'var(--green)' : 'var(--surface2)', color: pagoValido ? 'var(--on-accent)' : 'var(--muted)', fontSize: 15, fontWeight: 700, cursor: pagoValido ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)', opacity: pagoValido ? 1 : 0.5 }}>
               {cobrando ? 'Registrando...' : `✓ Confirmar cobro ${fmt(total)}`}
             </button>
           </div>
