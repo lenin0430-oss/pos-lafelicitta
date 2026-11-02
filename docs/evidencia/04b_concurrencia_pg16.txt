@@ -1,0 +1,26 @@
+Resultado de tests/concurrencia_04b.sh — 02/11/2026 — PostgreSQL 16.15 LOCAL y aislado (socket unix, sin red), dos o más conexiones psql independientes.
+Migraciones aplicadas en cada escenario: 03 → 04 → 04b (control C4: solo 03 → 04).
+
+C1  dos reservas simultáneas de la MISMA venta (04): una gana, la otra recibe 23505
+  OK   queda 1 intento activo
+  OK   la segunda conexión fue rechazada por el índice único
+C2  una conexión crea el cobro A sobre la venta; otra intenta CAMBIAR la empresa de esa venta a B en paralelo (con 04b)
+  OK   la segunda conexión ESPERÓ el bloqueo de la primera (1.55 s)
+  OK   el cambio de empresa fue rechazado una vez confirmado el cobro
+  OK   0 cobros incompatibles al final
+C3  orden inverso: una conexión cambia la empresa de la venta a B (sin confirmar); otra intenta cobrar como A
+  OK   el cobro ESPERÓ el cambio pendiente (1.55 s)
+  OK   el cobro fue rechazado (la venta ya es de B)
+  OK   no quedó ningún cobro
+C4  CONTROL sin 04b: el mismo cruce SÍ deja un cobro de A sobre una venta de B (demuestra que la carrera es real)
+  OK   sin 04b queda 1 cobro incompatible (esperado en el control)
+C5  A y B cobran a la vez: A su venta, B la venta de A
+  OK   solo quedó el cobro de A
+  OK   el de B fue rechazado
+C6  10 conexiones × 10 intentos (5 de A sobre su venta y 5 de B sobre la venta de A, cada una): ninguna cruza negocios
+  OK   50 cobros de A aceptados, 0 de B, 0 incompatibles
+
+RESULTADO: TODO OK
+
+Hallazgo previo (primera versión de 04b, solo trigger en pagos_point, sin bloqueo ni protección en ventas), mismo cruce que C3:
+  cobros incompatibles tras la carrera: 1  -> la primera versión de 04b NO era segura bajo concurrencia; por eso se añadió FOR SHARE y el trigger sobre ventas.

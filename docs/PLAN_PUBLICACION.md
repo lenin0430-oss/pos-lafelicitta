@@ -33,3 +33,7 @@ Rama `claude/preparacion-2026-11-02`. Producción hoy: 8142dc7 (Vercel `pos-lafe
 | `06_REVERSION` | Solo las marcas de archivo (cocina vuelve a mostrar el histórico); no toca estados. |
 
 Orden de reversión completo: código (Vercel) → 05 → 06 → 04 → 03. Después de cualquier reversión de 03/04, el código nuevo ya **no** puede estar desplegado: responde 503 "Falta migración" al cobrar con Point en lugar de operar a medias.
+
+
+## Migración 04b (aislamiento entre negocios) — añadido 02/11/2026
+Orden: 03 → 04 → 04b, cada una como UNA transacción (sin dividir). Antes de 04b: ejecutar `supabase/verificar_04b.sql` (solo lectura) y revisar los cobros históricos incompatibles; 04b no los corrige. Reversión: 04b → 04 → 03. Ver `docs/DECISION_04B_TRIGGER_VS_FK.md`. Pendiente antes de producción: prueba de aplicación/reversión en `mesapos-pruebas-aislado` y concurrencia en PostgreSQL con la versión de Supabase.

@@ -246,3 +246,88 @@ test("04b: un negocio B NO puede crear cobros sobre una venta del negocio A; cad
   await db.query("insert into pagos_point (restaurante_id,venta_id,monto,estado) values ($1,$2,1,'failed')", [b, va]); // sin 04b vuelve a permitirse
   assert.equal((await val(db, "select count(*)::int n from pg_trigger where tgname='trg_pagos_point_valida_venta'"))[0].n, 0);
 });
+
+// ---------- 04b ampliada: cadena completa, históricos, nulos y cambios posteriores ----------
+const A = "aaaaaaaa-0000-0000-0000-00000000000a", B = "bbbbbbbb-0000-0000-0000-00000000000b";
+async function baseCadena() {
+  const db = await nuevaBase();
+  const va = (await val(db, "insert into ventas (numero,mesa,total,estado,empresa_id) values (101,'A1',5000,'pendiente',$1) returning id", [A]))[0].id;
+  const vb = (await val(db, "insert into ventas (numero,mesa,total,estado,empresa_id) values (201,'B1',6000,'pendiente',$1) returning id", [B]))[0].id;
+  const vn = (await val(db, "insert into ventas (numero,mesa,total,estado) values (301,'N1',1000,'pendiente') returning id"))[0].id; // venta heredada SIN empresa
+  const huella = async () => (await val(db, "select md5(string_agg(id::text||venta_id||coalesce(restaurante_id,'')||monto||estado||coalesce(mp_order_id,''),',' order by id)) h, count(*)::int n from pagos_point where mp_order_id like 'ORD-F%'"))[0];
+  return { db, va, vb, vn, huella };
+}
+const ins = (db, rest, venta, est = "reservado") => db.query("insert into pagos_point (restaurante_id,venta_id,monto,estado) values ($1,$2,5000,$3)", [rest, venta, est]);
+
+test("04b (cadena 03→04→04b): reserva e idempotencia de 04 siguen funcionando y B sigue sin poder cobrar la venta de A", T, async () => {
+  const { db, va, vb } = await baseCadena();
+  await db.exec(sql("03_estados_separados.sql"));
+  await db.exec(sql("04_pagos_point_reserva.sql"));
+  await db.exec(sql("04b_pagos_point_aislamiento.sql"));
+  const r = await Promise.allSettled([ins(db, A, va), ins(db, A, va)]);          // dos reservas simultáneas de la misma venta
+  assert.equal(r.filter((x) => x.status === "fulfilled").length, 1);
+  assert.equal(r.find((x) => x.status === "rejected").reason.code, "23505");
+  await assert.rejects(ins(db, B, va), (e) => e.code === "23514");              // B sobre venta de A
+  await ins(db, B, vb);                                                          // B sobre la suya
+  await db.query("update pagos_point set estado='failed', detalle='rechazado por terminal' where restaurante_id=$1 and venta_id=$2", [A, va]);
+  await ins(db, A, va);                                                          // reintento tras fallo: nueva fila, nueva clave
+  const k = await val(db, "select clave_idempotencia from pagos_point where restaurante_id=$1 and venta_id=$2", [A, va]);
+  assert.equal(k.length, 2); assert.notEqual(String(k[0].clave_idempotencia), String(k[1].clave_idempotencia));
+  await db.query("update pagos_point set mp_order_id='ORD-X1', estado='created' where restaurante_id=$1 and venta_id=$2 and estado='reservado'", [A, va]); // lo que hace la ruta al recibir la orden
+  await db.query("update pagos_point set estado='processed' where mp_order_id='ORD-X1'");                                                            // lo que hace el webhook
+});
+
+test("04b: cobros históricos incompatibles NO se corrigen solos, se listan, y sus actualizaciones normales siguen funcionando", T, async () => {
+  const { db, huella } = await baseCadena();
+  await db.exec(sql("04_pagos_point_reserva.sql"));
+  const antes = await huella();
+  await db.exec(sql("04b_pagos_point_aislamiento.sql"));
+  assert.deepEqual(await huella(), antes, "04b no modifica ninguna fila histórica");
+  const lista = await val(db, sql("verificar_04b.sql").replace(/;\s*$/, ""));
+  assert.deepEqual(lista.map((x) => x.mp_order_id).sort(), ["ORD-F1", "ORD-F2"]);
+  assert.ok(lista.every((x) => x.motivo === "venta_inexistente"));
+  assert.deepEqual(await huella(), antes, "listar no corrige");
+  await db.query("update pagos_point set estado='processed', monto=7000 where mp_order_id='ORD-F2'");   // webhook/ajustes sobre un histórico: permitido
+  await assert.rejects(db.query("update pagos_point set restaurante_id='B' where mp_order_id='ORD-F1'"), (e) => e.code === "23514"); // reasignarlo SÍ se valida
+  await db.query("delete from pagos_point where mp_order_id='ORD-F1'");
+  const txt = sql("verificar_04b.sql").replace(/--.*$/gm, "");
+  assert.ok(!/\b(insert|update|delete|drop|alter|create|truncate)\b/i.test(txt), "verificar_04b.sql es solo lectura");
+});
+
+test("04b: nulos, venta sin empresa y venta inexistente se rechazan; cobros sin negocio histórico no rompen", T, async () => {
+  const { db, va, vn } = await baseCadena();
+  await db.exec(sql("04_pagos_point_reserva.sql"));
+  await db.query("insert into pagos_point (venta_id,monto,estado,mp_order_id) values ('legado',100,'processed','ORD-NULL')"); // histórico sin restaurante_id
+  await db.exec(sql("04b_pagos_point_aislamiento.sql"));
+  await assert.rejects(db.query("insert into pagos_point (venta_id,monto,estado) values ($1,1,'reservado')", [va]), (e) => e.code === "23514"); // restaurante_id NULL
+  await assert.rejects(db.query("insert into pagos_point (restaurante_id,monto,estado) values ($1,1,'reservado')", [A]), (e) => ["23502", "23514"].includes(e.code)); // venta_id NULL
+  await assert.rejects(ins(db, A, vn), (e) => e.code === "23514");                       // venta sin empresa
+  await assert.rejects(ins(db, "", va), (e) => e.code === "23514");                       // cadena vacía
+  await assert.rejects(ins(db, A, "no-es-uuid"), (e) => e.code === "23514");             // id que no es uuid no provoca error de cast
+  await db.query("update pagos_point set estado='failed' where mp_order_id='ORD-NULL'");   // el histórico sin negocio sigue actualizable
+  assert.equal((await val(db, "select count(*)::int n from pagos_point where restaurante_id is null"))[0].n, 1);
+});
+
+test("04b: cambiar después la empresa de una venta no puede dejar un cobro de otro negocio; sí se puede si no hay cobros o si coincide", T, async () => {
+  const { db, va, vb } = await baseCadena();
+  await db.exec(sql("04_pagos_point_reserva.sql"));
+  await db.exec(sql("04b_pagos_point_aislamiento.sql"));
+  await ins(db, A, va, "processed");
+  await assert.rejects(db.query("update ventas set empresa_id=$1 where id=$2", [B, va]), (e) => e.code === "23514");   // tiene cobro de A
+  await assert.rejects(db.query("update ventas set empresa_id=null where id=$1", [va]), (e) => e.code === "23514");
+  await assert.rejects(db.query("update ventas set id=gen_random_uuid() where id=$1", [va]), (e) => e.code === "23514");
+  await db.query("update ventas set empresa_id=$1, mesa='A9', total=5100 where id=$2", [A, va]);                          // mismo negocio y otras columnas: ok
+  await db.query("update ventas set empresa_id=$1 where id=$2", [A, vb]);                                                  // vb no tiene cobros: se puede mover
+  await assert.rejects(ins(db, B, vb), (e) => e.code === "23514");                                                         // y ahora es de A, B ya no puede cobrarla
+  await assert.equal((await val(db, "select empresa_id::text e from ventas where id=$1", [va]))[0].e, A);
+});
+
+test("04b: la reversión quita ambos triggers y deja el esquema de 04 intacto", T, async () => {
+  const { db, va } = await baseCadena();
+  await db.exec(sql("04_pagos_point_reserva.sql")); await db.exec(sql("04b_pagos_point_aislamiento.sql"));
+  await db.exec(sql("04b_pagos_point_aislamiento_REVERSION.sql"));
+  assert.equal((await val(db, "select count(*)::int n from pg_trigger where tgname in ('trg_pagos_point_valida_venta','trg_ventas_protege_pagos_point')"))[0].n, 0);
+  assert.equal((await val(db, "select count(*)::int n from pg_proc where proname in ('pagos_point_valida_venta','ventas_protege_pagos_point')"))[0].n, 0);
+  assert.equal((await val(db, "select count(*)::int n from pg_indexes where indexname='pagos_point_un_intento_activo'"))[0].n, 1);
+  await db.query("update ventas set empresa_id=$1 where id=$2", [B, va]);   // vuelve a permitirse
+});

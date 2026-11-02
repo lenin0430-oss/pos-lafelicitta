@@ -127,3 +127,12 @@ Datos ficticios; respaldo previo en `respaldo_ventas_pre03` (63) y `respaldo_pag
 - 04 aplicada: hash de pagos idéntico, índice único creado, segundo intento activo de la misma venta rechazado por la base, otro negocio con la misma venta permitido.
 - 06 aplicada: 60 archivadas, 0 pendientes/en proceso archivadas, `ventas.estado` y hash sin cambios; su reversión deja 0 archivadas, hash igual.
 - Reversión de 04 (drop index + drop de 3 columnas): **bloqueada por una aprobación pendiente de Supabase**; 04 sigue aplicada. Falta revertir 04 y 03 y verificar.
+
+## 04b — aislamiento entre negocios (02/11/2026, noche)
+Estado: **propuesta probada en PGlite y en PostgreSQL 16 local; NO aplicada en ningún proyecto remoto.** Operaciones remotas bloqueadas: la aprobación obligatoria de Supabase venció 4 veces sin respuesta; la reversión de 04 (y luego 03) en `mesapos-pruebas-aislado` sigue pendiente. No se repiten solicitudes ni se dividen operaciones.
+- Corrección propia: yo había afirmado que otro negocio podía tener un intento sobre la misma venta; el índice único es por negocio, pero la base no comprobaba que la venta fuera del negocio. La API (`/api/point/cobrar`) sí filtra por `empresa_id`.
+- Fallo encontrado en la primera 04b (solo trigger sin bloqueo): bajo concurrencia dejaba un cobro de A sobre una venta de B (1 caso medido). Corregido: `FOR SHARE` + trigger en `ventas` (ver `docs/DECISION_04B_TRIGGER_VS_FK.md`).
+- Pruebas: `tests/migracion.test.mjs` 19/19 (cadena 03→04→04b, históricos incompatibles sin corregir, nulos, cambio posterior de empresa, reversión); `tests/concurrencia_04b.sh` en PostgreSQL 16.15 local: C1–C6 OK (evidencia en `docs/evidencia/04b_concurrencia_pg16.txt`).
+- Clave foránea compuesta evaluada (`tests/pg_real/fk_alternativa.sql`): no aplicable hoy (text vs uuid, históricos no convertibles, hueco con NULL); queda como mejora futura.
+- Pendiente: repetir aplicación/reversión 03→04→04b en el proyecto de pruebas; repetir la concurrencia en un PostgreSQL con la versión de Supabase; correr `verificar_04b.sql` en producción (solo lectura, requiere tu autorización) para ver si hay cobros históricos incompatibles.
+- Procedimiento de producción propuesto: una transacción por migración (03 → 04 → 04b); reversión inversa 04b → 04 → 03; 06 aparte.
