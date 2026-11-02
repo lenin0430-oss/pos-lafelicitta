@@ -104,3 +104,9 @@ Resultado: **131 iguales · 27 con precio distinto (acordados) · 5 a retirar ·
 
 ## 10. Reversión
 Ver `docs/PLAN_PUBLICACION.md` (tabla de qué se pierde en cada reversión). Código: `git checkout main`, tag `punto-retorno-2026-11-02` o `respaldos/pos-8142dc7.bundle`; Vercel: rollback a `dpl_Dbn1AG…` (8142dc7).
+
+## 2026-11-02 (tarde) · Integración sobre main 1ba0afd (Claude)
+- Rama de preparación fusionada con origin/main 1ba0afd (diseño publicado + dependencias parcheadas); un conflicto (reportes) resuelto. Catálogo ya aplicado en producción: no se repite.
+- Nuevo: `lib/rotacionSecretoBot.ts`, `tests/rotacionBot.test.mjs` (rotación completa con bot falso: el secreto anterior se rechaza), `tests/cobrosCierre.test.mjs` (cierre conciliado por método y turno, webhook repetido, firma inválida, cron sin Bearer), `docs/ROTACION_SECRETO_BOT.md`, `scripts/verificar-rotacion-bot.mjs`, `docs/PLAN_PUBLICACION.md` corregido (rotación coordinada con el despliegue POS+bot).
+- Pruebas: 58/58 en Node (VM), sin omitidas. Pendiente repetir en Windows (`scripts/verificar-windows.ps1`: tsc + build).
+- Migraciones 03/04/06 en el proyecto de PRUEBAS (`mesapos-pruebas-aislado`): en curso; el servidor Supabase pidió una confirmación de usuario que no se contestó (no aplicadas aún).

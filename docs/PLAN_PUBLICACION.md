@@ -15,9 +15,10 @@ Rama `claude/preparacion-2026-11-02`. Producción hoy: 8142dc7 (Vercel `pos-lafe
 | 1b | Aplicar `06_archivar_cocina_historica_PROPUESTA.sql` (tras aprobar el corte) | Cocina muestra solo pendiente/en proceso/listo de hoy; `ventas.estado` sin cambios | `06_…_REVERSION.sql` |
 | 2 | Aplicar `04_pagos_point_reserva.sql` | Índice único presente; sin `reservado` huérfanos | `04_…_REVERSION.sql` |
 | 3 | (Tras aprobación) `05_reconciliar_menu_PROPUESTA.sql` | 27 precios, 5 desactivados, 7 altas; ventas intactas | `05_…_REVERSION.sql` |
-| 4 | Crear variables en Vercel: `CRON_SECRET`, `BOT_SECRET`, `BOT_URL`, `BOT_EMPRESA_ID` y preparar el bot para aceptar ambos secretos (PLAN de rotación, Fase B 1–2) | — | — |
+| 4 | Crear variables en Vercel: `CRON_SECRET`, `BOT_SECRET` (el NUEVO), `BOT_URL`, `BOT_EMPRESA_ID`, `SESSION_SECRET`. **Antes de desplegar el POS**, el bot debe aceptar ambos secretos (fase A de `docs/ROTACION_SECRETO_BOT.md`) | Un cierre de prueba con el secreto antiguo sigue funcionando | Revertir variables |
 | 5 | Desplegar la rama (fusionar a `main` solo tras aprobar) | Humo: abrir POS, cocina (se ven comandas no entregadas), crear comanda, cobrar manual, cobrar Point de monto bajo (con autorización), cierre = cobros del turno, reportes con 3 cifras | Rollback Vercel a `dpl_Dbn1AG…` (la base 03/04 es compatible con el código viejo) |
-| 6 | Rotación (Fase B 3–5) | cierre de prueba con sesión OK; sin sesión 401; secreto antiguo rechazado | Bot acepta ambos hasta confirmar |
+| 5b | **Rotación coordinada con este mismo despliegue (no se deja para después):** fase B (POS ya envía el nuevo) y, tras la prueba de humo, fase C: el bot retira el secreto antiguo y se ejecuta `scripts/verificar-rotacion-bot.mjs` | Cierre con sesión OK; sin sesión 401; otra empresa 403; **el secreto antiguo es rechazado por el bot** | Antes de C el bot aún acepta ambos; después de C, reconfigurar el bot |
+| 6 | Verificar que ningún despliegue conserva el secreto antiguo (ni `vercel.json`, ni variables, ni historial visible) y que el cron semanal responde 401 sin `CRON_SECRET` | Pruebas de `tests/rotacionBot.test.mjs` y humo en producción | — |
 | 7 | Más adelante, cuando no quede código antiguo: `03b_retirar_compatibilidad.sql` | — | recrear el disparador de 03 |
 
 ## Reversión y qué información nueva se pierde
