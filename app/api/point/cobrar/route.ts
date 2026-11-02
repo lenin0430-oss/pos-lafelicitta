@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { mpFetch, supabaseAdmin } from "@/lib/mp";
 import { restauranteDeLaSesion } from "@/lib/restaurante";
+import { ordenPointReutilizable } from "@/lib/pointGuard";
 
 // POST /api/point/cobrar  body: { ventaId: string, monto: number }
 export async function POST(req: Request) {
@@ -30,6 +31,17 @@ export async function POST(req: Request) {
   if (!cuenta) return NextResponse.json({ error: "Conecta Mercado Pago primero" }, { status: 400 });
   if (!cuenta.terminal_id) return NextResponse.json({ error: "Elige tu Point en Configuración" }, { status: 400 });
 
+  // Anti-duplicado: si ya hay una orden viva (< 5 min) para esta venta y monto, se reutiliza.
+  const { data: previos } = await db
+    .from("pagos_point")
+    .select("mp_order_id, monto, estado, created_at")
+    .eq("restaurante_id", restauranteId)
+    .eq("venta_id", String(ventaId))
+    .order("created_at", { ascending: false })
+    .limit(5);
+  const viva = ordenPointReutilizable(previos ?? [], monto);
+  if (viva) return NextResponse.json({ orderId: viva.mp_order_id, estado: viva.estado, reutilizada: true });
+
   const ref = `venta_${String(ventaId).replace(/[^a-zA-Z0-9_-]/g, "")}_${Date.now()}`.slice(0, 64);
 
   const r = await mpFetch(restauranteId, "/v1/orders", {
@@ -54,13 +66,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: r.status });
   }
 
-  await db.from("pagos_point").insert({
+  const { error: errRegistro } = await db.from("pagos_point").insert({
     restaurante_id: restauranteId,
     venta_id: String(ventaId),
     mp_order_id: data.id,
     monto,
     estado: data.status,
   });
+  if (errRegistro) {
+    // La orden YA existe en Mercado Pago: no ocultar el fallo; dejar rastro para conciliar.
+    console.error("Point: orden creada pero no registrada", { orderId: data.id, ventaId, error: errRegistro.message });
+    return NextResponse.json(
+      { error: "El cobro se envió al Point pero no se pudo registrar. No repitas el cobro; avisa al administrador.", orderId: data.id },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({ orderId: data.id, estado: data.status });
 }
