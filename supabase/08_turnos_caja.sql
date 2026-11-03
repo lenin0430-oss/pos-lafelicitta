@@ -148,6 +148,8 @@ begin
   if new.empresa_id is null then return new; end if;
   if tg_op = 'UPDATE' and old.estado_pago = 'pagado' and new.estado_pago is distinct from 'pagado' then
     -- La anulación queda registrada con su turno; si ese turno ya estaba cerrado, su cierre NO cambia (usa su instantánea).
+    perform 1 from public.aperturas_caja a join public.cobros_turno c on c.turno_id = a.id
+      where c.venta_id = new.id and c.anulado_at is null order by a.id for share of a;   -- serializa con el cierre
     insert into public.turno_eventos(empresa_id, turno_id, evento, detalle)
       select new.empresa_id, c.turno_id,
              case when a.estado = 'cerrada' then 'anulacion_posterior_al_cierre' else 'cobro_anulado' end,
@@ -201,7 +203,8 @@ begin
     return new;
   end if;
   -- UPDATE / DELETE: nada de lo registrado en un turno v2 cerrado se modifica ni se borra.
-  select * into a from public.aperturas_caja where id = old.apertura_id;
+  -- Bloqueo compartido del turno: se serializa con turno_cerrar (FOR UPDATE) en ambos órdenes.
+  select * into a from public.aperturas_caja where id = old.apertura_id for share;
   if found and a.modelo = 'v2' and a.estado <> 'abierta' then raise exception 'TURNO_CERRADO' using errcode = 'P0411'; end if;
   if tg_op = 'UPDATE' and new.apertura_id is distinct from old.apertura_id then raise exception 'TURNO_NO_CAMBIA' using errcode = 'P0411'; end if;
   if tg_op = 'DELETE' then

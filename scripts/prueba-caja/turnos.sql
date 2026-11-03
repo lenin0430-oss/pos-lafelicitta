@@ -137,6 +137,13 @@ select pg_temp.chk('cobro de otro equipo antes de confirmar → resumen_cambio, 
 select public.turno_cerrar(:'tb','{"efectivo":10499,"debito":1234}'::jsonb,null,gen_random_uuid(),'x',(public.turno_resumen(:'tb')->'esperado')) cb2 \gset
 select pg_temp.chk('con el resumen actualizado el cierre procede', (:'cb2'::jsonb->>'ok')::boolean);
 
+-- 6.5 efectivo esperado negativo (gastos > efectivo registrado) y contado 0
+insert into empresas values ('cccccccc-0000-4000-8000-00000000000c');
+select (public.turno_abrir('cccccccc-0000-4000-8000-00000000000c'::uuid, 0, 'c')->>'turno_id') tc \gset
+insert into gastos(categoria,descripcion,monto,empresa_id) values ('x','mayor al efectivo',1000,'cccccccc-0000-4000-8000-00000000000c');
+select public.turno_cerrar(:'tc','{"efectivo":0}'::jsonb,null,gen_random_uuid(),'c',(public.turno_resumen(:'tc')->'esperado')) cn \gset
+select pg_temp.chk('esperado negativo −1000 con contado 0 cierra; diferencia +1000', (:'cn'::jsonb->>'ok')::boolean and (select diferencia from cierres_turno_medios m join cierres_turno c on c.id=m.cierre_id where c.turno_id=:'tc' and medio='efectivo')=1000 and (:'cn'::jsonb->'resumen'->'esperado'->>'efectivo')::int=-1000);
+
 -- permisos
 select has_function_privilege('anon','public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb)','execute') a, has_function_privilege('authenticated','public.turno_abrir(uuid,integer,text)','execute') b, has_function_privilege('service_role','public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb)','execute') c \gset
 select pg_temp.chk('anon/authenticated sin acceso a funciones; service_role sí', not :'a'::boolean and not :'b'::boolean and :'c'::boolean);
