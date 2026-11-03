@@ -182,7 +182,8 @@ test("duplicada con almacenamiento roto: no hay intención compartida, la clave 
 
 // ---- Reapertura inmediata sin liberar, canal entre pestañas y huérfanas ----
 const hub = () => { const peers = new Set(); return () => { const c = { onmessage: null, postMessage(m) { for (const p of peers) if (p !== c) setTimeout(() => p.onmessage && p.onmessage({ data: m }), 0); } }; peers.add(c); return c; }; };
-const pagina = (local, ses, h) => { let c = null; const g = crearGestorIntenciones({ local, sesion: ses, nuevoUuid: uuid, ahora: () => reloj, canal: h ? () => (c = h()) : undefined, esperaMs: 20 }); return { g, matar: () => { if (c) c.onmessage = null; } }; };   // matar = cierre brusco: no responde más
+// esperaMs holgado: bajo carga (corrida paralela) un pong simulado de 0 ms no debe llegar tarde y volver la prueba intermitente.
+const pagina = (local, ses, h) => { let c = null; const g = crearGestorIntenciones({ local, sesion: ses, nuevoUuid: uuid, ahora: () => reloj, canal: h ? () => (c = h()) : undefined, esperaMs: 250 }); return { g, matar: () => { if (c) c.onmessage = null; } }; };   // matar = cierre brusco: no responde más
 
 test("respuesta perdida → cierre SIN liberar → reapertura inmediata (+130 s): misma identidad, misma venta y folio, misma clave", async () => {
   const db = baseFalsa({ perderRespuestaEnInsert: 1 }); const local = almacenFalso(), ses = almacenFalso(), h = hub();
