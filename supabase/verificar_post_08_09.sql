@@ -1,5 +1,5 @@
--- MesaPOS · verificación POSTERIOR a 08 y 09 (SOLO LECTURA; no modifica nada). Ejecutar tras aplicar cada paso y anotar el resultado.
--- Esperado tras 08: filas 1-4 ok. Tras 09: todas ok. Histórico intacto: fila 9 igual al valor anotado antes (verificar_08_previo.sql fila 'ventas').
+-- MesaPOS: SOLO LECTURA, ejecutar UNICAMENTE despues de 08 Y 09. Antes de 09 usar verificar_post_08.sql.
+-- Fila 9 = 0 solo inmediatamente tras 09 y antes de nuevas comandas. No es el conteo total de ventas.
 select o, qué, valor, esperado from (
  select 1 o, '08: tablas de turno (aperturas_caja v2 + cobros_turno, movimientos_caja, cierres_turno, cierres_turno_medios, turno_eventos)' qué,
    (select count(*) from information_schema.tables where table_schema='public' and table_name in ('cobros_turno','movimientos_caja','cierres_turno','cierres_turno_medios','turno_eventos'))::text valor, '5' esperado
