@@ -18,6 +18,8 @@ const LINKS_ADMIN = [
 const LINKS_GARZON = [
   { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
+  { href: '/gastos', label: '💸 Gastos' },
+  { href: '/cierre', label: '🔒 Turno y arqueo' },
 ]
   
 

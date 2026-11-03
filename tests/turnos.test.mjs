@@ -73,31 +73,31 @@ test("ya abierto → 409 con el id del turno", async () => {
 test("turno de otro negocio o inexistente → 404 sin llamar a la base", async () => {
   const db = dbFalsa();
   const otra = { ...ses, empresa_id: OTRA };
-  for (const a of [{ accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO }, { accion: "retiro", turno_id: T1, monto: 1, motivo: "x" }]) {
+  for (const a of [{ accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO }, { accion: "retiro", turno_id: T1, monto: 1, motivo: "x" }]) {
     assert.equal((await accionTurno(db, otra, a)).status, 404);
   }
-  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: "no-uuid", clave: CL })).status, 404);
+  assert.equal((await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: "no-uuid", clave: CL })).status, 404);
   assert.equal(db.llamadas.length, 0);
 });
 
-test("cerrar: exige clave; valida montos; solo manda lo contado", async () => {
+test("presentar arqueo: exige clave; valida montos; solo manda lo contado", async () => {
   const db = dbFalsa();
-  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, contados: { efectivo: 1 }, esperado_visto: VISTO })).status, 400);
-  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: -5 }, esperado_visto: VISTO })).status, 400);
-  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1e12 }, esperado_visto: VISTO })).status, 400);
-  const r = await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, notas: "n", contados: { efectivo: 10000, debito: 64500, esperado: 99, efectivo_esperado: 1 }, esperado_visto: VISTO });
+  assert.equal((await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, contados: { efectivo: 1 }, esperado_visto: VISTO })).status, 400);
+  assert.equal((await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: -5 }, esperado_visto: VISTO })).status, 400);
+  assert.equal((await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 1e12 }, esperado_visto: VISTO })).status, 400);
+  const r = await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, notas: "n", contados: { efectivo: 10000, debito: 64500, esperado: 99, efectivo_esperado: 1 }, esperado_visto: VISTO });
   assert.equal(r.status, 200);
   const [fn, args] = db.llamadas.at(-1);
-  assert.equal(fn, "turno_cerrar");
+  assert.equal(fn, "turno_presentar_arqueo");
   assert.deepEqual(args.p_esperado_visto, VISTO);
   assert.deepEqual(args.p_contados, { efectivo: 10000, debito: 64500 }); // campos ajenos descartados
 });
 
-test("reintento de cierre con la misma clave devuelve 200 repetido; otra clave → 409", async () => {
+test("reintento de presentación con la misma clave devuelve 200 repetido; otra clave → 409", async () => {
   const rep = dbFalsa({ rpc: () => ({ data: { ok: true, repetido: true } }) });
-  assert.equal((await accionTurno(rep, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO })).body.repetido, true);
+  assert.equal((await accionTurno(rep, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO })).body.repetido, true);
   const ya = dbFalsa({ rpc: () => ({ data: { ok: false, codigo: "ya_cerrado" } }) });
-  assert.equal((await accionTurno(ya, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO })).status, 409);
+  assert.equal((await accionTurno(ya, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO })).status, 409);
 });
 
 test("retiro y conciliación: validación y pertenencia", async () => {
@@ -110,13 +110,13 @@ test("retiro y conciliación: validación y pertenencia", async () => {
   assert.equal((await accionTurno(db, ses, { accion: "zzz", turno_id: T1 })).status, 400);
 });
 
-test("cerrar sin el resumen que se confirma → 400; resumen cambiado → 409 con cifras nuevas", async () => {
+test("presentación del administrador sin resumen → 400; resumen cambiado → 409", async () => {
   const db = dbFalsa();
-  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 } })).status, 400);
-  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: { efectivo: 1 } })).status, 400);
+  assert.equal((await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 1 } })).status, 400);
+  assert.equal((await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: { efectivo: 1 } })).status, 400);
   const nuevo = { esperado: { efectivo: 20000 } };
   const ch = dbFalsa({ rpc: () => ({ data: { ok: false, codigo: "resumen_cambio", resumen: nuevo } }) });
-  const r = await accionTurno(ch, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO });
+  const r = await accionTurno(ch, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO });
   assert.equal(r.status, 409); assert.deepEqual(r.body.resumen, nuevo);
 });
 
@@ -144,13 +144,13 @@ test("Point por confirmar: comanda, mesa, hora y referencia para distinguirlos",
 test("esperado negativo (−1000) con contado 0 se acepta; contado negativo sigue rechazado", async () => {
   const db = dbFalsa();
   const neg = { ...VISTO, efectivo: -1000 };
-  const r = await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: neg });
+  const r = await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: neg });
   assert.equal(r.status, 200);
   assert.deepEqual(db.llamadas.at(-1)[1].p_esperado_visto, neg);
   assert.deepEqual(db.llamadas.at(-1)[1].p_contados, { efectivo: 0 });
-  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: -1 }, esperado_visto: neg })).status, 400);
-  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: { ...neg, efectivo: 1.5 } })).status, 400);
-  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: { ...neg, efectivo: "x" } })).status, 400);
+  assert.equal((await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: -1 }, esperado_visto: neg })).status, 400);
+  assert.equal((await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: { ...neg, efectivo: 1.5 } })).status, 400);
+  assert.equal((await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: { ...neg, efectivo: "x" } })).status, 400);
 });
 
 test("corregir conciliación: errores de la base se traducen sin detalle interno", async () => {
@@ -169,7 +169,7 @@ test("error de base no filtra detalle", async () => {
 
 test("estado sin turno devuelve turno null", async () => {
   const db = { from: () => ({ select() { return this; }, eq() { return this; }, order() { return this; }, limit() { return this; }, maybeSingle: async () => ({ data: null }) }), rpc: async () => ({}) };
-  assert.deepEqual((await estadoTurno(db, ses)).body, { ok: true, turno: null });
+  assert.deepEqual((await estadoTurno(db, ses)).body, { ok: true, turno: null, rol: "admin" });
 });
 
 test("diferencia PROVISIONAL mientras haya Point por confirmar; definitiva si no", () => {
@@ -212,17 +212,17 @@ const BLOQ = [
 ];
 test("cierre bloqueado por la base → 409 con la lista (n.º, mesa, monto, motivo) y sin cerrar nada", async () => {
   const db = dbFalsa({ rpc: () => ({ data: { ok: false, codigo: "bloqueado", bloqueos: BLOQ } }) });
-  const r = await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO });
+  const r = await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO });
   assert.equal(r.status, 409); assert.equal(r.body.ok, false); assert.equal(r.body.codigo, "bloqueado");
   assert.deepEqual(r.body.bloqueos, BLOQ);
   assert.match(r.body.error, /No se puede cerrar el turno/);
 });
-test("la validación del cierre NO depende del navegador: el servidor siempre llama a turno_cerrar (que valida en la misma transacción)", async () => {
+test("la presentación valida pendientes en la base y no acepta un campo de forzar desde el navegador", async () => {
   const db = dbFalsa();
-  await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO, bloqueos: [], sin_bloqueos: true, forzar: true });
+  await accionTurno(db, ses, { accion: "presentar_arqueo", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO, bloqueos: [], sin_bloqueos: true, forzar: true });
   const [fn, args] = db.llamadas.at(-1);
-  assert.equal(fn, "turno_cerrar");
-  assert.deepEqual(Object.keys(args).sort(), ["p_clave", "p_contados", "p_esperado_visto", "p_notas", "p_por", "p_turno"], "ningún campo de 'forzar' llega a la base");
+  assert.equal(fn, "turno_presentar_arqueo");
+  assert.deepEqual(Object.keys(args).sort(), ["p_clave", "p_contados", "p_empresa", "p_esperado_visto", "p_notas", "p_por", "p_turno"], "ningún campo de 'forzar' llega a la base");
 });
 test("presentación del bloqueo: agrupado por motivo, con número, mesa, monto y acción para ir a resolver", () => {
   const g = agruparBloqueos(BLOQ);
