@@ -33,7 +33,15 @@ select pg_temp.chk('cierra con pendientes: aviso por conciliar', (public.turno_r
 select public.cobro_conciliar(c.id,'efectivo','Cajera ficticia') from cobros_turno c where venta_id=:'v_pe';
 select public.cobro_conciliar(c.id,'debito','Cajera ficticia') from cobros_turno c where venta_id=:'v_pd';
 select public.cobro_conciliar(c.id,'qr','Cajera ficticia') from cobros_turno c where venta_id=:'v_pq';
-select pg_temp.chk('conciliar por segunda vez falla', (select (public.cobro_conciliar(id,'qr','x')->>'codigo')='ya_conciliado' from cobros_turno where venta_id=:'v_pe'));
+select pg_temp.chk('conciliar al mismo medio otra vez → ya_conciliado', (select (public.cobro_conciliar(id,'efectivo','x')->>'codigo')='ya_conciliado' from cobros_turno where venta_id=:'v_pe'));
+select pg_temp.chk('un cobro manual no se reclasifica como Point', (select (public.cobro_conciliar(id,'qr','x')->>'codigo')='no_es_point' from cobros_turno where medio='transferencia' and venta_id in (select id from ventas where metodo_pago='Transferencia') limit 1));
+-- corregir una conciliación equivocada mientras el turno está abierto (queda en eventos con el medio anterior)
+select pg_temp.venta(:A::uuid,'Point',777) vcorr \gset
+select public.cobro_conciliar(id,'efectivo','Cajera ficticia') from cobros_turno where venta_id=:'vcorr';
+select public.cobro_conciliar(id,'debito','Cajera ficticia') from cobros_turno where venta_id=:'vcorr';
+select pg_temp.chk('corregir conciliación: efectivo → débito, con evento y medio anterior', (select medio from cobros_turno where venta_id=:'vcorr')='debito' and exists (select 1 from turno_eventos where evento='cobro_corregido' and detalle->>'antes'='efectivo' and detalle->>'medio'='debito'));
+delete from cobros_turno where venta_id=:'vcorr'; delete from ventas where id=:'vcorr';
+
 select public.turno_resumen(:'t1') r1 \gset
 select pg_temp.chk('efectivo esperado turno real = 19.090', (:'r1'::jsonb->'esperado'->>'efectivo')::int=19090);
 select pg_temp.chk('débito esperado = 64.500', (:'r1'::jsonb->'esperado'->>'debito')::int=64500);

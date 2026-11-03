@@ -108,7 +108,7 @@ test("Point por confirmar: comanda, mesa, hora y referencia para distinguirlos",
     pagos_point: [{ venta_id: V1, restaurante_id: EMP, mp_order_id: "ORD01ABCDEFGH", referencia_externa: null }, { venta_id: V2, restaurante_id: EMP, mp_order_id: "ORD02ZZZZ1234", referencia_externa: null }],
   };
   const from = (t) => { const f = []; let inn = null; const q = {
-    select: () => q, eq: (c, v) => (f.push([c, v]), q), is: () => q, order: () => q, limit: () => q, in: (c, vs) => (inn = [c, vs], q),
+    select: () => q, eq: (c, v) => (f.push([c, v]), q), is: () => q, not: () => q, neq: () => q, order: () => q, limit: () => q, in: (c, vs) => (inn = [c, vs], q),
     maybeSingle: async () => ({ data: (tablas[t] ?? []).find((r) => f.every(([c, v]) => r[c] === v)) ?? null }),
     then: (ok) => ok({ data: (tablas[t] ?? []).filter((r) => f.every(([c, v]) => r[c] === v) && (!inn || inn[1].includes(r[inn[0]]))) }) }; return q; };
   const r = await estadoTurno({ from, rpc: async () => ({ data: { turno: {}, esperado: {} } }) }, ses);
@@ -116,6 +116,7 @@ test("Point por confirmar: comanda, mesa, hora y referencia para distinguirlos",
   assert.deepEqual([a.comanda, a.mesa, a.referencia], [31, "4", "ABCDEFGH"]);
   assert.deepEqual([b.comanda, b.mesa, b.referencia], [32, "Llevar", "ZZZZ1234"]);
   assert.notEqual(a.hora, b.hora);
+  assert.ok(Array.isArray(r.body.point_confirmados));
 });
 
 test("esperado negativo (−1000) con contado 0 se acepta; contado negativo sigue rechazado", async () => {
@@ -128,6 +129,14 @@ test("esperado negativo (−1000) con contado 0 se acepta; contado negativo sigu
   assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: -1 }, esperado_visto: neg })).status, 400);
   assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: { ...neg, efectivo: 1.5 } })).status, 400);
   assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: { ...neg, efectivo: "x" } })).status, 400);
+});
+
+test("corregir conciliación: errores de la base se traducen sin detalle interno", async () => {
+  for (const [codigo, st] of [["no_es_point", 409], ["medio_informado_por_point", 409], ["ya_conciliado", 409]]) {
+    const db = dbFalsa({ rpc: () => ({ data: { ok: false, codigo } }) });
+    const r = await accionTurno(db, ses, { accion: "conciliar", turno_id: T1, cobro_id: CL, medio: "debito" });
+    assert.equal(r.status, st); assert.equal(r.body.codigo, codigo);
+  }
 });
 
 test("error de base no filtra detalle", async () => {

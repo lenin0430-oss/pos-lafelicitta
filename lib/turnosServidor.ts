@@ -24,7 +24,9 @@ const MENSAJES: Record<string, [number, string]> = {
   monto_invalido: [400, "Monto inválido"],
   motivo_requerido: [400, "Indica el motivo"],
   medio_invalido: [400, "Medio inválido"],
-  ya_conciliado: [409, "Este cobro ya estaba confirmado"],
+  ya_conciliado: [409, "Este cobro ya estaba confirmado con ese medio"],
+  no_es_point: [409, "Solo se corrigen cobros Point"],
+  medio_informado_por_point: [409, "Mercado Pago informó el medio de este cobro; no se cambia aquí"],
   no_encontrado: [404, "Cobro no encontrado"],
   medio_duplicado_en_venta: [409, "Esa venta ya tiene ese medio"],
   resumen_cambio: [409, "Entraron cobros o gastos nuevos mientras revisabas. Revisa las cifras actualizadas y confirma de nuevo"],
@@ -59,22 +61,28 @@ export async function estadoTurno(db: Db, s: SesionT): Promise<RespT> {
   const r = await db.rpc("turno_resumen", { p_turno: id });
   if (r?.error) return err(500, "No se pudo leer el turno");
   let porConciliar: unknown[] = [];
+  let pointConfirmados: unknown[] = [];
   if (abierto) {
-    const c = await db.from("cobros_turno").select("id,venta_id,monto,proveedor,created_at").eq("turno_id", id).eq("medio", "por_conciliar").is("anulado_at", null).order("created_at", { ascending: true }).limit(200);
-    const filas: any[] = c?.data ?? [];
     // Para distinguir un Point de otro: comanda, mesa, hora y referencia de la orden (solo importe no basta).
-    const ids = filas.map((f) => f.venta_id);
-    const v = ids.length ? await db.from("ventas").select("id,numero,mesa,mesero").eq("empresa_id", s.empresa_id).in("id", ids) : { data: [] };
-    const p = ids.length ? await db.from("pagos_point").select("venta_id,mp_order_id,referencia_externa").eq("restaurante_id", s.empresa_id).in("venta_id", ids) : { data: [] };
-    const vm = new Map<string, any>((v?.data ?? []).map((x: any) => [x.id, x]));
-    const pm = new Map<string, any>((p?.data ?? []).map((x: any) => [x.venta_id, x]));
-    porConciliar = filas.map((f) => ({
-      id: f.id, monto: f.monto, proveedor: f.proveedor, hora: f.created_at,
-      comanda: vm.get(f.venta_id)?.numero ?? null, mesa: vm.get(f.venta_id)?.mesa ?? null, mesero: vm.get(f.venta_id)?.mesero ?? null,
-      referencia: String(pm.get(f.venta_id)?.referencia_externa ?? pm.get(f.venta_id)?.mp_order_id ?? "").slice(-8) || null,
-    }));
+    const detalle = async (filas: any[]) => {
+      const ids = filas.map((f) => f.venta_id);
+      const v = ids.length ? await db.from("ventas").select("id,numero,mesa,mesero").eq("empresa_id", s.empresa_id).in("id", ids) : { data: [] };
+      const p = ids.length ? await db.from("pagos_point").select("venta_id,mp_order_id,referencia_externa").eq("restaurante_id", s.empresa_id).in("venta_id", ids) : { data: [] };
+      const vm = new Map<string, any>((v?.data ?? []).map((x: any) => [x.id, x]));
+      const pm = new Map<string, any>((p?.data ?? []).map((x: any) => [x.venta_id, x]));
+      return filas.map((f) => ({
+        id: f.id, monto: f.monto, proveedor: f.proveedor, medio: f.medio, hora: f.created_at,
+        comanda: vm.get(f.venta_id)?.numero ?? null, mesa: vm.get(f.venta_id)?.mesa ?? null, mesero: vm.get(f.venta_id)?.mesero ?? null,
+        referencia: String(pm.get(f.venta_id)?.referencia_externa ?? pm.get(f.venta_id)?.mp_order_id ?? "").slice(-8) || null,
+      }));
+    };
+    const c = await db.from("cobros_turno").select("id,venta_id,monto,proveedor,medio,created_at").eq("turno_id", id).eq("medio", "por_conciliar").is("anulado_at", null).order("created_at", { ascending: true }).limit(200);
+    porConciliar = await detalle(c?.data ?? []);
+    // Point que la cajera ya confirmó: se pueden corregir mientras el turno siga abierto.
+    const k = await db.from("cobros_turno").select("id,venta_id,monto,proveedor,medio,created_at").eq("turno_id", id).eq("proveedor", "point").neq("medio", "por_conciliar").not("conciliado_at", "is", null).is("anulado_at", null).order("created_at", { ascending: true }).limit(200);
+    pointConfirmados = await detalle(k?.data ?? []);
   }
-  return { status: 200, body: { ok: true, abierto, resumen: r.data, por_conciliar: porConciliar } };
+  return { status: 200, body: { ok: true, abierto, resumen: r.data, por_conciliar: porConciliar, point_confirmados: pointConfirmados } };
 }
 
 export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
