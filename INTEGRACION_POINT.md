@@ -1,57 +1,55 @@
 # Integración Mercado Pago Point — MesaPOS (multi-cliente con OAuth)
 
-Probado el 01/11/2026: cobro enviado por API → Point Smart → pago aprobado → boleta impresa ("Válido como boleta").
+Última revisión: 02/11/2026 (rama `claude/preparacion-2026-11-02`, **sin desplegar**).
 
-## Cómo funciona
-1. Cada restaurante entra a `/configuracion/mercadopago` y presiona **Conectar mi cuenta de Mercado Pago** (OAuth + PKCE).
-2. MesaPOS guarda su token **cifrado** en `mp_cuentas` y lo renueva solo (dura 180 días).
-3. El restaurante elige su Point y activa el modo "Cobra desde MesaPOS" (PDV).
-4. En la venta, `BotonCobrarPoint` crea la orden en **la cuenta de ese restaurante**; el dinero va directo a él.
-5. El webhook (firma validada) y `/api/point/estado` actualizan `pagos_point`.
+## Evidencia
+- **Prueba operativa reportada por el propietario (01/11/2026, versión 8142dc7):** cobro enviado por API → Point Smart → pago aprobado → boleta impresa. No se repitió en esta revisión; no se hicieron cobros.
+- **Comprobado ahora, con datos ficticios y sin red:** 28 pruebas locales (`npm test`): solicitudes simultáneas, respuesta perdida, fallo al guardar `pagos_point`, estados y cierre, y migraciones SQL en PostgreSQL en memoria.
+- **No comprobado:** comportamiento real contra Mercado Pago de la reserva/idempotencia nueva; `next build` (no ejecutable en el entorno de revisión; se comprueba tipos con `tsc`).
+- Point no equivale por sí solo a emisión de facturas. El voucher puede sustituir la boleta según el modelo tributario del contribuyente; verificar con el SII antes de anunciar facturación.
 
-## Archivos
-| Archivo | Para qué |
-|---|---|
-| `supabase/01_tabla_pagos_point.sql` | Tabla de pagos |
-| `supabase/02_mp_cuentas_oauth.sql` | Tabla de cuentas conectadas + `restaurante_id` en pagos |
-| `lib/mp.ts` | OAuth, cifrado de tokens, renovación, llamadas a la API |
-| `lib/restaurante.ts` | **Único lugar** que decide el restaurante de la sesión (⚠️ conectar a `lib/auth.ts`) |
-| `app/api/mp/conectar` | Inicia OAuth |
-| `app/api/mp/callback` | Recibe el código, guarda la cuenta |
-| `app/api/mp/terminales` | Lista Point, elige uno, cambia modo PDV/STANDALONE |
-| `app/api/point/cobrar` | Crea el cobro |
-| `app/api/point/estado` | Consulta estado (solo órdenes propias) |
-| `app/api/point/webhook` | Avisos de MP con firma `x-signature` |
-| `app/configuracion/mercadopago/page.tsx` | Pantalla de conexión |
-| `components/BotonCobrarPoint.tsx` | Botón de cobro |
+## Cómo funciona (versión de esta rama)
+1. Cada negocio entra a `/configuracion/mercadopago` → **Conectar Mercado Pago** (OAuth + PKCE). El token se guarda **cifrado** en `mp_cuentas` y se renueva solo.
+2. El negocio elige su Point y activa el modo PDV ("Cobra desde MesaPOS").
+3. `BotonCobrarPoint` (en el modal de cobro) llama a `POST /api/point/cobrar`.
+4. **Cobro sin duplicados** (`lib/pointCobro.ts`):
+   - se *reserva* un intento en `pagos_point` (`estado='reservado'`); un índice único parcial permite **un solo intento activo por venta y negocio**, incluso con solicitudes simultáneas;
+   - la **clave de idempotencia** (`X-Idempotency-Key`) se guarda en esa fila y es la misma en todo reintento: Mercado Pago devuelve la misma orden;
+   - si se pierde la respuesta, o falla el guardado tras crear la orden, la fila queda `reservado` y el reintento recupera la misma orden;
+   - error definitivo de MP (4xx) → el intento se cierra en `failed`; fallo ambiguo (red, 408, 429, 5xx) → se conserva para reintentar.
+5. El estado se actualiza por webhook (firma `x-signature` validada; se consulta la orden con el token del negocio) y por *polling* (`/api/point/estado`).
+6. Al aprobarse (`processed`) se marca **solo el estado financiero** (`ventas.estado_pago='pagado'`, `metodo_pago='Point'`, `pagado_at`). **No se toca el estado de cocina** (`ventas.estado`).
 
-## Variables de entorno (Vercel + .env.local) — solo servidor
-```
-MP_CLIENT_ID=5633945719763385          # N.º de la app MesaPOS
-MP_CLIENT_SECRET=...                    # Credenciales de producción → Client Secret
-MP_REDIRECT_URI=https://TU-DOMINIO/api/mp/callback
-MP_WEBHOOK_SECRET=...                   # Panel MP → Webhooks → Clave secreta
-MP_TOKEN_KEY=una-frase-larga-y-secreta  # cifra los tokens en la base
-APP_URL=https://TU-DOMINIO
-SUPABASE_SERVICE_ROLE_KEY=...
-NEXT_PUBLIC_SUPABASE_URL=...
-```
-`MP_ACCESS_TOKEN` y `MP_TERMINAL_ID` ya NO se usan (cada restaurante tiene los suyos).
+## Estados separados
+| Columna | Significado | Valores |
+|---|---|---|
+| `ventas.estado` | preparación / entrega (cocina) | `pendiente`, `en_proceso`, `listo`, `entregado` |
+| `ventas.estado_pago` | estado financiero | `pendiente`, `pagado`, `cortesia`, `sin_identificar` |
+Cobrar no retira la comanda de cocina (solo "Entregado" lo hace). Marcar preparado o entregado no impide cobrar ni quita una venta pagada del cierre (cubierto por pruebas). El cierre, el reporte semanal y Point leen `estado_pago`.
 
-## Configurar en Mercado Pago Developers (app MesaPOS)
-- **Configuración de la aplicación → URLs de redireccionamiento:** `https://TU-DOMINIO/api/mp/callback` (debe ser idéntica a `MP_REDIRECT_URI`).
-- Activar **PKCE** en los detalles de la aplicación.
-- **Webhooks:** URL `https://TU-DOMINIO/api/point/webhook`, tópico **Order**; copiar la clave secreta a `MP_WEBHOOK_SECRET`.
+## Migraciones (revisar; NO aplicadas)
+| Archivo | Qué hace | Reversión |
+|---|---|---|
+| `supabase/01_…`, `02_…` | tablas existentes (ya aplicadas en producción) | — |
+| `supabase/03_estados_separados.sql` | agrega `estado_pago`/`pagado_at`, clasifica el histórico por inferencia (criterio en `docs/conversion-historica-estado-pago.md`) sin tocar `ventas.estado`, añade `cocina_archivada_at`, disparador de compatibilidad con el código antiguo | `03_estados_separados_REVERSION.sql` |
+| `supabase/03b_retirar_compatibilidad.sql` | quita el disparador cuando ya no corra el código antiguo | — |
+| `supabase/04_pagos_point_reserva.sql` | `clave_idempotencia`, `referencia_externa`, `detalle` y el índice único de un intento activo por venta | `04_pagos_point_reserva_REVERSION.sql` |
 
-## Pendiente (pedírselo a Claude Code)
-1. Conectar `lib/restaurante.ts` con la sesión real (`lib/auth.ts`). **Obligatorio antes de producción.**
-2. Poner `BotonCobrarPoint` en la pantalla de cobro.
-3. En el webhook: marcar la venta como pagada cuando `status === "processed"`.
-4. Botón "Desconectar Mercado Pago" (borrar fila de `mp_cuentas`).
+**Orden de despliegue:** ver `docs/PLAN_PUBLICACION.md` (respaldo → 03 → verificar → 04 → verificar → código → 03b más tarde). Si el código se despliega sin 03/04, el cobro responde 503 "Falta migración" sin llamar a Mercado Pago. Las migraciones son aditivas y compatibles con el código actual; el código nuevo **requiere** ambas.
 
-## Notas
-- Montos en CLP como entero (`"500"`).
-- Si queda una orden en `at_terminal` y bloquea nuevas (`already_queued_order_on_terminal`), se libera al expirar; por eso usamos `expiration_time: PT5M`.
-- Después de cambiar modo PDV/STANDALONE hay que reiniciar el Point.
+## Variables de entorno (solo servidor)
+`MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `MP_REDIRECT_URI`, `MP_WEBHOOK_SECRET`, `MP_TOKEN_KEY`, `APP_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`. `MP_ACCESS_TOKEN` y `MP_TERMINAL_ID` ya no se usan.
 
-> Nota: `lib/mercadopago.ts` es la versión vieja (sin uso). Bórralo cuando puedas.
+## Configuración en Mercado Pago Developers
+- URL de redirección: `https://TU-DOMINIO/api/mp/callback` (idéntica a `MP_REDIRECT_URI`); activar PKCE.
+- Webhooks: `https://TU-DOMINIO/api/point/webhook`, tópico **Order**; la clave secreta va en `MP_WEBHOOK_SECRET`.
+
+## Limitaciones conocidas
+- El webhook responde 200 aunque falle el procesamiento y no hay conciliación periódica; el respaldo es el *polling* del cliente. Si se crea una orden y el guardado falla, el webhook no puede ubicar el negocio hasta que se reintente el cobro (la fila `reservado` conserva la clave para recuperarla).
+- Una fila `reservado` sin `mp_order_id` queda activa hasta que se reintente o se cierre a mano; no hay barrido automático.
+- Si se cambia el monto de la venta con un cobro `reservado`/activo, se responde 409 hasta cancelar el cobro en el Point.
+- Después de cambiar modo PDV/STANDALONE hay que reiniciar el Point. Montos en CLP enteros. `expiration_time: PT5M`.
+- `lib/mercadopago.ts` (versión antigua) no se usa; eliminar cuando se pueda.
+
+## Pendiente
+Botón "Desconectar Mercado Pago"; conciliación periódica de órdenes; prueba controlada en el negocio (ver `ESTADO_ACTUAL.md`).

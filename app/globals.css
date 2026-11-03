@@ -240,3 +240,6 @@ html, body {
     line-height: 1.5;
   }
 }
+
+/* El aviso ocupa su propia fila: nunca flota sobre Menu / Comanda. */
+.pos-pedido-incierto { position: relative; margin: 10px 14px; padding: 10px 14px; border: 2px solid var(--red); border-radius: 12px; background: var(--surface); font-size: 13px; overflow-wrap: anywhere; }

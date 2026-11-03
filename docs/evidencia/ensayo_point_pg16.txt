@@ -1,0 +1,21 @@
+== Escenario 1: el servidor leyó total=10000; otra transacción edita la venta a 15000 (confirma a los 1,5 s) mientras se reserva por 10000
+  OK   respuesta 409 estable
+  OK   mensaje: El total de la venta cambió. Presiona «Actualizar cocina» y reintenta.
+  OK   CERO llamadas al proveedor
+  OK   ninguna reserva queda en la base
+  OK   la venta quedó con el total nuevo
+== Escenario 2: terminó la edición y el cliente pide el total NUEVO (15000)
+  OK   cobro iniciado
+  OK   UNA llamada al proveedor por 15000
+  OK   reserva por 15000 con orden guardada
+  OK   reintento idempotente: misma orden, sin segunda reserva
+  OK   una sola clave de idempotencia usada
+== Escenario 3: reserva ANTES de la edición — gana la reserva (venta 10000); la edición espera y luego se rechaza
+  OK   la edición responde point_en_curso
+  OK   total intacto 10000
+== Escenario 4: el cobro manual gana; la reserva Point se rechaza con 409 'ya cobrada' y NO llega al proveedor
+  OK   409 «ya está cobrada»
+  OK   cero llamadas al proveedor
+  OK   queda pagada en efectivo y sin reservas
+
+RESULTADO: TODO OK

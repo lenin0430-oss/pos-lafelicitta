@@ -1,0 +1,45 @@
+== aplicar 07b (y dos veces: idempotente)
+  OK   07b se aplica dos veces sin error
+  OK   usuarios.pin_hash existe y está vacía
+  OK   el PIN existente no cambió
+== acceso cerrado
+  OK   anon no lee aprobaciones_operacion
+  OK   authenticated no lee aprobaciones_operacion
+  OK   anon no lee intentos_login
+  OK   authenticated no lee intentos_login
+  OK   anon no lee eventos_seguridad
+  OK   authenticated no lee eventos_seguridad
+  OK   anon no ejecuta registrar_fallo_login
+  OK   authenticated no ejecuta registrar_fallo_login
+  OK   anon no ejecuta login_bloqueado_hasta
+  OK   authenticated no ejecuta login_bloqueado_hasta
+  OK   anon no ejecuta limpiar_intentos_login
+  OK   authenticated no ejecuta limpiar_intentos_login
+  OK   anon no ejecuta consumir_aprobacion
+  OK   authenticated no ejecuta consumir_aprobacion
+== límite de intentos (3 fallos, ventana 60 s, bloqueo 60 s)
+  OK   fallo 1 no bloquea
+  OK   fallo 2 no bloquea
+  OK   fallo 3 bloquea
+  OK   login_bloqueado_hasta informa el bloqueo
+  OK   otra clave no está bloqueada
+  OK   el bloqueo vence
+  OK   segundo bloqueo dura el doble (>=100 s)
+  OK   éxito limpia el contador de la cuenta
+== concurrencia: 20 fallos simultáneos cuentan 20 (sin pérdidas)
+  OK   20 fallos concurrentes = n 20
+== aprobación de un solo uso
+  OK   otro importe no consume
+  OK   otro empleado no consume
+  OK   otro negocio no consume
+  OK   otra operación (huella) no consume
+  OK   vencida no consume
+  OK   coincidente SÍ consume (control positivo)
+  OK   segundo uso NO consume
+  OK   6 usos simultáneos: exactamente 1 gana
+== reversión
+  OK   reversión quita las tablas
+  OK   reversión quita pin_hash (vacía)
+  OK   reversión conserva el PIN y el usuario
+
+RESULTADO: TODO OK

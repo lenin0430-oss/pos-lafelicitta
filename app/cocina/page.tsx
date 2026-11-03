@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, DATOS_VIA_SERVIDOR } from '@/lib/supabase'
 import { getEmpresaIdActual } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import { useEmpresaNombre } from '@/lib/useEmpresaNombre'
+import { ESTADOS_VISIBLES_COCINA, antiguedad } from '@/lib/cocina'
 
 interface Venta {
   id: string
@@ -12,6 +13,7 @@ interface Venta {
   mesero: string
   items: { nombre: string; cantidad: number; nota?: string; ingredientes?: string }[]
   estado: 'pendiente' | 'en_proceso' | 'listo'
+  estado_pago?: 'pendiente' | 'pagado' | 'cortesia' | 'sin_identificar'
   created_at: string
   total: number
 }
@@ -39,11 +41,13 @@ export default function CocinaPage() {
       setHora(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     }, 1000)
 
+    // Con los datos por el servidor no hay tiempo real: se consulta cada 5 s (solo con la pestaña visible).
+    const sondeo = DATOS_VIA_SERVIDOR ? setInterval(() => { if (document.visibilityState === 'visible') cargarVentas() }, 5000) : null
     const canal = supabase.channel('cocina')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ventas' }, () => cargarVentas())
       .subscribe()
 
-    return () => { supabase.removeChannel(canal); clearInterval(tick) }
+    return () => { supabase.removeChannel(canal); clearInterval(tick); if (sondeo) clearInterval(sondeo) }
   }, [])
 
   async function cargarVentas() {
@@ -54,7 +58,9 @@ export default function CocinaPage() {
       .from('ventas')
       .select('*')
       .eq('empresa_id', empresaId)
-      .in('estado', ['pendiente', 'en_proceso'])
+      // Cobrar NO retira la comanda; solo "Entregado" lo hace. No se oculta por antigüedad: se marca como antigua.
+      .in('estado', [...ESTADOS_VISIBLES_COCINA])
+      .is('cocina_archivada_at', null)
       .order('created_at', { ascending: true })
     if (data) setVentas(data)
   }
@@ -113,11 +119,14 @@ export default function CocinaPage() {
               {ventasFiltradas.map(venta => {
                 const mins = minutosDesde(venta.created_at)
                 const urgente = mins >= 15 && venta.estado === 'pendiente'
+                const ant = antiguedad(venta.created_at)
                 return (
                   <div key={venta.id} style={{ background: 'var(--surface)', border: `2px solid ${urgente ? 'var(--red)' : ESTADO_COLOR[venta.estado]}`, borderRadius: 14, overflow: 'hidden', transition: 'border-color .3s' }}>
                     <div style={{ background: urgente ? 'var(--red)' : ESTADO_COLOR[venta.estado], padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 1, color: '#fff' }}>#{String(venta.numero).padStart(3, '0')} — {venta.mesa}</span>
+                        {venta.estado_pago === 'pagado' && <span style={{ marginLeft: 8, fontSize: 11, background: 'rgba(0,0,0,.25)', color: '#fff', padding: '2px 6px', borderRadius: 8 }}>💳 Pagado</span>}
+                        {ant.antigua && <span style={{ marginLeft: 8, fontSize: 11, background: '#000', color: '#fff', padding: '2px 6px', borderRadius: 8 }}>🕓 Antigua · {Math.floor(ant.horas)} h sin entregar</span>}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ color: 'var(--on-accent)', fontSize: 11 }}>{mins}min</div>

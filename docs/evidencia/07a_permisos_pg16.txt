@@ -1,0 +1,30 @@
+0) Control positivo: ANTES de 07 el problema existe (anon lee y escribe)
+  OK   anon lee usuarios (2 filas) — el problema reportado
+  OK   anon lee las ventas de TODOS los negocios (2)
+  OK   anon modifica ventas de otro negocio
+  OK   anon ejecuta verificar_pin_garzon (fuerza bruta posible)
+1) Aplicar 07a (etapa 1: usuarios + login)
+  OK   07a aplicada sin errores
+  OK   07a repetida sin errores (idempotente)
+2) Cerrado en la etapa 1
+  OK   anon NO lee usuarios (PIN y credenciales)
+  OK   anon NO puede: update usuarios set pin='0000'
+  OK   anon NO puede: insert into usuarios (nombre) values ('x
+  OK   anon NO puede: delete from usuarios
+  OK   anon NO ejecuta verificar_pin_garzon
+  OK   anon NO ejecuta verificar_login_admin
+  OK   authenticated NO lee pin
+  OK   authenticated ve solo su fila
+3) Lo que la etapa 1 NO cierra todavía (esperado; lo cierra 07 en la etapa 2): la app sigue operando
+  OK   ventas sigue abierta a anon (la app actual necesita esto hasta la etapa 2)
+  OK   carta pública intacta
+4) service_role (servidor): login y PIN de admin siguen funcionando
+  OK   login admin (RPC) desde el servidor
+  OK   login por PIN (RPC) desde el servidor
+  OK   verificar PIN de admin (gastos) desde el servidor
+5) Reversión de emergencia (restaura lo anterior, inseguro) y huella idéntica
+  OK   reversión sin errores
+  OK   anon vuelve a leer usuarios (estado anterior)
+  FALLA huella distinta tras la reversión
+
+RESULTADO 07a: 1 fallo(s)

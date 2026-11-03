@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { getEmpresaIdActual, getSesion } from '@/lib/auth'
 import AuthGuard from '@/components/AuthGuard'
 import { useEmpresaNombre } from '@/lib/useEmpresaNombre'
+import { cobrosDelPeriodo, etiquetaMetodo, resumenPeriodo } from '@/lib/reportes'
+import { estadoPagoParaMetodo } from '@/lib/estados'
 
 interface Venta {
   id: string
@@ -16,6 +18,7 @@ interface Venta {
   items: { nombre: string; cantidad: number; precio_unit: number }[]
   created_at: string
   estado: string
+  estado_pago?: string
 }
 
 interface AperturaCaja {
@@ -37,6 +40,9 @@ export default function ReportesPage() {
   const [cargando, setCargando] = useState(true)
   const [editandoPago, setEditandoPago] = useState<string | null>(null)
   const [nuevoPago, setNuevoPago] = useState('')
+  // Ventas creadas antes del período pero cobradas dentro de él (para "cobros recibidos")
+  const [cobrosExtra, setCobrosExtra] = useState<Venta[]>([])
+  const [rango, setRango] = useState<{ desde: string; hasta: string | null }>({ desde: new Date(0).toISOString(), hasta: null })
   const esAdmin = getSesion()?.rol === 'admin'
 
   useEffect(() => { cargarDatos() }, [periodo, fechaDia])
@@ -71,7 +77,13 @@ export default function ReportesPage() {
       aperturasQ = aperturasQ.lt('created_at', hasta.toISOString())
     }
 
-    const [{ data: ventasData }, { data: aperturasData }] = await Promise.all([ventasQ, aperturasQ])
+    let cobrosQ = supabase.from('ventas').select('*').eq('empresa_id', empresaId).eq('estado_pago', 'pagado').gte('pagado_at', desde.toISOString())
+    if (hasta) cobrosQ = cobrosQ.lt('pagado_at', hasta.toISOString())
+
+    const [{ data: ventasData }, { data: aperturasData }, { data: cobrosData }] = await Promise.all([ventasQ, aperturasQ, cobrosQ])
+
+    setRango({ desde: desde.toISOString(), hasta: hasta ? hasta.toISOString() : null })
+    setCobrosExtra((cobrosData as Venta[]) || [])
 
     if (ventasData) setVentas(ventasData)
     if (aperturasData) setAperturas(aperturasData)
@@ -83,7 +95,11 @@ export default function ReportesPage() {
     if (!nuevoPago) { alert('Selecciona el método de pago correcto.'); return }
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) return
-    const { error } = await supabase.from('ventas').update({ metodo_pago: nuevoPago }).eq('empresa_id', empresaId).eq('id', id)
+    // Si la venta estaba "Sin identificar", asignarle un método es declarar que fue cobrada con ese método.
+    const actual = ventas.find(v => v.id === id)
+    const cambios: Record<string, string> = { metodo_pago: nuevoPago }
+    if (actual?.estado_pago === 'sin_identificar') cambios.estado_pago = estadoPagoParaMetodo(nuevoPago)
+    const { error } = await supabase.from('ventas').update(cambios).eq('empresa_id', empresaId).eq('id', id)
     if (error) { alert('Error al corregir pago: ' + error.message); return }
     setEditandoPago(null); setNuevoPago(''); cargarDatos()
     alert('Método de pago corregido correctamente.')
@@ -104,8 +120,8 @@ export default function ReportesPage() {
 
   function exportarCSV() {
     const filas = [
-      ['#', 'Mesa', 'Mesero', 'Tipo', 'Método pago', 'Total', 'Estado', 'Fecha'],
-      ...ventas.map(v => [v.numero, v.mesa, v.mesero || '', v.tipo_servicio || '', v.metodo_pago, v.total, v.estado, new Date(v.created_at).toLocaleString('es-CL')])
+      ['#', 'Mesa', 'Mesero', 'Tipo', 'Método pago', 'Total', 'Estado cocina', 'Estado pago', 'Fecha'],
+      ...ventas.map(v => [v.numero, v.mesa, v.mesero || '', v.tipo_servicio || '', etiquetaMetodo(v), v.total, v.estado, v.estado_pago || '', new Date(v.created_at).toLocaleString('es-CL')])
     ]
     const csv = filas.map(f => f.join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -117,7 +133,10 @@ export default function ReportesPage() {
   }
 
   const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
-  const totalVentas = ventas.reduce((s, v) => s + v.total, 0)
+  // Tres cifras distintas: registradas (comandas creadas), cobros recibidos (por fecha de cobro) y saldo pendiente.
+  const resumen = resumenPeriodo(ventas, cobrosExtra, rango.desde, rango.hasta)
+  const cobros = cobrosDelPeriodo([...ventas, ...cobrosExtra], rango.desde, rango.hasta)
+  const totalVentas = resumen.registradas.total
   const ticketPromedio = ventas.length ? totalVentas / ventas.length : 0
 
   const porDia: Record<string, number> = {}
@@ -132,10 +151,14 @@ export default function ReportesPage() {
   })
 
   const porMetodo: Record<string, { total: number; count: number }> = {}
-  ventas.forEach(v => {
-    if (!porMetodo[v.metodo_pago]) porMetodo[v.metodo_pago] = { total: 0, count: 0 }
-    porMetodo[v.metodo_pago].total += v.total
-    porMetodo[v.metodo_pago].count += 1
+  // Por método: solo cobros recibidos + ventas sin identificar (las pendientes y cortesías no son cobros)
+  const paraMetodo = [...cobros, ...ventas.filter(v => v.estado_pago === 'sin_identificar')]
+  const totalMetodos = paraMetodo.reduce((s, v) => s + v.total, 0)
+  paraMetodo.forEach(v => {
+    const m = etiquetaMetodo(v)
+    if (!porMetodo[m]) porMetodo[m] = { total: 0, count: 0 }
+    porMetodo[m].total += v.total
+    porMetodo[m].count += 1
   })
 
   const porTipo: Record<string, number> = {}
@@ -232,9 +255,15 @@ export default function ReportesPage() {
 
               {/* KPIs */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-                {card('Total ventas', fmt(totalVentas))}
-                {card('N° comandas', String(ventas.length), 'órdenes registradas')}
+                {card('Ventas registradas', fmt(resumen.registradas.total), `${resumen.registradas.cantidad} comandas creadas en el período`)}
+                {card('Cobros recibidos', fmt(resumen.cobrado.total), `${resumen.cobrado.cantidad} cobros con fecha en el período`)}
+                {card('Saldo pendiente', fmt(resumen.pendiente.total), `${resumen.pendiente.cantidad} comandas sin cobrar`)}
                 {card('Ticket promedio', fmt(ticketPromedio))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+                {card('Sin identificar', fmt(resumen.sinIdentificar.total), `${resumen.sinIdentificar.cantidad} ventas históricas sin método`)}
+                {card('Cortesías', fmt(resumen.cortesias.total), `${resumen.cortesias.cantidad} sin cobro`)}
+                {card('N° comandas', String(ventas.length), 'órdenes registradas')}
                 {card('Productos vendidos', String(Object.values(conteoProductos).reduce((s, p) => s + p.cantidad, 0)))}
               </div>
 
@@ -269,11 +298,11 @@ export default function ReportesPage() {
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: METODO_COLOR[metodo] || 'var(--gold)' }}>{fmt(data.total)}</div>
-                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>{totalVentas ? Math.round(data.total / totalVentas * 100) : 0}%</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>{totalMetodos ? Math.round(data.total / totalMetodos * 100) : 0}%</div>
                         </div>
                       </div>
                       <div style={{ marginTop: 4, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${totalVentas ? Math.round(data.total / totalVentas * 100) : 0}%`, background: METODO_COLOR[metodo] || 'var(--gold)', borderRadius: 2 }} />
+                        <div style={{ height: '100%', width: `${totalMetodos ? Math.round(data.total / totalMetodos * 100) : 0}%`, background: METODO_COLOR[metodo] || 'var(--gold)', borderRadius: 2 }} />
                       </div>
                     </div>
                   ))}
@@ -362,15 +391,15 @@ export default function ReportesPage() {
                             ) : (
                               <>
                                 <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: METODO_COLOR[v.metodo_pago] || 'var(--muted)', marginRight: 6 }} />
-                                {v.metodo_pago}
+                                {etiquetaMetodo(v)}
                               </>
                             )}
                           </td>
                           <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--gold)', fontWeight: 600 }}>{fmt(v.total)}</td>
                           <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{new Date(v.created_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                           <td style={{ padding: '9px 12px' }}>
-                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: v.estado === 'listo' ? 'var(--green-bg)' : 'var(--gold-bg)', color: v.estado === 'listo' ? 'var(--green)' : 'var(--gold)', border: `1px solid ${v.estado === 'listo' ? 'var(--green)' : 'var(--gold)'}` }}>
-                              {v.estado}
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: (v.estado_pago === 'pagado' || v.estado_pago === 'cortesia') ? 'var(--green-bg)' : 'var(--gold-bg)', color: v.estado_pago === 'pagado' ? 'var(--green)' : 'var(--gold)', border: `1px solid ${v.estado === 'listo' ? 'var(--green)' : 'var(--gold)'}` }}>
+                              {v.estado} · {v.estado_pago === 'pagado' ? 'pagado' : v.estado_pago === 'cortesia' ? 'cortesía' : v.estado_pago === 'sin_identificar' ? 'sin identificar' : 'sin pagar'}
                             </span>
                           </td>
                           {esAdmin && (

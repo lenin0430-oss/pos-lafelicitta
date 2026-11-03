@@ -71,34 +71,21 @@ export default function GastosPage() {
     setTimeout(() => setMensaje(null), 3500)
   }
 
-  async function guardarGasto(cat: string, desc: string, mon: number) {
+  // El gasto lo valida y registra el SERVIDOR (/api/gastos): importe, autor y fecha salen de la sesión; un garzón con
+  // monto >= 30.000 necesita una aprobación de administrador de un solo uso (token que emite /api/admin/verificar-pin).
+  async function guardarGasto(cat: string, desc: string, mon: number, aprobacion?: string) {
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) { mostrarMensaje('No hay empresa activa', 'err'); return }
 
-    // Obtener apertura activa
-    const { data: apertura } = await supabase
-      .from('aperturas_caja')
-      .select('id')
-      .eq('empresa_id', empresaId)
-      .eq('estado', 'abierta')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
     setGuardando(true)
-    const { error } = await supabase.from('gastos').insert({
-      empresa_id: empresaId,
-      categoria: cat.toLowerCase().split(' /')[0].trim(),
-      descripcion: desc,
-      monto: mon,
-      cajero: sesion?.nombre || 'Caja',
-      apertura_id: apertura?.id || null,
-      afecto_caja: afectoCaja,
-      created_at: new Date().toISOString()
+    const r = await fetch('/api/gastos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoria: cat, descripcion: desc, monto: mon, afecto_caja: afectoCaja, ...(aprobacion ? { aprobacion } : {}) })
     })
+    const data = await r.json().catch(() => null)
 
-    if (error) {
-      mostrarMensaje('Error: ' + error.message, 'err')
+    if (!r.ok || !data?.ok) {
+      mostrarMensaje('Error: ' + (data?.error || 'no se pudo registrar el gasto'), 'err')
     } else {
       mostrarMensaje('Gasto registrado', 'ok')
       setCategoria('Ingredientes / Insumos')
@@ -129,20 +116,18 @@ export default function GastosPage() {
   }
 
   async function verificarPin() {
-    // Verificar PIN admin en Supabase
-    const empresaId = await getEmpresaIdActual()
-    const { data } = await supabase
-      .from('usuarios')
-      .select('nombre')
-      .eq('empresa_id', empresaId)
-      .eq('pin', pinAdmin)
-      .eq('rol', 'admin')
-      .maybeSingle()
+    // El PIN del administrador se verifica en el SERVIDOR y a cambio se recibe una aprobación de un solo uso para ESTE gasto.
+    if (!gastosPendiente) return
+    const r = await fetch('/api/admin/verificar-pin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: pinAdmin, categoria: gastosPendiente.categoria, descripcion: gastosPendiente.descripcion, monto: gastosPendiente.monto })
+    })
+    const data = await r.json().catch(() => null)
 
-    if (data && gastosPendiente) {
-      await guardarGasto(gastosPendiente.categoria, gastosPendiente.descripcion, gastosPendiente.monto)
+    if (data?.ok && data.aprobacion) {
+      await guardarGasto(gastosPendiente.categoria, gastosPendiente.descripcion, gastosPendiente.monto, data.aprobacion)
     } else {
-      mostrarMensaje('PIN admin incorrecto', 'err')
+      mostrarMensaje(r.status === 429 ? 'Demasiados intentos. Espera unos minutos.' : 'PIN admin incorrecto', 'err')
       setPinAdmin('')
     }
   }

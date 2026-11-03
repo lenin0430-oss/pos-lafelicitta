@@ -1,0 +1,538 @@
+{
+  "empresa": "c0300000-0000-4000-8000-000000000001",
+  "turno": "5958f096-124f-4a10-8ab8-8b36b8954a03",
+  "fecha": "2026-11-03T20:24:08.861Z",
+  "evidencia": [
+    {
+      "ruta": "/api/auth/login",
+      "status": 200,
+      "respuesta": {
+        "ok": true,
+        "rol": "admin",
+        "nombre": "E2E Admin Cierre",
+        "empresa_id": "c0300000-0000-4000-8000-000000000001"
+      }
+    },
+    {
+      "ruta": "/api/turno",
+      "status": 200,
+      "respuesta": {
+        "ok": true,
+        "abierto": true,
+        "resumen": {
+          "fondo": 10000,
+          "turno": {
+            "id": "5958f096-124f-4a10-8ab8-8b36b8954a03",
+            "cajero": "E2E Admin Cierre",
+            "estado": "abierta",
+            "numero": 1,
+            "cierre_at": null,
+            "apertura_at": "2026-11-03T20:21:43.028996+00:00",
+            "fecha_apertura": "2026-11-03",
+            "horas_abiertas": 0.04
+          },
+          "cobros": {
+            "qr": 0,
+            "debito": 0,
+            "credito": 0,
+            "cortesia": 0,
+            "efectivo": 0,
+            "por_conciliar": 0,
+            "transferencia": 0
+          },
+          "retiros": 0,
+          "bloqueos": [],
+          "esperado": {
+            "qr": 0,
+            "debito": 0,
+            "credito": 0,
+            "efectivo": 10000,
+            "por_conciliar": 0,
+            "transferencia": 0
+          },
+          "pendientes": {
+            "bloqueos_total": 0,
+            "ventas_sin_cobrar": 0,
+            "monto_por_conciliar": 0,
+            "cobros_por_conciliar": 0
+          },
+          "gastos_caja": 0,
+          "gastos_otros_medios": 0,
+          "propinas_registradas": 0
+        },
+        "por_conciliar": [],
+        "point_confirmados": []
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": {
+          "id": "9af2746b-a703-47b9-84a5-b45556a9ca08",
+          "numero": 1,
+          "mesa": "PRUEBA CIERRE",
+          "mesero": "E2E Admin Cierre",
+          "personas": 1,
+          "metodo_pago": "",
+          "total": 5000,
+          "items": [
+            {
+              "nombre": "Plato prueba cierre",
+              "cantidad": 1,
+              "precio_unit": 5000
+            }
+          ],
+          "estado": "pendiente",
+          "nota": null,
+          "created_at": "2026-11-03T20:24:00.633+00:00",
+          "nota_general": null,
+          "tipo_servicio": null,
+          "empresa_id": "c0300000-0000-4000-8000-000000000001",
+          "estado_pago": "pendiente",
+          "pagado_at": null,
+          "cocina_archivada_at": null,
+          "turno_id": null,
+          "folio": 1,
+          "clave_idempotencia": "a764072c-6250-4422-8e04-96d12ccb75e6"
+        },
+        "count": null,
+        "status": 201,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": [
+          {
+            "id": "9af2746b-a703-47b9-84a5-b45556a9ca08"
+          }
+        ],
+        "count": null,
+        "status": 200,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": {
+          "id": "be8d103d-2436-4bcc-ad71-c288ad252900",
+          "numero": 2,
+          "mesa": "PRUEBA CIERRE",
+          "mesero": "E2E Admin Cierre",
+          "personas": 1,
+          "metodo_pago": "",
+          "total": 5000,
+          "items": [
+            {
+              "nombre": "Plato prueba cierre",
+              "cantidad": 1,
+              "precio_unit": 5000
+            }
+          ],
+          "estado": "pendiente",
+          "nota": null,
+          "created_at": "2026-11-03T20:24:02.107+00:00",
+          "nota_general": null,
+          "tipo_servicio": null,
+          "empresa_id": "c0300000-0000-4000-8000-000000000001",
+          "estado_pago": "pendiente",
+          "pagado_at": null,
+          "cocina_archivada_at": null,
+          "turno_id": null,
+          "folio": 2,
+          "clave_idempotencia": "1387f3f6-05a7-44ee-8cea-bc15acc1dbd7"
+        },
+        "count": null,
+        "status": 201,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": [
+          {
+            "id": "be8d103d-2436-4bcc-ad71-c288ad252900"
+          }
+        ],
+        "count": null,
+        "status": 200,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": {
+          "id": "fefbfd34-fcc4-4bf8-b331-e04bb8571592",
+          "numero": 3,
+          "mesa": "PRUEBA CIERRE",
+          "mesero": "E2E Admin Cierre",
+          "personas": 1,
+          "metodo_pago": "",
+          "total": 5000,
+          "items": [
+            {
+              "nombre": "Plato prueba cierre",
+              "cantidad": 1,
+              "precio_unit": 5000
+            }
+          ],
+          "estado": "pendiente",
+          "nota": null,
+          "created_at": "2026-11-03T20:24:03.306+00:00",
+          "nota_general": null,
+          "tipo_servicio": null,
+          "empresa_id": "c0300000-0000-4000-8000-000000000001",
+          "estado_pago": "pendiente",
+          "pagado_at": null,
+          "cocina_archivada_at": null,
+          "turno_id": null,
+          "folio": 3,
+          "clave_idempotencia": "2767e675-f1bd-43e8-8c34-3b1d5c56e1f6"
+        },
+        "count": null,
+        "status": 201,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": [
+          {
+            "id": "fefbfd34-fcc4-4bf8-b331-e04bb8571592"
+          }
+        ],
+        "count": null,
+        "status": 200,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": {
+          "id": "87f7ca08-006d-47af-b700-fa39dcf84169",
+          "numero": 4,
+          "mesa": "PRUEBA CIERRE",
+          "mesero": "E2E Admin Cierre",
+          "personas": 1,
+          "metodo_pago": "",
+          "total": 5000,
+          "items": [
+            {
+              "nombre": "Plato prueba cierre",
+              "cantidad": 1,
+              "precio_unit": 5000
+            }
+          ],
+          "estado": "pendiente",
+          "nota": null,
+          "created_at": "2026-11-03T20:24:04.498+00:00",
+          "nota_general": null,
+          "tipo_servicio": null,
+          "empresa_id": "c0300000-0000-4000-8000-000000000001",
+          "estado_pago": "pendiente",
+          "pagado_at": null,
+          "cocina_archivada_at": null,
+          "turno_id": null,
+          "folio": 4,
+          "clave_idempotencia": "826347ff-4950-428d-952e-2e8746d486d9"
+        },
+        "count": null,
+        "status": 201,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": [
+          {
+            "id": "87f7ca08-006d-47af-b700-fa39dcf84169"
+          }
+        ],
+        "count": null,
+        "status": 200,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": {
+          "id": "d491a8a8-1548-4095-87a0-50f0dc15946f",
+          "numero": 5,
+          "mesa": "PRUEBA CIERRE",
+          "mesero": "E2E Admin Cierre",
+          "personas": 1,
+          "metodo_pago": "",
+          "total": 5000,
+          "items": [
+            {
+              "nombre": "Plato prueba cierre",
+              "cantidad": 1,
+              "precio_unit": 5000
+            }
+          ],
+          "estado": "pendiente",
+          "nota": null,
+          "created_at": "2026-11-03T20:24:05.711+00:00",
+          "nota_general": null,
+          "tipo_servicio": null,
+          "empresa_id": "c0300000-0000-4000-8000-000000000001",
+          "estado_pago": "pendiente",
+          "pagado_at": null,
+          "cocina_archivada_at": null,
+          "turno_id": null,
+          "folio": 5,
+          "clave_idempotencia": "f45bccaa-c6ab-4a39-bee2-efe200c21a83"
+        },
+        "count": null,
+        "status": 201,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": [
+          {
+            "id": "d491a8a8-1548-4095-87a0-50f0dc15946f"
+          }
+        ],
+        "count": null,
+        "status": 200,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/datos",
+      "status": 200,
+      "respuesta": {
+        "data": null,
+        "count": null,
+        "status": 204,
+        "error": null
+      }
+    },
+    {
+      "ruta": "/api/gastos",
+      "status": 200,
+      "respuesta": {
+        "ok": true
+      }
+    },
+    {
+      "ruta": "/api/gastos",
+      "status": 200,
+      "respuesta": {
+        "ok": true
+      }
+    },
+    {
+      "ruta": "/api/turno",
+      "status": 200,
+      "respuesta": {
+        "ok": true,
+        "abierto": true,
+        "resumen": {
+          "fondo": 10000,
+          "turno": {
+            "id": "5958f096-124f-4a10-8ab8-8b36b8954a03",
+            "cajero": "E2E Admin Cierre",
+            "estado": "abierta",
+            "numero": 1,
+            "cierre_at": null,
+            "apertura_at": "2026-11-03T20:21:43.028996+00:00",
+            "fecha_apertura": "2026-11-03",
+            "horas_abiertas": 0.04
+          },
+          "cobros": {
+            "qr": 5000,
+            "debito": 5000,
+            "credito": 5000,
+            "cortesia": 0,
+            "efectivo": 5000,
+            "por_conciliar": 0,
+            "transferencia": 5000
+          },
+          "retiros": 0,
+          "bloqueos": [],
+          "esperado": {
+            "qr": 5000,
+            "debito": 5000,
+            "credito": 5000,
+            "efectivo": 13000,
+            "por_conciliar": 0,
+            "transferencia": 5000
+          },
+          "pendientes": {
+            "bloqueos_total": 0,
+            "ventas_sin_cobrar": 0,
+            "monto_por_conciliar": 0,
+            "cobros_por_conciliar": 0
+          },
+          "gastos_caja": 2000,
+          "gastos_otros_medios": 1500,
+          "propinas_registradas": 0
+        },
+        "por_conciliar": [],
+        "point_confirmados": []
+      }
+    }
+  ]
+}

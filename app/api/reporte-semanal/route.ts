@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/mp'
+import { cronAutorizado } from '@/lib/seguridadBot'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 const EMPRESA_ID = '382de687-99e1-4303-bbac-783561f663f0'
 
@@ -13,12 +10,12 @@ function fmt(n: number) {
 }
 
 export async function GET(request: Request) {
-  // Verificar token secreto
-  const { searchParams } = new URL(request.url)
-  const token = searchParams.get('token')
-  if (token !== 'lafelicitta2026') {
+  // Vercel Cron envía Authorization: Bearer CRON_SECRET. Sin CRON_SECRET configurado se rechaza todo.
+  if (!cronAutorizado(request.headers.get('authorization'), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
+  // Llave de servicio del servidor (SUPABASE_SERVICE_ROLE_KEY): ya no se usa la llave pública como respaldo.
+  const supabase = supabaseAdmin()
 
   try {
     // Rango: lunes pasado a domingo pasado
@@ -43,7 +40,7 @@ export async function GET(request: Request) {
       .from('ventas')
       .select('total, metodo_pago, created_at')
       .eq('empresa_id', EMPRESA_ID)
-      .eq('estado', 'listo')
+      .eq('estado_pago', 'pagado')
       .gte('created_at', desde)
       .lte('created_at', hasta)
 
@@ -52,7 +49,7 @@ export async function GET(request: Request) {
     const efectivo = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('efectivo')).reduce((s, v) => s + v.total, 0)
     const debito = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('deb')).reduce((s, v) => s + v.total, 0)
     const transfer = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('trans')).reduce((s, v) => s + v.total, 0)
-    const qr = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('mercado')).reduce((s, v) => s + v.total, 0)
+    const qr = (ventas || []).filter(v => (v.metodo_pago || '').toLowerCase().includes('mercado') || (v.metodo_pago || '').toLowerCase().includes('point')).reduce((s, v) => s + v.total, 0)
 
     // Promedio diario
     const promedioDiario = Math.round(totalVentas / 7)
@@ -123,11 +120,11 @@ Neto estimado: *${fmt(neto)}*
 ${totalPropinas > 0 ? `💰 Propinas semana: ${fmt(totalPropinas)}\n` : ''}${Math.abs(totalDiferencias) > 0 ? `⚠️ Diferencias acumuladas: ${fmt(totalDiferencias)}\n` : ''}${peorDiferencia < -10000 ? `🚨 Peor diferencia: ${fmt(peorDiferencia)}\n` : ''}`
 
     // Enviar por WhatsApp via bot
-    await fetch('http://67.205.170.244:3001/cierre-turno', {
+    await fetch(`${process.env.BOT_URL}/cierre-turno`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-bot-secret': 'lafelicitta2026'
+        'x-bot-secret': process.env.BOT_SECRET || ''
       },
       body: JSON.stringify({ alerta_diferencia: false, reporte_semanal: true, mensaje_custom: mensaje })
     })

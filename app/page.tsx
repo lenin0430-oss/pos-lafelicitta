@@ -1,8 +1,10 @@
 'use client'
+import { estadoPagoParaMetodo } from '@/lib/estados'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
 import { getEmpresaIdActual, getSesion } from '@/lib/auth'
+import { huellaComanda, crearGestorIntenciones, recuperarPendiente, resolverHuerfanas, guardarComandaIdempotente, type Canal } from '@/lib/intencionComanda'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
 import BotonCobrarPoint from '@/components/BotonCobrarPoint'
@@ -15,6 +17,15 @@ interface ItemComanda {
   cantidad: number
   nota: string
 }
+
+// Un gestor por carga de página: la clave se conserva en memoria aunque falle el almacenamiento; una intención por pestaña.
+const gestorComanda = crearGestorIntenciones({
+  local: typeof window !== 'undefined' ? safeStorage('localStorage') : null,
+  sesion: typeof window !== 'undefined' ? safeStorage('sessionStorage') : null,
+  nuevoUuid: () => crypto.randomUUID(),
+  canal: () => (typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('lf_comanda_tabs') as unknown as Canal : null), // para saber si la página anterior sigue viva
+})
+function safeStorage(n: 'localStorage' | 'sessionStorage'): Storage | null { try { return window[n] } catch { return null } }
 
 export default function CajaPage() {
   const [mesa, setMesa] = useState('Mesa 1')
@@ -29,11 +40,14 @@ export default function CajaPage() {
   const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0] || '')
   const [busqueda, setBusqueda] = useState('')
   const [guardando, setGuardando] = useState(false)
-  const [ordenNum, setOrdenNum] = useState(1)
+  // Folio de la comanda: lo asigna la base al guardar (nunca localStorage ni contadores del navegador)
+  const [inciertas, setInciertas] = useState<{ tab: string; clave: string; mesa?: string; total?: number }[]>([])
+  const [numeroComanda, setNumeroComanda] = useState<number | null>(null)
   const [hora, setHora] = useState('')
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
   const [tabMovil, setTabMovil] = useState<'menu'|'comanda'>('menu')
   const [cajaAbierta, setCajaAbierta] = useState<boolean | null>(null)
+  const [turnoAbierto, setTurnoAbierto] = useState<boolean | null>(null)   // turno v2 abierto: sin él no se puede COBRAR (la base también lo rechaza)
 
   // FLUJO: paso 1 = enviar a cocina, paso 2 = cobrar
   const [ventaId, setVentaId] = useState<string | null>(null)
@@ -69,9 +83,18 @@ export default function CajaPage() {
     return () => { clearInterval(tick); clearInterval(poll) }
   }, [])
 
+  // Identidad de pestaña: latido mientras la página vive y liberación al salir (permite detectar una pestaña duplicada y recuperar tras recargar).
+  useEffect(() => {
+    let t: ReturnType<typeof setInterval> | undefined
+    gestorComanda.iniciar().then(() => { gestorComanda.latido(); t = setInterval(() => gestorComanda.latido(), 20000) })
+    const ver = () => { if (document.visibilityState === 'visible') gestorComanda.latido() }
+    const salir = () => gestorComanda.liberar()
+    document.addEventListener('visibilitychange', ver)
+    window.addEventListener('pagehide', salir)
+    return () => { if (t) clearInterval(t); document.removeEventListener('visibilitychange', ver); window.removeEventListener('pagehide', salir) }
+  }, [])
+
   async function inicializarCaja() {
-    const n = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
-    setOrdenNum(n)
     verificarApertura()
 
     const catalogo = await cargarCatalogo()
@@ -79,7 +102,38 @@ export default function CajaPage() {
     if (typeof window !== 'undefined') {
       const editarId = new URLSearchParams(window.location.search).get('editar')
       if (editarId) cargarComandaParaEditar(editarId, catalogo.menu)
+      else recuperarComandaPendiente(catalogo.menu)
     }
+  }
+
+  // Recarga con una comanda enviada cuya respuesta se perdió: si la base ya la tiene, se vuelve a abrir (mismo folio); si no, la clave queda para el reintento.
+  async function recuperarComandaPendiente(menuActual: Producto[]) {
+    try {
+      const empresaId = await getEmpresaIdActual()
+      if (!empresaId) return
+      await gestorComanda.iniciar()                      // decide la identidad de la pestaña (¿sigue viva la anterior?) antes de leer nada
+      const data = await recuperarPendiente(supabase, gestorComanda, empresaId)
+      if (data) {
+        await cargarComandaParaEditar(data.id, menuActual)
+        gestorComanda.cerrar()
+        mostrarMensaje(`Se recuperó la comanda #${data.numero}, que ya estaba guardada (no se creó otra)`, 'ok')
+      }
+      await revisarPendientesInciertos(empresaId, !data, menuActual)
+    } catch { /* sin conexión: se reintenta al enviar */ }
+  }
+
+  // Pedidos inciertos de una página que ya no existe: si la base los tiene se recuperan (mismo folio); si no se puede confirmar, se BLOQUEA otro envío.
+  async function revisarPendientesInciertos(empresaId: string, abrir: boolean, menuActual?: Producto[]): Promise<boolean> {
+    await gestorComanda.iniciar()
+    const r = await resolverHuerfanas(supabase, gestorComanda, empresaId)
+    setInciertas(r.inciertas)
+    if (r.recuperadas.length) {
+      const n = r.recuperadas.map(x => '#' + x.numero).join(', ')
+      if (abrir && items.length === 0 && !ventaId) await cargarComandaParaEditar(r.recuperadas[0].id, menuActual)
+      mostrarMensaje(`Un pedido anterior ya estaba guardado: comanda ${n}. No se creó otra`, 'ok')
+      return !abrir
+    }
+    return r.inciertas.length > 0
   }
 
   async function cargarCatalogo() {
@@ -121,16 +175,18 @@ export default function CajaPage() {
 
   async function verificarApertura() {
     const sesion = getSesion()
-    if (sesion?.rol === 'admin') { setCajaAbierta(true); return }
     const empresaId = await getEmpresaIdActual()
-    if (!empresaId) { setCajaAbierta(false); return }
-    const { data } = await supabase
+    if (!empresaId) { setCajaAbierta(sesion?.rol === 'admin'); return }
+    const { data, error } = await supabase
       .from('aperturas_caja')
       .select('id')
       .eq('empresa_id', empresaId)
       .eq('estado', 'abierta')
+      .eq('modelo', 'v2')
       .limit(1)
-    setCajaAbierta(!!(data && data.length > 0))
+    const hay = !!(data && data.length > 0)
+    if (!error) setTurnoAbierto(hay)
+    setCajaAbierta(sesion?.rol === 'admin' ? true : (error ? false : hay))
   }
 
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
@@ -207,7 +263,7 @@ export default function CajaPage() {
       setMesa(data.mesa || 'Mesa 1')
       setMesero(data.mesero || '')
       setPersonas(data.personas || 2)
-      setOrdenNum((data.numero || 1) + 1)
+      setNumeroComanda(data.numero ?? null)
 
       const itemsEditados = (data.items || []).map((it: any, idx: number) => {
         const prod = menuActual.find(p => p.nombre === it.nombre) || {
@@ -228,7 +284,7 @@ export default function CajaPage() {
 
       setItems(itemsEditados)
       setEnviada(true)
-      setCobrada(data.estado === 'listo')
+      setCobrada(data.estado_pago === 'pagado' || data.estado_pago === 'cortesia')
       setTabMovil('comanda')
       mostrarMensaje('Comanda abierta para editar ✓', 'ok')
     } catch (e: unknown) {
@@ -299,7 +355,7 @@ export default function CajaPage() {
         if (error) throw error
 
         mostrarMensaje('Comanda actualizada en cocina ✓', 'ok')
-        imprimirComandaRaw(Math.max(1, ordenNum - 1), printWindow)
+        imprimirComandaRaw(numeroComanda ?? 0, printWindow)
       } catch (e: unknown) {
         if (printWindow && !printWindow.closed) printWindow.close()
         mostrarMensaje('Error al actualizar: ' + (e as Error).message, 'err')
@@ -308,23 +364,39 @@ export default function CajaPage() {
       return
     }
 
+    // Antes de crear una comanda NUEVA: ¿quedó un pedido anterior sin confirmar? Se comprueba en el servidor; si no se puede confirmar, no se envía.
+    try {
+      if (await revisarPendientesInciertos(empresaId, false)) {
+        if (printWindow && !printWindow.closed) printWindow.close()
+        mostrarMensaje('Hay un pedido enviado sin confirmar. Compruébalo o descártalo (aviso rojo) antes de enviar otro', 'err')
+        return
+      }
+    } catch (e: unknown) {
+      if (printWindow && !printWindow.closed) printWindow.close()
+      mostrarMensaje('No se pudo comprobar el pedido anterior: ' + (e as Error).message, 'err')
+      return
+    }
     setGuardando(true)
     try {
-      const { data, error } = await supabase.from('ventas').insert({
+      await gestorComanda.iniciar()
+      // La clave se guarda en el navegador ANTES de enviar: si se pierde la respuesta y se recarga, se recupera la misma comanda.
+      const clave = gestorComanda.claveParaEnvio(empresaId, huellaComanda(mesa, items), { mesa, total })
+      const fila = {
         empresa_id: empresaId,
-        numero: ordenNum, mesa, mesero: mesero || 'Caja', personas,
+        mesa, mesero: mesero || 'Caja', personas,
         metodo_pago: '', total,
         items: items.map(i => ({ nombre: i.producto.nombre, cantidad: i.cantidad, precio_unit: i.producto.precio, nota: i.nota, ingredientes: i.producto.ingredientes || '' })),
         estado: 'pendiente', created_at: new Date().toISOString()
-      }).select().single()
-      if (error) throw error
+      }
+      // Busca primero por clave (respuesta perdida) y recupera ante 23505; el folio lo asigna la base.
+      const { data, error } = await guardarComandaIdempotente(supabase, empresaId, clave, fila)
+      if (error || !data) throw error || new Error('No se recibió la comanda')
       setVentaId(data.id)
+      setNumeroComanda(data.numero)
       setEnviada(true)
-      const nuevoNum = ordenNum + 1
-      setOrdenNum(nuevoNum)
-      if (typeof window !== 'undefined') localStorage.setItem('lf_orden_num', String(nuevoNum))
-      mostrarMensaje(`Comanda #${ordenNum} enviada a cocina ✓`, 'ok')
-      imprimirComandaRaw(ordenNum, printWindow)
+      gestorComanda.cerrar()
+      mostrarMensaje(`Comanda #${data.numero} enviada a cocina ✓`, 'ok')
+      imprimirComandaRaw(data.numero, printWindow)
     } catch (e: unknown) {
       if (printWindow && !printWindow.closed) printWindow.close()
       mostrarMensaje('Error: ' + (e as Error).message, 'err')
@@ -336,6 +408,7 @@ export default function CajaPage() {
   function abrirCobro() {
     if (!enviada) { mostrarMensaje('Primero envía la comanda a cocina', 'err'); return }
     if (cobrada) return
+    if (turnoAbierto === false) { mostrarMensaje('No hay turno abierto: ábrelo en «Cierre» para cobrar', 'err'); return }
     setModalCobro(true)
   }
 
@@ -351,7 +424,7 @@ export default function CajaPage() {
     setCobrando(true)
     try {
       const { error } = await supabase.from('ventas')
-        .update({ metodo_pago: detalleMetodoPago, estado: 'listo' })
+        .update({ metodo_pago: detalleMetodoPago, estado_pago: estadoPagoParaMetodo(detalleMetodoPago), pagado_at: new Date().toISOString() })
         .eq('empresa_id', empresaId)
         .eq('id', ventaId)
       if (error) throw error
@@ -368,12 +441,13 @@ export default function CajaPage() {
             metodo_pago: metodoPago || 'Efectivo',
             cajero: getSesion()?.nombre || 'Caja',
             venta_id: ventaId,
-            notas: 'Cobro comanda #' + String(ordenNum - 1).padStart(3,'0'),
+            notas: 'Cobro comanda #' + String(numeroComanda ?? 0).padStart(3,'0'),
             created_at: new Date().toISOString()
           })
         } catch(ep) { console.warn('Error propina:', ep) }
       }
     } catch (e: unknown) {
+      if ((e as { code?: string }).code === 'P0413') setTurnoAbierto(false)
       mostrarMensaje('Error al cobrar: ' + (e as Error).message, 'err')
     }
     setCobrando(false)
@@ -388,6 +462,8 @@ export default function CajaPage() {
     setEnviada(false)
     setCobrada(false)
     setVentaId(null)
+    setNumeroComanda(null)
+    gestorComanda.cerrar() // «Comanda nueva»: la siguiente usa otra clave aunque lleve los mismos productos
     setModalCobro(false)
     setTabMovil('menu')
     setPropinaMonto('')
@@ -486,7 +562,7 @@ export default function CajaPage() {
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: 'var(--navy)', border: '1px solid var(--navy)' }}>
             <span style={{ fontSize: 20 }}>🧾</span>
             <span style={{ fontFamily: 'var(--display)', fontSize: 21, letterSpacing: 2.4, color: 'var(--on-navy)', fontWeight: 900 }}>
-              COMANDA #{String(enviada ? ordenNum - 1 : ordenNum).padStart(3,'0')}
+              COMANDA #{enviada && numeroComanda !== null ? String(numeroComanda).padStart(3,'0') : 'NUEVA'}
             </span>
           </div>
           {estadoBadge && <span style={{ fontSize: 11, background: estadoBadge.bg, color: estadoBadge.color, borderRadius: 8, padding: '2px 8px', fontWeight: 700 }}>{estadoBadge.label}</span>}
@@ -582,7 +658,7 @@ export default function CajaPage() {
         <div className="t-tipo">{mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA'}</div>
         <hr className="t-divider" />
         <div className="t-meta">
-          <span><strong>COMANDA #{String(ordenNum - 1).padStart(3, '0')}</strong></span>
+          <span><strong>COMANDA #{String(numeroComanda ?? 0).padStart(3, '0')}</strong></span>
           <span>{mesa}</span>
           <span>{new Date().toLocaleDateString('es-CL')} {new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
@@ -646,6 +722,26 @@ export default function CajaPage() {
           <SesionBar />
         </div>
       </header>
+          {inciertas.length > 0 && (
+            <div role="alert" className="pos-pedido-incierto no-print">
+              <strong style={{ color: 'var(--red)' }}>Pedido enviado sin confirmar</strong>
+              {inciertas.map(x => (
+                <div key={x.tab} style={{ marginTop: 6 }}>
+                  {x.mesa ? `${x.mesa}` : 'Un pedido'}{x.total != null ? ` · $${Math.round(x.total).toLocaleString('es-CL')}` : ''}: no se pudo comprobar si llegó a cocina. Revisa Cocina; no envíes otro igual hasta resolverlo.
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                    <button onClick={async () => { const id = await getEmpresaIdActual(); if (id) await revisarPendientesInciertos(id, true, menu) }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', cursor: 'pointer' }}>Comprobar de nuevo</button>
+                    <button onClick={() => { if (confirm('¿Confirmas que ese pedido NO está en Cocina? Se descarta y podrás enviar.')) { gestorComanda.descartar(x.tab); setInciertas(prev => prev.filter(y => y.tab !== x.tab)) } }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--red)', background: 'transparent', color: 'var(--red)', cursor: 'pointer' }}>No se guardó: descartar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+      {turnoAbierto === false && (
+        <div role="alert" style={{ background: 'var(--red)', color: '#fff', padding: '8px 14px', fontSize: 14, fontWeight: 600, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>Sin turno abierto: no se puede cobrar (sí puedes tomar comandas).</span>
+          {esAdmin ? <a href="/cierre" style={{ color: '#fff', textDecoration: 'underline' }}>Abrir turno</a> : <span>Pide al administrador que abra el turno.</span>}
+        </div>
+      )}
 
       {/* DESKTOP */}
       <div className="no-print desktop-layout" style={{ display: 'none' }}>
@@ -675,7 +771,7 @@ export default function CajaPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
                 <div style={{ fontFamily: 'var(--display)', fontSize: 16, letterSpacing: 2, color: 'var(--gold)' }}>COBRO DE MESA</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{mesa} · Comanda #{String(ordenNum - 1).padStart(3,'0')}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{mesa} · Comanda #{String(numeroComanda ?? 0).padStart(3,'0')}</div>
               </div>
               <button onClick={() => setModalCobro(false)} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 18, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
@@ -720,7 +816,7 @@ export default function CajaPage() {
                         await supabase.from('propinas').insert({
                           empresa_id: empresaId, empleado: propinaEmpleado, monto: parseInt(propinaMonto),
                           metodo_pago: 'Point', cajero: getSesion()?.nombre || 'Caja', venta_id: ventaId,
-                          notas: 'Cobro comanda #' + String(ordenNum - 1).padStart(3,'0'),
+                          notas: 'Cobro comanda #' + String(numeroComanda ?? 0).padStart(3,'0'),
                           created_at: new Date().toISOString()
                         })
                       } catch(ep) { console.warn('Error propina:', ep) }

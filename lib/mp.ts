@@ -1,7 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 
-export const MP_API = "https://api.mercadopago.com";
+import { resolverMpApi } from "./mpApi";
+import { medioDesdeOrden } from "./medioPoint";
+
+// Siempre la API real, salvo simulador LOCAL de pruebas (ver lib/mpApi.ts; ignorado en producción).
+export const MP_API = resolverMpApi(process.env);
 export const MP_AUTH = "https://auth.mercadopago.cl/authorization";
 
 // ---------- Supabase (solo servidor, service role) ----------
@@ -15,13 +19,17 @@ export function supabaseAdmin() {
 
 // Cierra la venta igual que el POS (app/page.tsx → confirmarCobro): metodo_pago + estado "listo".
 // Idempotente: no toca ventas que ya están cobradas.
-export async function marcarVentaPagadaPoint(db: ReturnType<typeof supabaseAdmin>, ventaId: string, empresaId: string) {
+export async function marcarVentaPagadaPoint(db: ReturnType<typeof supabaseAdmin>, ventaId: string, empresaId: string, orden?: unknown) {
+  // Medio informado por Mercado Pago (si lo hay) ANTES de cobrar, para que el turno lo registre; si no, queda "por conciliar".
+  const medio = medioDesdeOrden(orden);
+  if (medio) await db.from("pagos_point").update({ medio_reportado: medio }).eq("venta_id", ventaId).eq("restaurante_id", empresaId).eq("estado", "processed");
+  // Solo toca el estado financiero. NO modifica ventas.estado (preparación/entrega de cocina).
   const { error } = await db
     .from("ventas")
-    .update({ metodo_pago: "Point", estado: "listo" })
+    .update({ metodo_pago: "Point", estado_pago: "pagado", pagado_at: new Date().toISOString() })
     .eq("empresa_id", empresaId)
     .eq("id", ventaId)
-    .neq("estado", "listo");
+    .neq("estado_pago", "pagado");
   if (error) throw error;
 }
 
@@ -119,7 +127,7 @@ export async function tokenDe(restauranteId: string): Promise<string> {
 export async function mpFetch(
   restauranteId: string,
   path: string,
-  init: RequestInit & { idempotency?: boolean } = {}
+  init: RequestInit & { idempotency?: boolean; idempotencyKey?: string } = {}
 ) {
   const token = await tokenDe(restauranteId);
   const headers: Record<string, string> = {
@@ -127,7 +135,9 @@ export async function mpFetch(
     "Content-Type": "application/json",
     ...(init.headers as Record<string, string>),
   };
-  if (init.idempotency) headers["X-Idempotency-Key"] = crypto.randomUUID();
+  // idempotencyKey = clave ESTABLE guardada en la base (reintentos seguros); idempotency = clave aleatoria de un solo uso.
+  if (init.idempotencyKey) headers["X-Idempotency-Key"] = init.idempotencyKey;
+  else if (init.idempotency) headers["X-Idempotency-Key"] = crypto.randomUUID();
   return fetch(`${MP_API}${path}`, { ...init, headers, cache: "no-store" });
 }
 

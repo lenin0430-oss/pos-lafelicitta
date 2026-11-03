@@ -1,0 +1,89 @@
+0) Control positivo: ANTES de 07 el problema existe (anon lee y escribe)
+  OK   anon lee usuarios (2 filas) — el problema reportado
+  OK   anon lee las ventas de TODOS los negocios (2)
+  OK   anon modifica ventas de otro negocio
+  OK   anon ejecuta verificar_pin_garzon (fuerza bruta posible)
+1) Aplicar 07 (una transacción)
+  OK   07 aplicada sin errores
+  OK   07 repetida: sin errores (idempotente)
+  OK   respaldo del estado anterior: 14 políticas guardadas (no se pisa al repetir)
+2) anon (llave pública): no lee ni escribe nada privado
+  OK   anon NO lee usuarios
+  OK   anon NO lee ventas
+  OK   anon NO lee gastos
+  OK   anon NO lee aperturas_caja
+  OK   anon NO lee cierres_caja
+  OK   anon NO lee propinas
+  OK   anon NO lee insumos
+  OK   anon NO lee recetas
+  OK   anon NO lee stock_insumos
+  OK   anon NO lee stock_compras
+  OK   anon NO lee stock_movimientos
+  OK   anon NO lee mesas
+  OK   anon NO lee configuracion_empresa
+  OK   anon NO lee pedidos
+  OK   anon NO lee pedido_items
+  OK   anon NO lee usuarios_pos
+  OK   anon NO lee mp_cuentas
+  OK   anon NO lee pagos_point
+  OK   anon NO lee respaldo_ventas_pre03
+  OK   anon NO lee permisos_respaldo_07
+  OK   anon NO puede: insert into ventas (empresa_id,total) values ('a
+  OK   anon NO puede: update ventas set total=1
+  OK   anon NO puede: delete from ventas
+  OK   anon NO puede: insert into usuarios (nombre) values ('x')
+  OK   anon NO puede: update usuarios set pin='0000'
+  OK   anon NO puede: delete from gastos
+  OK   anon NO puede: insert into gastos (empresa_id,monto) values ('a
+  OK   anon NO puede: update propinas set monto=0
+  OK   anon NO puede: insert into propinas (empresa_id,monto) values (
+  OK   anon NO puede: truncate ventas
+   funciones de login:
+  OK   anon NO ejecuta verificar_pin_garzon
+  OK   anon NO ejecuta verificar_login_admin
+  OK   authenticated NO ejecuta verificar_pin_garzon
+3) Lo que sigue abierto: solo la carta
+  OK   anon ve solo productos disponibles (1 de 2)
+  OK   anon lee categorías
+  OK   anon lee empresas (id,nombre,slug,logo_url) para el login
+  OK   anon NO lee columnas no públicas de empresas
+  OK   select * en empresas se rechaza (solo columnas públicas)
+  OK   anon NO puede: insert into productos (empresa_id,nombre,precio) val
+  OK   anon NO puede: update productos set precio=1
+  OK   anon NO puede: delete from productos
+  OK   anon NO puede: insert into categorias (empresa_id,nombre) values ('
+  OK   anon NO puede: update empresas set nombre='x'
+  OK   anon NO puede: delete from empresas
+4) authenticated (usuario de Supabase Auth): solo su propia fila y sin PIN
+  OK   ve 1 fila (la propia)
+  OK   lee nombre/empresa propios
+  OK   NO puede leer la columna pin
+  OK   NO puede modificar usuarios
+  OK   NO lee ventas (ni siquiera de su negocio: todo pasa por el servidor)
+5) service_role (servidor): todo el flujo operativo sigue funcionando
+  OK   crear venta
+  OK   pasar a listo (cocina)
+  OK   registrar gasto
+  OK   cierre de caja
+  OK   cobro Point (pagos_point)
+  OK   lee mp_cuentas (token cifrado) en el servidor
+  OK   login admin (RPC) desde el servidor
+  OK   login por PIN (RPC) desde el servidor
+  OK   verificar PIN de admin (gastos) desde el servidor
+  OK   eliminar venta (admin)
+6) Verificador de solo lectura: bloques B, C y D vacíos
+  OK   B: 0 tablas con escritura abierta
+  OK   C: 0 lecturas abiertas fuera de la carta
+  OK   verificar_07.sql es solo lectura
+  OK   D: 0 políticas públicas indebidas ni funciones abiertas
+7) Tablas nuevas ya no nacen abiertas (privilegios por defecto)
+  OK   anon NO ve una tabla creada después
+8) Reversión de emergencia restaura EXACTAMENTE el estado anterior
+  OK   reversión aplicada sin errores
+  OK   anon vuelve a leer usuarios (estado anterior, inseguro)
+  OK   anon vuelve a modificar ventas
+  OK   RPC de login vuelve a ser público
+  OK   14 políticas restauradas (las del estado anterior)
+  OK   huella (políticas + privilegios + RLS + funciones) IDÉNTICA a la de antes de 07
+
+RESULTADO: TODO OK
