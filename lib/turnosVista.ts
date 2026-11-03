@@ -29,3 +29,7 @@ export function agruparBloqueos(b: Bloqueo[] | null | undefined): { tipo: string
 }
 export const etiquetaBloqueo = (x: Bloqueo) =>
   `${x.numero != null ? `Comanda #${x.numero}` : "Venta"}${x.mesa ? ` · mesa ${x.mesa}` : ""} · $${Math.round(x.monto).toLocaleString("es-CL")} — ${x.motivo}`;
+
+// Folios internos (los asigna la base; no son numeración tributaria del SII). Históricos sin folio: null → no se muestra.
+export const folioTexto = (n: number | null | undefined, ancho = 4): string => (n == null ? "" : String(n).padStart(ancho, "0"));
+export const etiquetaFolio = (prefijo: string, n: number | null | undefined): string => (n == null ? "" : `${prefijo} N° ${folioTexto(n)}`);

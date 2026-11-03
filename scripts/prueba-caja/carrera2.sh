@@ -23,7 +23,7 @@ for K in comanda pagada point; do
  ( $P -c "begin; $SQL; select pg_sleep(2); commit" >/dev/null 2>&1 ) & sleep 0.6
  R=$($P -c "$(cierre_sql)"); wait; est=$(snap)
  case $K in
-  comanda) chk "orden1 $K: la comanda guardada primero BLOQUEA el cierre (turno sigue abierto, comanda listada)" $([ "$est" = abierta ] && echo "$R" | grep -q '"codigo": "bloqueado"' && echo "$R" | grep -q '"numero": 7' && echo 1 || echo 0);;
+  comanda) chk "orden1 $K: la comanda guardada primero BLOQUEA el cierre (turno sigue abierto, comanda listada)" $([ "$est" = abierta ] && echo "$R" | grep -q '"codigo": "bloqueado"' && echo "$R" | grep -q comanda_sin_entregar && echo 1 || echo 0);;
   pagada)  chk "orden1 $K: la venta pagada guardada primero entra en el cierre (efectivo 700)" $([ "$est" = cerrada ] && [ "$($P -c "select resumen->'cobros'->>'efectivo' from cierres_turno where turno_id='$T'")" = 700 ] && echo 1 || echo 0);;
   point)   chk "orden1 $K: la reserva Point guardada primero BLOQUEA el cierre (listada como pago en proceso)" $([ "$est" = abierta ] && echo "$R" | grep -q 'point_en_proceso' && echo 1 || echo 0);;
  esac

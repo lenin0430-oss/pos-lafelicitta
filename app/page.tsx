@@ -1,6 +1,6 @@
 'use client'
 import { estadoPagoParaMetodo } from '@/lib/estados'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
 import { getEmpresaIdActual, getSesion } from '@/lib/auth'
@@ -30,7 +30,9 @@ export default function CajaPage() {
   const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0] || '')
   const [busqueda, setBusqueda] = useState('')
   const [guardando, setGuardando] = useState(false)
-  const [ordenNum, setOrdenNum] = useState(1)
+  // Folio de la comanda: lo asigna la base al guardar (nunca localStorage ni contadores del navegador)
+  const [numeroComanda, setNumeroComanda] = useState<number | null>(null)
+  const claveComanda = useRef<string>('') // misma clave en cada reintento/doble clic de la MISMA comanda
   const [hora, setHora] = useState('')
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
   const [tabMovil, setTabMovil] = useState<'menu'|'comanda'>('menu')
@@ -72,8 +74,6 @@ export default function CajaPage() {
   }, [])
 
   async function inicializarCaja() {
-    const n = parseInt((typeof window !== 'undefined' ? localStorage.getItem('lf_orden_num') : null) || '1')
-    setOrdenNum(n)
     verificarApertura()
 
     const catalogo = await cargarCatalogo()
@@ -211,7 +211,7 @@ export default function CajaPage() {
       setMesa(data.mesa || 'Mesa 1')
       setMesero(data.mesero || '')
       setPersonas(data.personas || 2)
-      setOrdenNum((data.numero || 1) + 1)
+      setNumeroComanda(data.numero ?? null)
 
       const itemsEditados = (data.items || []).map((it: any, idx: number) => {
         const prod = menuActual.find(p => p.nombre === it.nombre) || {
@@ -303,7 +303,7 @@ export default function CajaPage() {
         if (error) throw error
 
         mostrarMensaje('Comanda actualizada en cocina ✓', 'ok')
-        imprimirComandaRaw(Math.max(1, ordenNum - 1), printWindow)
+        imprimirComandaRaw(numeroComanda ?? 0, printWindow)
       } catch (e: unknown) {
         if (printWindow && !printWindow.closed) printWindow.close()
         mostrarMensaje('Error al actualizar: ' + (e as Error).message, 'err')
@@ -314,21 +314,28 @@ export default function CajaPage() {
 
     setGuardando(true)
     try {
-      const { data, error } = await supabase.from('ventas').insert({
+      if (!claveComanda.current) claveComanda.current = crypto.randomUUID()
+      const clave = claveComanda.current
+      const fila = {
         empresa_id: empresaId,
-        numero: ordenNum, mesa, mesero: mesero || 'Caja', personas,
+        clave_idempotencia: clave,
+        mesa, mesero: mesero || 'Caja', personas,
         metodo_pago: '', total,
         items: items.map(i => ({ nombre: i.producto.nombre, cantidad: i.cantidad, precio_unit: i.producto.precio, nota: i.nota, ingredientes: i.producto.ingredientes || '' })),
         estado: 'pendiente', created_at: new Date().toISOString()
-      }).select().single()
-      if (error) throw error
+      }
+      let { data, error } = await supabase.from('ventas').insert(fila).select().single()
+      if (error && (error as { code?: string }).code === '23505') {
+        // Reintento de una comanda que ya se guardó: recuperar la misma, no crear otra
+        const previa = await supabase.from('ventas').select('*').eq('empresa_id', empresaId).eq('clave_idempotencia', clave).single()
+        data = previa.data; error = previa.error
+      }
+      if (error || !data) throw error || new Error('No se recibió la comanda')
       setVentaId(data.id)
+      setNumeroComanda(data.numero)
       setEnviada(true)
-      const nuevoNum = ordenNum + 1
-      setOrdenNum(nuevoNum)
-      if (typeof window !== 'undefined') localStorage.setItem('lf_orden_num', String(nuevoNum))
-      mostrarMensaje(`Comanda #${ordenNum} enviada a cocina ✓`, 'ok')
-      imprimirComandaRaw(ordenNum, printWindow)
+      mostrarMensaje(`Comanda #${data.numero} enviada a cocina ✓`, 'ok')
+      imprimirComandaRaw(data.numero, printWindow)
     } catch (e: unknown) {
       if (printWindow && !printWindow.closed) printWindow.close()
       mostrarMensaje('Error: ' + (e as Error).message, 'err')
@@ -373,7 +380,7 @@ export default function CajaPage() {
             metodo_pago: metodoPago || 'Efectivo',
             cajero: getSesion()?.nombre || 'Caja',
             venta_id: ventaId,
-            notas: 'Cobro comanda #' + String(ordenNum - 1).padStart(3,'0'),
+            notas: 'Cobro comanda #' + String(numeroComanda ?? 0).padStart(3,'0'),
             created_at: new Date().toISOString()
           })
         } catch(ep) { console.warn('Error propina:', ep) }
@@ -394,6 +401,8 @@ export default function CajaPage() {
     setEnviada(false)
     setCobrada(false)
     setVentaId(null)
+    setNumeroComanda(null)
+    claveComanda.current = ''
     setModalCobro(false)
     setTabMovil('menu')
     setPropinaMonto('')
@@ -492,7 +501,7 @@ export default function CajaPage() {
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: 'var(--navy)', border: '1px solid var(--navy)' }}>
             <span style={{ fontSize: 20 }}>🧾</span>
             <span style={{ fontFamily: 'var(--display)', fontSize: 21, letterSpacing: 2.4, color: 'var(--on-navy)', fontWeight: 900 }}>
-              COMANDA #{String(enviada ? ordenNum - 1 : ordenNum).padStart(3,'0')}
+              COMANDA #{enviada && numeroComanda !== null ? String(numeroComanda).padStart(3,'0') : 'NUEVA'}
             </span>
           </div>
           {estadoBadge && <span style={{ fontSize: 11, background: estadoBadge.bg, color: estadoBadge.color, borderRadius: 8, padding: '2px 8px', fontWeight: 700 }}>{estadoBadge.label}</span>}
@@ -588,7 +597,7 @@ export default function CajaPage() {
         <div className="t-tipo">{mesa.toLowerCase().includes('llevar') ? 'PARA LLEVAR' : mesa.toLowerCase().includes('delivery') ? 'DELIVERY' : 'SERVIR EN MESA'}</div>
         <hr className="t-divider" />
         <div className="t-meta">
-          <span><strong>COMANDA #{String(ordenNum - 1).padStart(3, '0')}</strong></span>
+          <span><strong>COMANDA #{String(numeroComanda ?? 0).padStart(3, '0')}</strong></span>
           <span>{mesa}</span>
           <span>{new Date().toLocaleDateString('es-CL')} {new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
@@ -687,7 +696,7 @@ export default function CajaPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
                 <div style={{ fontFamily: 'var(--display)', fontSize: 16, letterSpacing: 2, color: 'var(--gold)' }}>COBRO DE MESA</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{mesa} · Comanda #{String(ordenNum - 1).padStart(3,'0')}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{mesa} · Comanda #{String(numeroComanda ?? 0).padStart(3,'0')}</div>
               </div>
               <button onClick={() => setModalCobro(false)} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 18, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
@@ -732,7 +741,7 @@ export default function CajaPage() {
                         await supabase.from('propinas').insert({
                           empresa_id: empresaId, empleado: propinaEmpleado, monto: parseInt(propinaMonto),
                           metodo_pago: 'Point', cajero: getSesion()?.nombre || 'Caja', venta_id: ventaId,
-                          notas: 'Cobro comanda #' + String(ordenNum - 1).padStart(3,'0'),
+                          notas: 'Cobro comanda #' + String(numeroComanda ?? 0).padStart(3,'0'),
                           created_at: new Date().toISOString()
                         })
                       } catch(ep) { console.warn('Error propina:', ep) }

@@ -72,3 +72,6 @@ Corrección de un Point mal confirmado, cierre con pendientes, cruce de medianoc
 - Archivo de cocina: solo se excluye lo marcado por `06`. Consecuencia operativa: **06 es obligatorio antes del primer cierre** y toda comanda debe pasar a «Entregado».
 - Incremental para el proyecto de pruebas: `supabase/08c_bloqueos_cierre_sin_turno.sql` (≡ 08 final, verificado). Producción: solo 08.
 - Pruebas: `turnos.sql` 81/81, `carrera.sh` 4/4, `carrera2.sh` 8/8 (ambos órdenes), `tests/turnos.test.mjs` 20, suite 159, `tsc` limpio.
+
+## Revisión 7 (03/11/2026) — folios internos por negocio (09)
+Codex confirmó comandas duplicadas en producción (número calculado en el navegador con `localStorage`). `supabase/09_correlativos.sql` asigna en la base, con bloqueo de fila, correlativos por negocio para comandas, turnos (`numero_turno`) y cierres (`numero_cierre`); idempotencia por clave (`ventas.clave_idempotencia`, `aperturas_caja.clave_apertura`, clave del cierre); el histórico no se renumera. La interfaz muestra e imprime el número devuelto por el servidor; «Turno N°» y «Cierre N°» aparecen en cabecera, historial y ticket. Detalle y pruebas: `docs/PUBLICACION_CAJA_FELICITTA.md` §6b. Son folios internos, no numeración del SII.

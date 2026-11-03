@@ -91,7 +91,8 @@ export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
   if (a === "abrir") {
     const fondo = entero(b.fondo);
     if (fondo === null) return err(400, "Fondo inválido");
-    return desdeRpc(await db.rpc("turno_abrir", { p_empresa: s.empresa_id, p_fondo: fondo, p_cajero: s.nombre }));
+    const clave = typeof b.clave === "string" && UUID.test(b.clave) ? b.clave : null;
+    return desdeRpc(await db.rpc("turno_abrir", { p_empresa: s.empresa_id, p_fondo: fondo, p_cajero: s.nombre, p_clave: clave }));
   }
   const turno = await turnoPropio(db, s.empresa_id, b?.turno_id);
   if (!turno) return err(404, "Turno no encontrado");
@@ -129,7 +130,7 @@ export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
 
 // Historial auditable: últimos cierres del negocio con esperado/contado/diferencia por medio.
 export async function historialTurnos(db: Db, s: SesionT): Promise<RespT> {
-  const c = await db.from("cierres_turno").select("id,turno_id,fecha_apertura,apertura_at,cierre_at,fondo_contado,cerrado_por,notas,con_pendientes,resumen").eq("empresa_id", s.empresa_id).order("cierre_at", { ascending: false }).limit(30);
+  const c = await db.from("cierres_turno").select("id,numero_cierre,turno_id,fecha_apertura,apertura_at,cierre_at,fondo_contado,cerrado_por,notas,con_pendientes,resumen").eq("empresa_id", s.empresa_id).order("cierre_at", { ascending: false }).limit(30);
   const ids = (c?.data ?? []).map((x: any) => x.id);
   const m = ids.length ? await db.from("cierres_turno_medios").select("cierre_id,medio,esperado,contado,diferencia").in("cierre_id", ids) : { data: [] };
   const por: Record<string, unknown[]> = {};

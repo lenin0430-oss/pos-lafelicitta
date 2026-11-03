@@ -25,6 +25,15 @@ test("el navegador no puede apuntar a otro negocio: eq, in, insert y update con 
   const p = ok(garzon, sol("ventas", ["insert", venta()])); assert.equal(p.pasos[0].a[0].empresa_id, A);
   const q = ok(garzon, sol("ventas", ["insert", [venta(), venta({ empresa_id: A, numero: 2 })]])); assert.ok(q.pasos[0].a[0].every((f) => f.empresa_id === A));
 });
+const CLAVE = "33333333-3333-4333-8333-333333333333";
+test("folio de comanda: el número del navegador NUNCA se reenvía; la clave anti-duplicado sí (solo UUID)", () => {
+  const p = ok(garzon, sol("ventas", ["insert", venta({ numero: 99999, clave_idempotencia: CLAVE })]));
+  const f = p.pasos[0].a[0]; assert.equal("numero" in f, false); assert.equal(f.clave_idempotencia, CLAVE);
+  const q = ok(garzon, sol("ventas", ["insert", (({ numero, ...r }) => r)(venta({ clave_idempotencia: CLAVE }))])); assert.equal("numero" in q.pasos[0].a[0], false);
+  no(garzon, sol("ventas", ["insert", venta({ clave_idempotencia: "x" })]), 400);
+  no(garzon, sol("ventas", ["insert", venta({ numero: -3 })]), 400);
+  no(garzon, sol("ventas", ["insert", venta({ folio: 5 })]), 403);
+});
 test("update/delete exigen un filtro propio además del negocio", () => {
   no(admin, sol("ventas", ["delete"]), 400);
   no(admin, sol("productos", ["update", { precio: 1 }]), 400);

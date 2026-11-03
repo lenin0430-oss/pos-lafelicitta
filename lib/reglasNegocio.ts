@@ -82,15 +82,17 @@ export function reglasVentas(op: "insert" | "update", rol: Sesion["rol"], filas:
   if (op === "insert") {
     const salida: Fila[] = [];
     for (const f of filas) {
-      if (!soloClaves(f, ["empresa_id", "numero", "mesa", "mesero", "personas", "metodo_pago", "total", "items", "estado", "estado_pago", "created_at", "tipo_servicio"])) return no("Campos no permitidos en la venta", 403);
+      if (!soloClaves(f, ["empresa_id", "numero", "clave_idempotencia", "mesa", "mesero", "personas", "metodo_pago", "total", "items", "estado", "estado_pago", "created_at", "tipo_servicio"])) return no("Campos no permitidos en la venta", 403);
       if ("metodo_pago" in f && f.metodo_pago !== "" && f.metodo_pago !== null) return no("Una venta nueva no puede traer medio de pago", 403);
       if ("estado" in f && f.estado !== "pendiente") return no("Una venta nueva debe estar pendiente", 403);
-      if (!entero(f.numero, 0, 9_999_999) || !texto(f.mesa, 60, 1) || !texto(f.mesero ?? "Caja", 60) || !entero(f.personas ?? 1, 0, 200)) return no("Datos de venta inválidos");
+      // El folio (numero) lo asigna la base: si el cliente lo manda se IGNORA (nunca se reenvía).
+      if (("numero" in f && f.numero !== undefined && !entero(f.numero, 0, 9_999_999)) || !texto(f.mesa, 60, 1) || !texto(f.mesero ?? "Caja", 60) || !entero(f.personas ?? 1, 0, 200)) return no("Datos de venta inválidos");
       if (f.tipo_servicio !== undefined && !texto(f.tipo_servicio, 40)) return no("Datos de venta inválidos");
+      if (f.clave_idempotencia !== undefined && !(typeof f.clave_idempotencia === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(f.clave_idempotencia))) return no("Clave de comanda inválida");
       const it = validarItems(f.items); if (!it.ok) return it;
       if (f.total !== it.valor.total) return no("El total no coincide con las líneas del pedido", 422);
       if ("estado_pago" in f && f.estado_pago !== "pendiente") return no("Una venta nueva nace por cobrar", 403);
-      salida.push({ empresa_id: f.empresa_id, numero: f.numero, mesa: f.mesa, mesero: f.mesero ?? "Caja", personas: f.personas ?? 1, metodo_pago: "", total: it.valor.total, items: it.valor.items, estado: "pendiente", created_at: ahora(), ...(f.tipo_servicio !== undefined ? { tipo_servicio: f.tipo_servicio } : {}) });
+      salida.push({ empresa_id: f.empresa_id, ...(f.clave_idempotencia !== undefined ? { clave_idempotencia: f.clave_idempotencia } : {}), mesa: f.mesa, mesero: f.mesero ?? "Caja", personas: f.personas ?? 1, metodo_pago: "", total: it.valor.total, items: it.valor.items, estado: "pendiente", created_at: ahora(), ...(f.tipo_servicio !== undefined ? { tipo_servicio: f.tipo_servicio } : {}) });
     }
     return ok({ filas: salida, accion: "ventas.crear", chequeos: ["catalogo"], filtrosExtra: [] });
   }

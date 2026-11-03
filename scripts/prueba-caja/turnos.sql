@@ -166,8 +166,8 @@ insert into ventas(id,numero,mesa,total,empresa_id) values ('d1000000-0000-4000-
 select public.turno_cerrar(:'td','{"efectivo":1000}'::jsonb,null,gen_random_uuid(),'c') b1 \gset
 select pg_temp.chk('comanda activa y sin cobrar: cierre bloqueado con número, mesa, monto y motivo',
   (:'b1'::jsonb->>'codigo')='bloqueado'
-  and exists (select 1 from jsonb_array_elements(:'b1'::jsonb->'bloqueos') e where e->>'tipo'='comanda_sin_entregar' and (e->>'numero')::int=101 and e->>'mesa'='Mesa 4' and (e->>'monto')::int=5000 and e->>'motivo' like 'Comanda sin entregar%' and e->>'ir'='cocina')
-  and exists (select 1 from jsonb_array_elements(:'b1'::jsonb->'bloqueos') e where e->>'tipo'='venta_sin_cobrar' and (e->>'numero')::int=101 and e->>'ir'='caja'));
+  and exists (select 1 from jsonb_array_elements(:'b1'::jsonb->'bloqueos') e where e->>'tipo'='comanda_sin_entregar' and (e->>'numero')::int=(select numero from ventas where id='d1000000-0000-4000-8000-000000000001') and e->>'mesa'='Mesa 4' and (e->>'monto')::int=5000 and e->>'motivo' like 'Comanda sin entregar%' and e->>'ir'='cocina')
+  and exists (select 1 from jsonb_array_elements(:'b1'::jsonb->'bloqueos') e where e->>'tipo'='venta_sin_cobrar' and (e->>'numero')::int=(select numero from ventas where id='d1000000-0000-4000-8000-000000000001') and e->>'ir'='caja'));
 select pg_temp.chk('cierre bloqueado no cambia nada: turno abierto, sin cierre, con evento', (select estado from aperturas_caja where id=:'td')='abierta' and not exists (select 1 from cierres_turno where turno_id=:'td') and not exists (select 1 from cierres_caja where apertura_id=:'td') and exists (select 1 from turno_eventos where turno_id=:'td' and evento='cierre_bloqueado'));
 select pg_temp.chk('el resumen del turno abierto trae la misma lista', jsonb_array_length(public.turno_resumen(:'td')->'bloqueos')=2 and (public.turno_resumen(:'td')->'pendientes'->>'ventas_sin_cobrar')::int=1);
 -- cobrar NO desbloquea la comanda: sigue sin entregar (no se entrega ni se cobra sola)
@@ -178,16 +178,16 @@ select pg_temp.chk('nada se cambió solo: la comanda sigue en pendiente', (selec
 update ventas set estado='entregado' where id='d1000000-0000-4000-8000-000000000001';
 insert into ventas(id,numero,mesa,total,empresa_id,estado) values ('d1000000-0000-4000-8000-000000000002',102,'Mesa 7',8000,:D::uuid,'entregado');
 insert into pagos_point(venta_id,monto,estado,restaurante_id) values ('d1000000-0000-4000-8000-000000000002',8000,'at_terminal',:'D');
-select pg_temp.chk('pago Point en proceso bloquea y se lista con monto y motivo', exists (select 1 from jsonb_array_elements(public.turno_bloqueos(:'td')) e where e->>'tipo'='point_en_proceso' and (e->>'numero')::int=102 and (e->>'monto')::int=8000 and e->>'mesa'='Mesa 7') and (public.turno_cerrar(:'td','{"efectivo":6000}'::jsonb,null,gen_random_uuid(),'c')->>'codigo')='bloqueado');
+select pg_temp.chk('pago Point en proceso bloquea y se lista con monto y motivo', exists (select 1 from jsonb_array_elements(public.turno_bloqueos(:'td')) e where e->>'tipo'='point_en_proceso' and (e->>'numero')::int=(select numero from ventas where id='d1000000-0000-4000-8000-000000000002') and (e->>'monto')::int=8000 and e->>'mesa'='Mesa 7') and (public.turno_cerrar(:'td','{"efectivo":6000}'::jsonb,null,gen_random_uuid(),'c')->>'codigo')='bloqueado');
 -- el pago llega: queda cobrado por Point SIN medio informado → cobro por confirmar (también bloquea)
 update pagos_point set estado='processed' where venta_id='d1000000-0000-4000-8000-000000000002';
 update ventas set metodo_pago='Point', estado_pago='pagado', pagado_at=now() where id='d1000000-0000-4000-8000-000000000002';
-select pg_temp.chk('Point confirmado sin medio: cobro con medio por confirmar bloquea el cierre', exists (select 1 from jsonb_array_elements(public.turno_bloqueos(:'td')) e where e->>'tipo'='cobro_medio_sin_confirmar' and (e->>'numero')::int=102 and e->>'ir'='cierre'));
+select pg_temp.chk('Point confirmado sin medio: cobro con medio por confirmar bloquea el cierre', exists (select 1 from jsonb_array_elements(public.turno_bloqueos(:'td')) e where e->>'tipo'='cobro_medio_sin_confirmar' and (e->>'numero')::int=(select numero from ventas where id='d1000000-0000-4000-8000-000000000002') and e->>'ir'='cierre'));
 select public.cobro_conciliar(id,'debito','Cajera ficticia') from cobros_turno where venta_id='d1000000-0000-4000-8000-000000000002';
 select pg_temp.chk('al confirmar el medio (acción de la cajera) se libera', jsonb_array_length(public.turno_bloqueos(:'td'))=0);
 -- 7.3 días anteriores: una venta sin cobrar antigua NO se oculta
 insert into ventas(id,numero,mesa,total,empresa_id,estado,created_at) values ('d1000000-0000-4000-8000-000000000003',90,'Mesa 1',3000,:D::uuid,'entregado',now()-interval '5 days');
-select pg_temp.chk('venta sin cobrar de días anteriores bloquea (no se oculta)', exists (select 1 from jsonb_array_elements(public.turno_bloqueos(:'td')) e where e->>'tipo'='venta_sin_cobrar' and (e->>'numero')::int=90));
+select pg_temp.chk('venta sin cobrar de días anteriores bloquea (no se oculta)', exists (select 1 from jsonb_array_elements(public.turno_bloqueos(:'td')) e where e->>'tipo'='venta_sin_cobrar' and (e->>'numero')::int=(select numero from ventas where id='d1000000-0000-4000-8000-000000000003')));
 update ventas set cocina_archivada_at=now() where id='d1000000-0000-4000-8000-000000000003';
 select pg_temp.chk('archivada de cocina (corte aprobado) no cuenta', jsonb_array_length(public.turno_bloqueos(:'td'))=0);
 select pg_temp.chk('comanda de otro negocio no bloquea', (select count(*) from jsonb_array_elements(public.turno_bloqueos(:'td')) e where e->>'venta_id' in (select id::text from ventas where empresa_id<>:D::uuid))=0);
@@ -225,7 +225,7 @@ select pg_temp.chk('el resumen no cuenta la venta borrada', (public.turno_resume
 select pg_temp.chk('el cierre guardado del turno anterior no cambió', (public.turno_resumen(:'td')->'cobros'->>'efectivo')::int=5000);
 
 -- permisos
-select has_function_privilege('anon','public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb)','execute') a, has_function_privilege('authenticated','public.turno_abrir(uuid,integer,text)','execute') b, has_function_privilege('service_role','public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb)','execute') c \gset
+select has_function_privilege('anon','public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb)','execute') a, has_function_privilege('authenticated','public.turno_abrir(uuid,integer,text,uuid)','execute') b, has_function_privilege('service_role','public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb)','execute') c \gset
 select pg_temp.chk('anon/authenticated sin acceso a funciones; service_role sí', not :'a'::boolean and not :'b'::boolean and :'c'::boolean);
 select pg_temp.chk('anon sin acceso a tablas nuevas', not has_table_privilege('anon','public.cobros_turno','select') and not has_table_privilege('authenticated','public.cierres_turno','select'));
 select n, case when ok then 'OK ' else 'FALLA' end, det from res order by ok, n;

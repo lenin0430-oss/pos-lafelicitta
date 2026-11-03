@@ -38,7 +38,8 @@ Jornada: ~11:00 hasta «Cerrar turno» (00:00–01:00 siguiente); **el miércole
 | 10:35 | SQL, cada uno una transacción y verificado antes del siguiente: `03` → `04` → `verificar_04b` → `04b` → `07b` → `07c` → `06` (corte aprobado). | ★ | Fallo: `*_REVERSION.sql` de ese paso y detenerse. |
 | 11:15 | **V1** repetir `verificar_08_previo.sql`: filas 20–22 = 0 (o lista aprobada por el dueño). | ★ | Si no es 0: resolver/archivar antes de 08. |
 | 11:20 | Aplicar **solo** `08_turnos_caja.sql` (final, SHA-256 `6f126848…`; **no** 08b ni 08c: ya incluidos). Verificar fila 8 = 5 y 9 = 5. | ★ | `08_turnos_caja_REVERSION.sql`. |
-| 11:25 | **Desplegar** la candidata (flag=1). | ★ | Ver §6 (rollback con 08). |
+| 11:22 | Aplicar **`09_correlativos.sql`** (folios internos; SHA-256 `d1116f94…`; **después de 08, antes de desplegar**). Antes: filas 24–25 de `verificar_08_previo.sql` anotadas (grupos de números repetidos y máximo). Verificar: tabla `correlativos` con 1 fila `comanda` por negocio = máximo histórico; `select count(*) from ventas where folio is not null` = 0 (histórico intacto). | ★ | `09_correlativos_REVERSION.sql`; el código antiguo sigue funcionando con 09 (el trigger ignora el número del navegador). |
+| 11:25 | **Desplegar** la candidata (flag=1). | ★ | Ver §6 (rollback con 08 y 09). |
 | 11:30 | **Comprobaciones §5** (sin turno: cobro bloqueado; menú; login; prueba identificada). | Codex+dueño | |
 | 12:15 | Revisar logs 30 min; decidir «queda» o reversión. **Confirmar que no queda turno abierto.** | | |
 
@@ -67,11 +68,20 @@ Criterio: cobros que no se registran, cierre imposible o errores 5xx sostenidos.
 1. **Código antiguo + 08 juntos**: con la regla «no cobrar sin turno», el POS antiguo (4bcd30e) no puede cobrar mientras no haya turno v2 abierto y tampoco cierra uno v2 (P0412). Por eso el rollback de código a `dpl_AMbvJb44WNSnrK41ui1thQzZ8y` va **acompañado de `08_turnos_caja_REVERSION.sql`** (guarda todo en `respaldo_turnos`; si ya existe, aborta y pide renombrarlo; quita triggers, funciones, tablas y las columnas `ventas.turno_id` y `pagos_point.medio_reportado`; conserva las columnas añadidas a `aperturas_caja`). Los cierres de compatibilidad en `cierres_caja` permanecen.
 2. Luego cerrar a mano con cifras de papel y operar con el flujo antiguo.
 3. `07c/07b` solo se revierten después de volver al código antiguo y con bandera 0.
-4. Orden inverso completo: código → 08 → 07c → 07b → 04b → 04 → 06 → 03 (cada uno con su `*_REVERSION*.sql`; 03 pierde `pagado_at` y la distinción cortesía/sin identificar/pagado de ventas nuevas). Las reversiones de emergencia de 07a/07 reabren el acceso inseguro: solo si el negocio no puede operar.
+4. Orden inverso completo: código → 09 → 08 → 07c → 07b → 04b → 04 → 06 → 03 (cada uno con su `*_REVERSION*.sql`; 03 pierde `pagado_at` y la distinción cortesía/sin identificar/pagado de ventas nuevas). Las reversiones de emergencia de 07a/07 reabren el acceso inseguro: solo si el negocio no puede operar.
 5. Restauración total (último recurso): desde `respaldo_pre08` y los CSV, con aprobación del dueño.
+
+## 6b. Folios internos (09) — qué cambia y qué no
+- **Comandas, turnos y cierres** reciben un correlativo por negocio, asignado dentro de la base con bloqueo de fila (`correlativos`); sin reinicio a medianoche, único entre equipos, sin huecos por reintentos (si la transacción falla, el contador vuelve atrás). Anular **no** reutiliza el número. Editar, cobrar y reimprimir conservan el número.
+- El navegador **ya no manda** el número: `app/page.tsx` no usa `lf_orden_num`; manda una clave anti-duplicado (`clave_idempotencia`); un doble clic o reintento devuelve la misma comanda. El servidor ignora cualquier `numero` que llegue.
+- **Histórico**: no se renumera. Los duplicados antiguos (mismo `numero`, mismos `id`) quedan tal cual con `folio` vacío; el contador arranca en el mayor número histórico del negocio, así que los nuevos no chocan con los viejos.
+- Son **folios internos**, separados de la numeración tributaria del SII (no son boletas ni facturas).
+- Orden: 08 → 09 → desplegar. Con 09 aplicado y código antiguo no se rompe nada. Para el proyecto de pruebas: 08c y luego 09 (manual, con visto bueno).
+- Limitación: `cierres_caja` (tabla heredada de compatibilidad) no tiene folio; el folio de cierre vive en `cierres_turno.numero_cierre`.
 
 ## 7. Evidencia (03/11/2026, candidata con reglas del dueño)
 - PostgreSQL 16 real: `scripts/prueba-caja/turnos.sql` **81/81** (incluye: comanda histórica sin archivar bloquea; archivada no; pagada pero sin entregar sigue bloqueando y no se entrega sola; Point en proceso y cobro por confirmar bloquean; días anteriores no se ocultan; otro negocio no cuenta; cierre bloqueado no cambia nada y deja evento; cobro/cortesía/venta pagada/reserva Point sin turno → P0413; Point ya confirmado se registra sin turno; borrar venta anula cobros sin error de FK).
 - Carreras con dos conexiones reales: `carrera.sh` 4/4 (gastos) y **`carrera2.sh` 8/8**: comanda nueva, venta pagada, reserva Point y cobro manual contra el cierre, en **ambos órdenes** (si la operación llega primero, el cierre la ve; si el cierre llega primero, la operación queda fuera del turno cerrado o se rechaza P0413 sin dejar rastro).
 - 08c sobre 08+08b ≡ 08 final (comparación de funciones, triggers, restricciones, índices y permisos); reversión y re-aplicación probadas.
-- TypeScript: 159 pruebas, `tsc` limpio. Pendiente: build Windows del commit final (Codex), navegador sobre el proyecto de pruebas con 08c, impresora física, Point real.
+- Folios (PG16): `folios.sql` **34/34** (asignación, idempotencia, histórico conservado, inmutabilidad, anulación sin reutilizar, **60 turnos** con números 1..60 sin huecos), `carrera3.sh` C1–C7 (misma clave en paralelo, equipos en paralelo, cierres en paralelo, etc.); regresión `turnos.sql` 81/81, carreras 4/4 y 8/8; 08c→09 ≡ 08→09; reversión de 09 y re-aplicación probadas.
+- TypeScript: 163 pruebas, `tsc` limpio. Pendiente: build Windows del commit final (Codex), navegador sobre el proyecto de pruebas con 08c, impresora física, Point real.

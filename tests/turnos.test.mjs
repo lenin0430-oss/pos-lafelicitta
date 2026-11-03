@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { medioDesdeOrden } from "../lib/medioPoint.ts";
 import { accionTurno, estadoTurno, historialTurnos } from "../lib/turnosServidor.ts";
-import { esProvisional, textoDiferenciaEfectivo } from "../lib/turnosVista.ts";
+import { esProvisional, textoDiferenciaEfectivo, folioTexto, etiquetaFolio } from "../lib/turnosVista.ts";
 
 const EMP = "aaaaaaaa-0000-4000-8000-00000000000a", OTRA = "bbbbbbbb-0000-4000-8000-00000000000b";
 const T1 = "11111111-1111-4111-8111-111111111111", CL = "22222222-2222-4222-8222-222222222222";
@@ -40,7 +40,28 @@ test("abrir: fondo entero ≥ 0; el negocio sale de la sesión, no del cuerpo", 
   assert.equal((await accionTurno(db, ses, { accion: "abrir", fondo: "1000" })).status, 400);
   const r = await accionTurno(db, ses, { accion: "abrir", fondo: 1000, empresa_id: OTRA });
   assert.equal(r.status, 200);
-  assert.deepEqual(db.llamadas.at(-1), ["turno_abrir", { p_empresa: EMP, p_fondo: 1000, p_cajero: "Cajera ficticia" }]);
+  assert.deepEqual(db.llamadas.at(-1), ["turno_abrir", { p_empresa: EMP, p_fondo: 1000, p_cajero: "Cajera ficticia", p_clave: null }]);
+});
+
+test("abrir: la clave de reintento (UUID) se reenvía; una clave inválida se descarta", async () => {
+  const db = dbFalsa();
+  await accionTurno(db, ses, { accion: "abrir", fondo: 0, clave: CL });
+  assert.equal(db.llamadas.at(-1)[1].p_clave, CL);
+  await accionTurno(db, ses, { accion: "abrir", fondo: 0, clave: "no-es-uuid" });
+  assert.equal(db.llamadas.at(-1)[1].p_clave, null);
+});
+
+test("historial de cierres pide el folio numero_cierre", async () => {
+  let cols = "";
+  const q = { select: (c) => ((cols = cols || c), q), eq: () => q, order: () => q, limit: async () => ({ data: [] }), in: async () => ({ data: [] }) };
+  const db = { from: () => q };
+  await historialTurnos(db, ses);
+  assert.match(cols, /numero_cierre/);
+});
+
+test("folios: etiquetas con ceros; históricos sin folio no muestran nada", () => {
+  assert.equal(folioTexto(7), "0007"); assert.equal(etiquetaFolio("Cierre", 12), "Cierre N° 0012");
+  assert.equal(etiquetaFolio("Turno", null), ""); assert.equal(folioTexto(undefined), "");
 });
 
 test("ya abierto → 409 con el id del turno", async () => {

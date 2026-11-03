@@ -5,20 +5,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
-import { esProvisional, agruparBloqueos, etiquetaBloqueo, RUTA_BLOQUEO, type Bloqueo } from '@/lib/turnosVista'
+import { esProvisional, agruparBloqueos, etiquetaBloqueo, etiquetaFolio, RUTA_BLOQUEO, type Bloqueo } from '@/lib/turnosVista'
 
 type Medios = { efectivo: number; debito: number; credito: number; transferencia: number; qr: number; por_conciliar: number }
 type Resumen = {
-  turno: { id: string; estado: string; fecha_apertura: string; apertura_at: string; cierre_at: string | null; cajero: string; horas_abiertas: number }
+  turno: { id: string; numero?: number | null; estado: string; fecha_apertura: string; apertura_at: string; cierre_at: string | null; cajero: string; horas_abiertas: number }
   fondo: number; cobros: Medios & { cortesia: number }; gastos_caja: number; gastos_otros_medios: number; retiros: number
   propinas_registradas: number; esperado: Medios
   pendientes: { cobros_por_conciliar: number; monto_por_conciliar: number; ventas_sin_cobrar: number }
   bloqueos?: Bloqueo[]
+  numero_cierre?: number | null
 }
 const provisional = esProvisional
 const abierto_ = (r: any) => Boolean(r?.abierto && r?.resumen)
 type Cobro = { id: string; medio?: string; monto: number; proveedor: string; hora: string; comanda: number | null; mesa: string | null; mesero: string | null; referencia: string | null }
-type Cierre = { id: string; resumen: Resumen | null; fecha_apertura: string; apertura_at: string; cierre_at: string; con_pendientes: boolean; notas: string | null; medios: { medio: string; esperado: number; contado: number | null; diferencia: number | null }[] }
+type Cierre = { id: string; numero_cierre?: number | null; resumen: Resumen | null; fecha_apertura: string; apertura_at: string; cierre_at: string; con_pendientes: boolean; notas: string | null; medios: { medio: string; esperado: number; contado: number | null; diferencia: number | null }[] }
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' })
@@ -40,6 +41,7 @@ export default function CierrePage() {
   const [cargando, setCargando] = useState(true)
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null)
   const [fondo, setFondo] = useState('')
+  const [claveAbrir, setClaveAbrir] = useState('') // misma clave en cada reintento/doble clic de la misma apertura
   const [ret, setRet] = useState({ monto: '', motivo: '', para: '' })
   const [cont, setCont] = useState<Record<string, string>>({})
   const [notas, setNotas] = useState('')
@@ -72,6 +74,7 @@ export default function CierrePage() {
     window.addEventListener('focus', f)
     return () => { clearInterval(t); window.removeEventListener('focus', f) }
   }, [cargar])
+  useEffect(() => { setClaveAbrir(crypto.randomUUID()) }, [])
   useEffect(() => { setClave(crypto.randomUUID()) }, [res?.turno.id]) // misma clave en cada reintento del mismo cierre
 
   async function accion(cuerpo: Record<string, unknown>, okMsg: string) {
@@ -123,7 +126,7 @@ export default function CierrePage() {
     if (!c.resumen) return
     const contados: Record<string, number> = {}
     for (const m of c.medios) if (m.contado !== null) contados[m.medio] = m.contado
-    setTicket({ resumen: c.resumen, contados, conPendientes: c.con_pendientes, reimpresion: true, auto: true })
+    setTicket({ resumen: { ...c.resumen, numero_cierre: c.resumen.numero_cierre ?? c.numero_cierre ?? null }, contados, conPendientes: c.con_pendientes, reimpresion: true, auto: true })
   }
   useEffect(() => { if (ticket?.auto) { setTicket({ ...ticket, auto: false }); setTimeout(() => window.print(), 150) } }, [ticket])
 
@@ -143,6 +146,8 @@ export default function CierrePage() {
               {ticket.reimpresion && <div className="t-sub">REIMPRESIÓN · cifras del cierre original</div>}
               <hr className="t-divider" />
               <div className="t-meta">
+                {x.numero_cierre != null && <span><b>{etiquetaFolio('Cierre', x.numero_cierre)}</b></span>}
+                {x.turno.numero != null && <span>{etiquetaFolio('Turno', x.turno.numero)}</span>}
                 <span>Turno del {dia(x.turno.apertura_at)}</span>
                 <span>Abierto: {hora(x.turno.apertura_at)}</span>
                 <span>Cerrado: {hora(x.turno.cierre_at as string)}</span>
@@ -179,14 +184,14 @@ export default function CierrePage() {
               <h2 style={{ fontSize: 18 }}>1 · Abrir turno</h2>
               <p style={{ opacity: .8 }}>Cuenta el efectivo que hay en la caja ahora. El turno seguirá abierto, aunque pase de medianoche, hasta que lo cierres.</p>
               <input style={inp} inputMode="numeric" placeholder="Fondo contado (ej. 20000)" value={fondo} onChange={e => setFondo(e.target.value)} aria-label="Fondo contado" />
-              <div style={{ marginTop: 12 }}><button style={btn()} disabled={ocupado || num(fondo) === null} onClick={() => accion({ accion: 'abrir', fondo: num(fondo) }, 'Turno abierto').then(r => r.ok && setFondo(''))}>Abrir turno</button></div>
+              <div style={{ marginTop: 12 }}><button style={btn()} disabled={ocupado || num(fondo) === null} onClick={() => accion({ accion: 'abrir', fondo: num(fondo), clave: claveAbrir }, 'Turno abierto').then(r => { if (r.ok) { setFondo(''); setClaveAbrir(crypto.randomUUID()) } })}>Abrir turno</button></div>
             </section>
           )}
 
           {!cargando && abierto && res && (<>
             <section style={card} aria-label="Turno abierto">
               <div style={{ fontSize: 13, opacity: .75 }}>TURNO ABIERTO</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>Turno del {dia(res.turno.apertura_at)}</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{etiquetaFolio('Turno', res.turno.numero)}{res.turno.numero != null ? ' · ' : ''}Turno del {dia(res.turno.apertura_at)}</div>
               <div>Abierto a las {hora(res.turno.apertura_at)} · lleva {res.turno.horas_abiertas.toFixed(1)} h · fondo {fmt(res.fondo)}</div>
               <div style={{ fontSize: 13, opacity: .75, marginTop: 4 }}>Todo lo que se cobre, gaste o retire queda en este turno hasta «Cerrar turno». A las 00:00 no cambia nada.</div>
               {res.turno.horas_abiertas > 16 && <div style={{ color: 'var(--red, #d33)', marginTop: 6 }}>Este turno lleva más de 16 horas abierto: revisa si olvidaste cerrarlo.</div>}
@@ -280,7 +285,7 @@ export default function CierrePage() {
 
           {cerrado?.ok && (
             <section style={{ ...card, borderColor: 'var(--green, #2a9d5c)' }} aria-label="Turno cerrado">
-              <h2 style={{ fontSize: 18 }}>Turno cerrado{cerrado.repetido ? ' (ya estaba cerrado)' : ''}</h2>
+              <h2 style={{ fontSize: 18 }}>Turno cerrado{cerrado.numero_cierre != null ? ` · ${etiquetaFolio('Cierre', cerrado.numero_cierre)}` : ''}{cerrado.repetido ? ' (ya estaba cerrado)' : ''}</h2>
               <div>Abierto {hora(cerrado.resumen.turno.apertura_at)} · cerrado {hora(cerrado.resumen.turno.cierre_at)}{cerrado.con_pendientes ? ' · con pendientes' : ''}</div>
               {provisional(cerrado.resumen) && <div style={{ color: 'var(--gold, #c8962a)' }}>Diferencia de efectivo PROVISIONAL: hay Point por confirmar.</div>}
               {aviso && <div style={{ color: aviso.ok ? 'var(--green, #2a9d5c)' : 'var(--red, #d33)' }}>{aviso.ok ? 'Aviso al dueño: enviado.' : `Aviso al dueño: NO enviado (${aviso.msg}). El cierre sí quedó guardado; avísale tú.`}</div>}
@@ -293,7 +298,7 @@ export default function CierrePage() {
               <h2 style={{ fontSize: 18 }}>Cierres anteriores</h2>
               {hist.map(c => (
                 <details key={c.id} style={{ padding: '6px 0' }}>
-                  <summary>Turno del {dia(c.apertura_at)} · {hora(c.apertura_at)}–{hora(c.cierre_at)}{c.con_pendientes ? ' · con pendientes' : ''}</summary>
+                  <summary>{c.numero_cierre != null ? `${etiquetaFolio('Cierre', c.numero_cierre)} · ` : ''}Turno del {dia(c.apertura_at)} · {hora(c.apertura_at)}–{hora(c.cierre_at)}{c.con_pendientes ? ' · con pendientes' : ''}</summary>
                   {c.medios.filter(m => m.esperado !== 0 || m.contado !== null).map(m => (
                     <div key={m.medio} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span>{NOMBRE[m.medio] ?? m.medio}</span>
                       <span>esperado {fmt(m.esperado)} · contado {m.contado === null ? 'sin comprobar' : fmt(m.contado)}{m.diferencia !== null && m.diferencia !== 0 ? ` · dif.${m.medio === 'efectivo' && provisional(c.resumen) ? ' PROVISIONAL' : ''} ${m.diferencia > 0 ? '+' : '−'}${fmt(Math.abs(m.diferencia))}` : ''}</span></div>))}
