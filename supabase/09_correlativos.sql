@@ -36,10 +36,38 @@ create unique index if not exists aperturas_clave_uq       on public.aperturas_c
 create unique index if not exists cierres_numero_uq        on public.cierres_turno (empresa_id, numero_cierre) where numero_cierre is not null;
 create index if not exists ventas_empresa_numero_idx       on public.ventas (empresa_id, numero);
 
--- Siembra: el siguiente folio de comanda continúa después del mayor número histórico de cada negocio (no se toca ninguna comanda existente).
+-- Re-aplicación tras una reversión: si existe el esquema `respaldo_correlativos` (lo crea 09_correlativos_REVERSION.sql), se RESTAURAN
+-- los folios, las claves y los contadores; así la numeración continúa (p. ej. en 61 tras 60 turnos) y nada se reutiliza.
+-- (Mientras exista ese respaldo no renombrarlo: es lo que esta re-aplicación lee.) No se renumera ninguna fila.
+do $$
+begin
+  if to_regclass('respaldo_correlativos.correlativos') is not null then
+    perform set_config('app.turno_fn', '1', true);
+    update public.ventas v set folio = b.folio, clave_idempotencia = b.clave_idempotencia
+      from respaldo_correlativos.ventas b where v.id = b.id and v.folio is null and v.clave_idempotencia is null;
+    update public.aperturas_caja t set numero_turno = b.numero_turno, clave_apertura = b.clave_apertura
+      from respaldo_correlativos.aperturas_caja b where t.id = b.id and t.numero_turno is null and t.clave_apertura is null;
+    -- cierres_turno es de solo-agregar: se suspende ese guardián solo durante esta restauración y se reactiva en la misma transacción.
+    alter table public.cierres_turno disable trigger cierres_turno_inmutable;
+    update public.cierres_turno c set numero_cierre = b.numero_cierre
+      from respaldo_correlativos.cierres_turno b where c.id = b.id and c.numero_cierre is null;
+    alter table public.cierres_turno enable trigger cierres_turno_inmutable;
+    insert into public.correlativos (empresa_id, tipo, ultimo, updated_at)
+      select empresa_id, tipo, ultimo, clock_timestamp() from respaldo_correlativos.correlativos
+      on conflict (empresa_id, tipo) do update set ultimo = greatest(public.correlativos.ultimo, excluded.ultimo);
+  end if;
+end $$;
+
+-- Siembra (nunca retrocede un contador): comandas continúan después del mayor número existente de cada negocio; turnos y cierres, después del mayor ya asignado.
 insert into public.correlativos (empresa_id, tipo, ultimo)
   select empresa_id, 'comanda', max(numero) from public.ventas where empresa_id is not null and numero is not null group by empresa_id
-  on conflict (empresa_id, tipo) do nothing;
+  on conflict (empresa_id, tipo) do update set ultimo = greatest(public.correlativos.ultimo, excluded.ultimo);
+insert into public.correlativos (empresa_id, tipo, ultimo)
+  select empresa_id, 'turno', max(numero_turno) from public.aperturas_caja where empresa_id is not null and numero_turno is not null group by empresa_id
+  on conflict (empresa_id, tipo) do update set ultimo = greatest(public.correlativos.ultimo, excluded.ultimo);
+insert into public.correlativos (empresa_id, tipo, ultimo)
+  select empresa_id, 'cierre', max(numero_cierre) from public.cierres_turno where empresa_id is not null and numero_cierre is not null group by empresa_id
+  on conflict (empresa_id, tipo) do update set ultimo = greatest(public.correlativos.ultimo, excluded.ultimo);
 
 -- Siguiente folio. SECURITY DEFINER para que el trigger funcione sea cual sea el rol que inserta; solo service_role puede llamarla directamente.
 create or replace function public.correlativo_siguiente(p_empresa uuid, p_tipo text) returns bigint

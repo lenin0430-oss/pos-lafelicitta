@@ -1,9 +1,10 @@
 'use client'
 import { estadoPagoParaMetodo } from '@/lib/estados'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
 import { getEmpresaIdActual, getSesion } from '@/lib/auth'
+import { huellaComanda, claveParaEnvio, recuperarPendiente, guardarComandaIdempotente, borrarIntencion } from '@/lib/intencionComanda'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
 import BotonCobrarPoint from '@/components/BotonCobrarPoint'
@@ -32,7 +33,6 @@ export default function CajaPage() {
   const [guardando, setGuardando] = useState(false)
   // Folio de la comanda: lo asigna la base al guardar (nunca localStorage ni contadores del navegador)
   const [numeroComanda, setNumeroComanda] = useState<number | null>(null)
-  const claveComanda = useRef<string>('') // misma clave en cada reintento/doble clic de la MISMA comanda
   const [hora, setHora] = useState('')
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
   const [tabMovil, setTabMovil] = useState<'menu'|'comanda'>('menu')
@@ -81,7 +81,21 @@ export default function CajaPage() {
     if (typeof window !== 'undefined') {
       const editarId = new URLSearchParams(window.location.search).get('editar')
       if (editarId) cargarComandaParaEditar(editarId, catalogo.menu)
+      else recuperarComandaPendiente(catalogo.menu)
     }
+  }
+
+  // Recarga con una comanda enviada cuya respuesta se perdió: si la base ya la tiene, se vuelve a abrir (mismo folio); si no, la clave queda para el reintento.
+  async function recuperarComandaPendiente(menuActual: Producto[]) {
+    try {
+      const empresaId = await getEmpresaIdActual()
+      if (!empresaId) return
+      const data = await recuperarPendiente(supabase, window.localStorage, empresaId)
+      if (!data) return
+      await cargarComandaParaEditar(data.id, menuActual)
+      borrarIntencion(window.localStorage)
+      mostrarMensaje(`Se recuperó la comanda #${data.numero}, que ya estaba guardada (no se creó otra)`, 'ok')
+    } catch { /* sin conexión: se reintenta al enviar */ }
   }
 
   async function cargarCatalogo() {
@@ -314,26 +328,23 @@ export default function CajaPage() {
 
     setGuardando(true)
     try {
-      if (!claveComanda.current) claveComanda.current = crypto.randomUUID()
-      const clave = claveComanda.current
+      // La clave se guarda en el navegador ANTES de enviar: si se pierde la respuesta y se recarga, se recupera la misma comanda.
+      const almacen = typeof window !== 'undefined' ? window.localStorage : null
+      const clave = claveParaEnvio(almacen, empresaId, huellaComanda(mesa, items), () => crypto.randomUUID())
       const fila = {
         empresa_id: empresaId,
-        clave_idempotencia: clave,
         mesa, mesero: mesero || 'Caja', personas,
         metodo_pago: '', total,
         items: items.map(i => ({ nombre: i.producto.nombre, cantidad: i.cantidad, precio_unit: i.producto.precio, nota: i.nota, ingredientes: i.producto.ingredientes || '' })),
         estado: 'pendiente', created_at: new Date().toISOString()
       }
-      let { data, error } = await supabase.from('ventas').insert(fila).select().single()
-      if (error && (error as { code?: string }).code === '23505') {
-        // Reintento de una comanda que ya se guardó: recuperar la misma, no crear otra
-        const previa = await supabase.from('ventas').select('*').eq('empresa_id', empresaId).eq('clave_idempotencia', clave).single()
-        data = previa.data; error = previa.error
-      }
+      // Busca primero por clave (respuesta perdida) y recupera ante 23505; el folio lo asigna la base.
+      const { data, error } = await guardarComandaIdempotente(supabase, empresaId, clave, fila)
       if (error || !data) throw error || new Error('No se recibió la comanda')
       setVentaId(data.id)
       setNumeroComanda(data.numero)
       setEnviada(true)
+      borrarIntencion(almacen)
       mostrarMensaje(`Comanda #${data.numero} enviada a cocina ✓`, 'ok')
       imprimirComandaRaw(data.numero, printWindow)
     } catch (e: unknown) {
@@ -402,7 +413,6 @@ export default function CajaPage() {
     setCobrada(false)
     setVentaId(null)
     setNumeroComanda(null)
-    claveComanda.current = ''
     setModalCobro(false)
     setTabMovil('menu')
     setPropinaMonto('')
