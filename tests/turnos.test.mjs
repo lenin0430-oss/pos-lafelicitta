@@ -177,3 +177,53 @@ test("historial entrega la instantánea guardada (resumen) y los contados origin
   const otra = await historialTurnos({ from, rpc: async () => ({}) }, { ...ses, empresa_id: OTRA });
   assert.deepEqual(otra.body.cierres, []);                                      // otro negocio no ve este cierre
 });
+
+// ---- Reglas del dueño: cierre bloqueado por pendientes; sin cobros sin turno ----
+import { agruparBloqueos, etiquetaBloqueo, RUTA_BLOQUEO } from "../lib/turnosVista.ts";
+import { iniciarCobroPoint } from "../lib/pointCobro.ts";
+import { ejecutarPlan } from "../lib/datosAutorizados.ts";
+
+const BLOQ = [
+  { tipo: "comanda_sin_entregar", venta_id: "v1", numero: 101, mesa: "Mesa 4", monto: 5000, motivo: "Comanda sin entregar (pendiente)", ir: "cocina" },
+  { tipo: "venta_sin_cobrar", venta_id: "v1", numero: 101, mesa: "Mesa 4", monto: 5000, motivo: "Venta sin cobrar", ir: "caja" },
+  { tipo: "point_en_proceso", venta_id: "v2", numero: 102, mesa: null, monto: 8000, motivo: "Pago Point en proceso (at_terminal)", ir: "caja" },
+  { tipo: "cobro_medio_sin_confirmar", venta_id: "v3", numero: 103, mesa: "Mesa 2", monto: 1200, motivo: "Cobro con medio por confirmar", ir: "cierre" },
+];
+test("cierre bloqueado por la base → 409 con la lista (n.º, mesa, monto, motivo) y sin cerrar nada", async () => {
+  const db = dbFalsa({ rpc: () => ({ data: { ok: false, codigo: "bloqueado", bloqueos: BLOQ } }) });
+  const r = await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO });
+  assert.equal(r.status, 409); assert.equal(r.body.ok, false); assert.equal(r.body.codigo, "bloqueado");
+  assert.deepEqual(r.body.bloqueos, BLOQ);
+  assert.match(r.body.error, /No se puede cerrar el turno/);
+});
+test("la validación del cierre NO depende del navegador: el servidor siempre llama a turno_cerrar (que valida en la misma transacción)", async () => {
+  const db = dbFalsa();
+  await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 1 }, esperado_visto: VISTO, bloqueos: [], sin_bloqueos: true, forzar: true });
+  const [fn, args] = db.llamadas.at(-1);
+  assert.equal(fn, "turno_cerrar");
+  assert.deepEqual(Object.keys(args).sort(), ["p_clave", "p_contados", "p_esperado_visto", "p_notas", "p_por", "p_turno"], "ningún campo de 'forzar' llega a la base");
+});
+test("presentación del bloqueo: agrupado por motivo, con número, mesa, monto y acción para ir a resolver", () => {
+  const g = agruparBloqueos(BLOQ);
+  assert.deepEqual(g.map((x) => [x.tipo, x.items.length]), [["comanda_sin_entregar", 1], ["venta_sin_cobrar", 1], ["point_en_proceso", 1], ["cobro_medio_sin_confirmar", 1]]);
+  assert.equal(etiquetaBloqueo(BLOQ[0]), "Comanda #101 · mesa Mesa 4 · $5.000 — Comanda sin entregar (pendiente)");
+  assert.match(etiquetaBloqueo(BLOQ[2]), /^Comanda #102 · \$8\.000 — Pago Point en proceso/);
+  for (const b of BLOQ) assert.ok(RUTA_BLOQUEO[b.ir].href, "cada bloqueo tiene a dónde ir");
+  assert.deepEqual(agruparBloqueos(null), []);
+});
+test("Point sin turno abierto (P0413): 409 'sin_turno' ANTES de llamar al proveedor", async () => {
+  let llamadas = 0;
+  const mp = { crearOrden: async () => { llamadas++; return { ok: true, orden: { id: "O", status: "created" } }; } };
+  const entrada = { restauranteId: EMP, ventaId: "v", monto: 10000, terminalId: "T", venta: { total: 10000, estado_pago: "pendiente" } };
+  const pagos = { reservar: async () => { throw Object.assign(new Error("SIN_TURNO_ABIERTO"), { code: "P0413" }); } };
+  const r = await iniciarCobroPoint(pagos, mp, entrada);
+  assert.deepEqual([r.ok, r.status, r.codigo, r.reintentable], [false, 409, "sin_turno", false]);
+  assert.match(r.error, /Abre el turno/);
+  assert.equal(llamadas, 0, "cero llamadas al proveedor");
+});
+test("cobro manual sin turno (P0413) llega al navegador con un mensaje claro y el mismo código", async () => {
+  const q = { eq() { return q; }, then(res) { res({ data: null, error: { code: "P0413", message: "SIN_TURNO_ABIERTO" }, status: 400 }); } };
+  const db = { from: () => ({ update: () => q }) };
+  const r = await ejecutarPlan(db, { tabla: "ventas", pasos: [{ m: "update", a: [{}] }, { m: "eq", a: ["id", "x"] }] });
+  assert.equal(r.error.code, "P0413"); assert.match(r.error.message, /No hay un turno abierto/);
+});

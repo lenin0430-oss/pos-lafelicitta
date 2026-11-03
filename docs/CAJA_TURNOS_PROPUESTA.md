@@ -61,3 +61,14 @@ Pendiente: reimprimir un cierre desde el historial; probar impresión real en la
 
 ## Revisión 5 — segundo turno en navegador (e20e30f + 08b)
 Corrección de un Point mal confirmado, cierre con pendientes, cruce de medianoche (simulado con datos ficticios) y ticket: todo OK; detalle en `docs/evidencia/CAJA_navegador_2026-11-03.md`. El aviso al dueño sigue **pendiente** (bot no configurado en pruebas; el payload aún no incluye pendientes ni retiros; hoy lo dispara el navegador).
+
+## Revisión 6 (03/11/2026) — reglas del dueño: cierre bloqueado y sin cobros sin turno
+**Reemplaza** la idea de cerrar «con pendientes».
+- `turno_bloqueos(turno)` (SQL, solo lectura) lista lo que impide cerrar: comandas `pendiente|en_proceso|listo` sin archivar de cocina, ventas con `estado_pago='pendiente'` sin archivar (cualquier fecha), pagos Point `reservado|created|at_terminal`, cobros del turno con medio `por_conciliar` y ventas `sin_identificar` creadas desde la apertura. Cada fila: tipo, venta, n.º, mesa, monto, motivo y a dónde ir (cocina / caja / confirmar aquí).
+- `turno_cerrar` lo evalúa **dentro de la misma transacción**, con el turno ya tomado `FOR UPDATE`; si hay algo devuelve `{ok:false, codigo:'bloqueado', bloqueos:[…]}` sin cambiar nada (deja el evento `cierre_bloqueado`). El resumen del turno abierto trae la misma lista (la pantalla la muestra y deshabilita «Cerrar turno», pero el servidor decide).
+- Serialización: una comanda nueva (`ventas` INSERT) y la reserva de un cobro Point toman el turno `FOR SHARE`; un cobro manual ya lo hacía. Orden de bloqueos venta → turno en todos los caminos (sin interbloqueos).
+- No se cobra sin turno abierto: P0413 `SIN_TURNO_ABIERTO` (cobro manual, cortesía, venta ya pagada, reserva Point). El POS muestra «Sin turno abierto» con «Abrir turno» (admin) o «Pide al administrador…» y `/api/point/cobrar` responde 409 `sin_turno` antes de llamar al proveedor. Excepción: pago ya `processed` por el proveedor → se registra con evento `cobro_sin_turno`.
+- Borrar una venta (Reportes) anula sus cobros activos y lo registra; `cobros_turno.venta_id` ya no tiene FK (antes el borrado fallaba con un cobro registrado).
+- Archivo de cocina: solo se excluye lo marcado por `06`. Consecuencia operativa: **06 es obligatorio antes del primer cierre** y toda comanda debe pasar a «Entregado».
+- Incremental para el proyecto de pruebas: `supabase/08c_bloqueos_cierre_sin_turno.sql` (≡ 08 final, verificado). Producción: solo 08.
+- Pruebas: `turnos.sql` 81/81, `carrera.sh` 4/4, `carrera2.sh` 8/8 (ambos órdenes), `tests/turnos.test.mjs` 20, suite 159, `tsc` limpio.

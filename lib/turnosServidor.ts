@@ -29,6 +29,7 @@ const MENSAJES: Record<string, [number, string]> = {
   medio_informado_por_point: [409, "Mercado Pago informó el medio de este cobro; no se cambia aquí"],
   no_encontrado: [404, "Cobro no encontrado"],
   medio_duplicado_en_venta: [409, "Esa venta ya tiene ese medio"],
+  bloqueado: [409, "No se puede cerrar el turno: hay pendientes por resolver"],
   resumen_cambio: [409, "Entraron cobros o gastos nuevos mientras revisabas. Revisa las cifras actualizadas y confirma de nuevo"],
 };
 function desdeRpc(r: any): RespT {
@@ -36,7 +37,7 @@ function desdeRpc(r: any): RespT {
   const d = r?.data ?? {};
   if (d.ok) return { status: 200, body: d };
   const [st, msg] = MENSAJES[d.codigo] ?? [400, "Operación rechazada"];
-  return { status: st, body: { ok: false, error: msg, codigo: d.codigo, turno_id: d.turno_id, resumen: d.resumen } };
+  return { status: st, body: { ok: false, error: msg, codigo: d.codigo, turno_id: d.turno_id, resumen: d.resumen, bloqueos: d.bloqueos } };
 }
 
 export async function turnoAbiertoDe(db: Db, empresaId: string): Promise<string | null> {

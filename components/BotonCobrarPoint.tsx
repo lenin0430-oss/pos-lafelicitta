@@ -20,12 +20,13 @@ const FINALES = ["processed", "canceled", "expired", "failed"];
 export default function BotonCobrarPoint({ ventaId, monto, onPagado }: Props) {
   const [estado, setEstado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sinTurno, setSinTurno] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
 
   async function cobrar() {
-    setError(null);
+    setError(null); setSinTurno(false);
     setEstado("enviando");
     const r = await fetch("/api/point/cobrar", {
       method: "POST",
@@ -33,7 +34,7 @@ export default function BotonCobrarPoint({ ventaId, monto, onPagado }: Props) {
       body: JSON.stringify({ ventaId, monto }),
     });
     const data = await r.json();
-    if (!r.ok) { setEstado(null); setError(data.error); return; }
+    if (!r.ok) { setEstado(null); setError(data.error); setSinTurno(data.codigo === "sin_turno"); return; }
 
     setEstado(data.estado);
     timer.current = setInterval(async () => {
@@ -63,7 +64,7 @@ export default function BotonCobrarPoint({ ventaId, monto, onPagado }: Props) {
         {ocupado ? "Cobrando…" : `Cobrar con Point $${monto.toLocaleString("es-CL")}`}
       </button>
       {estado && estado !== "enviando" && <p>{TEXTO[estado] ?? estado}</p>}
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      {error && <p style={{ color: "crimson" }}>{error}{sinTurno && <> <a href="/cierre" style={{ fontWeight: 700 }}>Abrir turno</a></>}</p>}
     </div>
   );
 }

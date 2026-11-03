@@ -39,7 +39,7 @@ export type Entrada = {
 
 export type Salida =
   | { ok: true; status: 200; orderId: string; estado: string }
-  | { ok: false; status: number; error: string; orderId?: string; reintentable?: boolean };
+  | { ok: false; status: number; error: string; orderId?: string; reintentable?: boolean; codigo?: "sin_turno" };
 
 export async function iniciarCobroPoint(
   pagos: PuertoPagos,
@@ -63,6 +63,8 @@ export async function iniciarCobroPoint(
         ? { ok: false, status: 409, error: "La venta ya está cobrada", reintentable: false }
         : { ok: false, status: 409, error: "El total de la venta cambió. Presiona «Actualizar cocina» y reintenta.", reintentable: false };
     }
+    // P0413 = no hay turno abierto (supabase/08): un cobro NUEVO exige turno. Se responde antes de llamar al proveedor.
+    if (x?.code === "P0413") return { ok: false, status: 409, error: "No hay un turno abierto. Abre el turno para poder cobrar.", reintentable: false, codigo: "sin_turno" };
     throw err;
   }
   const { reserva } = reservado;

@@ -229,6 +229,6 @@ export async function ejecutarPlan(
     data: r.data ?? null,
     count: r.count ?? null,
     status: r.status ?? 200,
-    error: r.error ? { message: String(r.error.message ?? "Error"), code: r.error.code ?? null } : null,
+    error: r.error ? { message: r.error.code === "P0413" ? "No hay un turno abierto. Abre el turno para poder cobrar." : String(r.error.message ?? "Error"), code: r.error.code ?? null } : null,
   };
 }

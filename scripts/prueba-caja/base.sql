@@ -5,7 +5,7 @@ do $$ begin
 end $$;
 create table empresas(id uuid primary key);
 create table ventas (id uuid primary key default gen_random_uuid(), numero int, mesa text, mesero text, metodo_pago text default 'Débito', total int, estado text default 'pendiente',
-  created_at timestamptz default now(), empresa_id uuid, estado_pago text default 'pendiente', pagado_at timestamptz);
+  created_at timestamptz default now(), empresa_id uuid, estado_pago text default 'pendiente', pagado_at timestamptz, cocina_archivada_at timestamptz);
 create table aperturas_caja (id uuid primary key default gen_random_uuid(), fecha date, monto_inicial int default 0, cajero text default 'Caja', created_at timestamptz default now(), estado text default 'abierta', cerrada_at timestamptz, empresa_id uuid);
 create table cierres_caja (id uuid primary key default gen_random_uuid(), fecha date, ventas_total int, ventas_efectivo int default 0, ventas_debito int default 0, ventas_qr int default 0, ventas_transferencia int default 0, efectivo_fisico int default 0, diferencia int default 0, notas text, created_at timestamptz default now(), apertura_id uuid, empresa_id uuid);
 create table gastos (id uuid primary key default gen_random_uuid(), categoria text, descripcion text, monto int, created_at timestamptz default now(), empresa_id uuid, cajero text, apertura_id uuid, afecto_caja boolean default true);

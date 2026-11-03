@@ -29,7 +29,7 @@ create table if not exists public.cobros_turno (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null,
   turno_id uuid references public.aperturas_caja(id),      -- NULL = cobro sin turno abierto (se informa, no se oculta)
-  venta_id uuid not null references public.ventas(id),
+  venta_id uuid not null,   -- sin FK: borrar una venta ANULA sus cobros (trigger) pero conserva el historial del turno
   medio text not null check (medio in ('efectivo','debito','credito','transferencia','qr','por_conciliar','cortesia')),
   proveedor text not null default 'manual' check (proveedor in ('manual','point')),
   monto integer not null check (monto >= 0),
@@ -162,6 +162,10 @@ begin
   if new.estado_pago not in ('pagado','cortesia') then return new; end if;
   if tg_op = 'UPDATE' and old.estado_pago in ('pagado','cortesia') then return new; end if;   -- ya registrado
   v_turno := public._turno_abierto(new.empresa_id);
+  -- Un cobro NUEVO exige turno abierto. Única excepción: el proveedor ya confirmó el pago (pagos_point.processed): no se pierde, queda sin turno y se informa.
+  if v_turno is null and not exists (select 1 from public.pagos_point where venta_id = new.id::text and estado = 'processed') then
+    raise exception 'SIN_TURNO_ABIERTO' using errcode = 'P0413', hint = 'Abre el turno antes de cobrar';
+  end if;
   new.turno_id := v_turno;
   select medio_reportado into v_medio_point from public.pagos_point
     where venta_id = new.id::text and estado = 'processed' and medio_reportado is not null order by updated_at desc limit 1;
@@ -182,6 +186,94 @@ end $$;
 drop trigger if exists ventas_cobro_a_turno on public.ventas;
 create trigger ventas_cobro_a_turno before insert or update of estado_pago on public.ventas
   for each row execute function public.trg_cobro_a_turno();
+
+-- Una comanda nueva toma FOR SHARE el turno abierto: el cierre (FOR UPDATE) espera a que termine de guardarse y la ve; si el cierre llegó antes,
+-- la comanda queda fuera del turno cerrado (y no se podrá cobrar hasta abrir otro turno).
+create or replace function public.trg_venta_serializa_cierre() returns trigger
+language plpgsql set search_path = public, pg_temp as $$
+begin
+  if new.empresa_id is not null then perform public._turno_abierto(new.empresa_id); end if;
+  return new;
+end $$;
+drop trigger if exists ventas_serializa_cierre on public.ventas;
+create trigger ventas_serializa_cierre before insert on public.ventas
+  for each row execute function public.trg_venta_serializa_cierre();
+
+-- Borrar una venta (Reportes, solo admin) anula sus cobros activos y lo deja registrado; si el turno ya estaba cerrado, su cierre NO cambia.
+create or replace function public.trg_venta_eliminada() returns trigger
+language plpgsql set search_path = public, pg_temp as $$
+begin
+  perform 1 from public.aperturas_caja a join public.cobros_turno c on c.turno_id = a.id
+    where c.venta_id = old.id and c.anulado_at is null order by a.id for share of a;
+  insert into public.turno_eventos(empresa_id, turno_id, evento, detalle)
+    select old.empresa_id, c.turno_id,
+           case when a.estado = 'cerrada' then 'anulacion_posterior_al_cierre' else 'cobro_anulado' end,
+           jsonb_build_object('venta_id', old.id, 'numero', old.numero, 'mesa', old.mesa, 'cobro_id', c.id, 'medio', c.medio, 'monto', c.monto, 'venta_eliminada', true)
+      from public.cobros_turno c left join public.aperturas_caja a on a.id = c.turno_id
+     where c.venta_id = old.id and c.anulado_at is null;
+  update public.cobros_turno set anulado_at = clock_timestamp() where venta_id = old.id and anulado_at is null;
+  return old;
+end $$;
+drop trigger if exists ventas_eliminada_anula_cobros on public.ventas;
+create trigger ventas_eliminada_anula_cobros before delete on public.ventas
+  for each row execute function public.trg_venta_eliminada();
+
+-- Reservar un cobro Point (nuevo cobro) exige turno abierto y lo serializa con el cierre. Se llama DESPUÉS de pagos_point_bloquea_venta (07c)
+-- por orden alfabético: primero se bloquea la venta y luego el turno (mismo orden que el cobro manual: sin interbloqueos).
+create or replace function public.trg_pagos_point_requiere_turno() returns trigger
+language plpgsql set search_path = public, pg_temp as $$
+declare v_emp uuid;
+begin
+  if new.estado not in ('reservado','created','at_terminal') then return new; end if;
+  select empresa_id into v_emp from public.ventas where id::text = new.venta_id;
+  if v_emp is null then return new; end if;   -- la pertenencia de la venta la valida 04b
+  if public._turno_abierto(v_emp) is null then
+    raise exception 'SIN_TURNO_ABIERTO' using errcode = 'P0413', hint = 'Abre el turno antes de cobrar';
+  end if;
+  return new;
+end $$;
+drop trigger if exists pagos_point_turno_abierto on public.pagos_point;
+create trigger pagos_point_turno_abierto before insert on public.pagos_point
+  for each row execute function public.trg_pagos_point_requiere_turno();
+
+-- Qué impide cerrar el turno (lista para mostrar y para validar en el servidor). Sin ocultar nada: solo se excluyen las comandas ARCHIVADAS de cocina
+-- (marca de 06, histórico aprobado). Comandas/ventas sin cobrar de días anteriores SÍ cuentan: son pendientes reales.
+create or replace function public.turno_bloqueos(p_turno uuid)
+returns jsonb language plpgsql stable set search_path = public, pg_temp as $$
+declare t public.aperturas_caja; r jsonb;
+begin
+  select * into t from public.aperturas_caja where id = p_turno and modelo = 'v2';
+  if not found then return '[]'::jsonb; end if;
+  select coalesce(jsonb_agg(x order by (x->>'numero')::int nulls last, x->>'tipo'), '[]'::jsonb) into r from (
+    select * from (
+      select jsonb_build_object('tipo', 'comanda_sin_entregar', 'venta_id', v.id, 'numero', v.numero, 'mesa', v.mesa, 'monto', v.total,
+               'estado', v.estado, 'motivo', 'Comanda sin entregar (' || v.estado || ')', 'ir', 'cocina') x
+        from public.ventas v
+       where v.empresa_id = t.empresa_id and v.cocina_archivada_at is null and v.estado in ('pendiente','en_proceso','listo')
+      union all
+      select jsonb_build_object('tipo', 'venta_sin_cobrar', 'venta_id', v.id, 'numero', v.numero, 'mesa', v.mesa, 'monto', v.total,
+               'estado', v.estado, 'motivo', 'Venta sin cobrar', 'ir', 'caja')
+        from public.ventas v
+       where v.empresa_id = t.empresa_id and v.cocina_archivada_at is null and v.estado_pago = 'pendiente'
+      union all
+      select jsonb_build_object('tipo', 'cobro_medio_sin_confirmar', 'venta_id', v.id, 'cobro_id', c.id, 'numero', v.numero, 'mesa', v.mesa, 'monto', c.monto,
+               'motivo', 'Cobro con medio por confirmar (Point sin medio informado)', 'ir', 'cierre')
+        from public.cobros_turno c join public.ventas v on v.id = c.venta_id
+       where c.turno_id = p_turno and c.medio = 'por_conciliar' and c.anulado_at is null
+      union all
+      select jsonb_build_object('tipo', 'cobro_medio_sin_confirmar', 'venta_id', v.id, 'numero', v.numero, 'mesa', v.mesa, 'monto', v.total,
+               'motivo', 'Cobro con medio sin identificar', 'ir', 'caja')
+        from public.ventas v
+       where v.empresa_id = t.empresa_id and v.cocina_archivada_at is null and v.estado_pago = 'sin_identificar' and v.created_at >= t.created_at
+      union all
+      select jsonb_build_object('tipo', 'point_en_proceso', 'venta_id', v.id, 'numero', v.numero, 'mesa', v.mesa, 'monto', p.monto,
+               'estado', p.estado, 'motivo', 'Pago Point en proceso (' || p.estado || ')', 'ir', 'caja')
+        from public.pagos_point p join public.ventas v on v.id::text = p.venta_id
+       where v.empresa_id = t.empresa_id and p.estado in ('reservado','created','at_terminal')
+    ) u limit 200
+  ) q;
+  return r;
+end $$;
 
 create or replace function public.trg_gasto_propina_a_turno() returns trigger
 language plpgsql set search_path = public, pg_temp as $$
@@ -262,7 +354,7 @@ create or replace function public.turno_resumen(p_turno uuid)
 returns jsonb language plpgsql stable set search_path = public, pg_temp as $$
 declare t public.aperturas_caja; v jsonb; fin timestamptz;
   c_ef int; c_de int; c_cr int; c_tr int; c_qr int; c_pc int; c_co int;
-  g_caja int; g_otros int; ret int; prop int; n_pc int; n_pend int;
+  g_caja int; g_otros int; ret int; prop int; n_pc int; n_pend int; bl jsonb;
 begin
   select * into t from public.aperturas_caja where id = p_turno and modelo = 'v2';
   if not found then return null; end if;
@@ -281,8 +373,8 @@ begin
     into g_caja, g_otros from public.gastos where apertura_id = p_turno;
   select coalesce(sum(monto),0) into ret from public.movimientos_caja where turno_id = p_turno;
   select coalesce(sum(monto),0) into prop from public.propinas where apertura_id = p_turno;
-  select count(*) into n_pend from public.ventas
-    where empresa_id = t.empresa_id and estado_pago in ('pendiente','sin_identificar') and created_at >= t.created_at and created_at <= fin;
+  bl := public.turno_bloqueos(p_turno);
+  select count(*) into n_pend from jsonb_array_elements(bl) e where e->>'tipo' = 'venta_sin_cobrar';
   return jsonb_build_object(
     'turno', jsonb_build_object('id', t.id, 'estado', t.estado, 'fecha_apertura', t.fecha_apertura,
         'apertura_at', t.created_at, 'cierre_at', t.cerrada_at, 'cajero', t.cajero,
@@ -293,7 +385,8 @@ begin
     'gastos_caja', g_caja, 'gastos_otros_medios', g_otros, 'retiros', ret, 'propinas_registradas', prop,
     'esperado', jsonb_build_object('efectivo', t.monto_inicial + c_ef - g_caja - ret, 'debito', c_de, 'credito', c_cr,
                                    'transferencia', c_tr, 'qr', c_qr, 'por_conciliar', c_pc),
-    'pendientes', jsonb_build_object('cobros_por_conciliar', n_pc, 'monto_por_conciliar', c_pc, 'ventas_sin_cobrar', n_pend)
+    'pendientes', jsonb_build_object('cobros_por_conciliar', n_pc, 'monto_por_conciliar', c_pc, 'ventas_sin_cobrar', n_pend, 'bloqueos_total', jsonb_array_length(bl)),
+    'bloqueos', bl
   );
 end $$;
 
@@ -339,7 +432,7 @@ end $$;
 
 create or replace function public.turno_cerrar(p_turno uuid, p_contados jsonb, p_notas text, p_clave uuid, p_por text, p_esperado_visto jsonb default null)
 returns jsonb language plpgsql set search_path = public, pg_temp as $$
-declare t public.aperturas_caja; r jsonb; ex jsonb; cie uuid; k text; esp int; con int; pend boolean; prev public.cierres_turno;
+declare t public.aperturas_caja; r jsonb; ex jsonb; cie uuid; k text; esp int; con int; pend boolean; prev public.cierres_turno; bl jsonb;
 begin
   if p_clave is null then return jsonb_build_object('ok', false, 'codigo', 'falta_clave'); end if;
   select * into t from public.aperturas_caja where id = p_turno and modelo = 'v2' for update;   -- serializa con cobros (FOR SHARE) y otros cierres
@@ -350,6 +443,14 @@ begin
       return jsonb_build_object('ok', true, 'repetido', true, 'cierre_id', prev.id, 'resumen', prev.resumen);
     end if;
     return jsonb_build_object('ok', false, 'codigo', 'ya_cerrado');
+  end if;
+  -- Con el turno ya bloqueado (FOR UPDATE): nada de lo que bloquea el cierre puede entrar o cambiar sin que lo vea esta misma transacción.
+  bl := public.turno_bloqueos(p_turno);
+  if jsonb_array_length(bl) > 0 then
+    insert into public.turno_eventos(empresa_id, turno_id, evento, detalle, actor)
+      values (t.empresa_id, p_turno, 'cierre_bloqueado', jsonb_build_object('total', jsonb_array_length(bl),
+              'tipos', (select jsonb_agg(distinct e->>'tipo') from jsonb_array_elements(bl) e)), p_por);
+    return jsonb_build_object('ok', false, 'codigo', 'bloqueado', 'bloqueos', bl);
   end if;
   if p_contados is null or (p_contados->>'efectivo') is null or (p_contados->>'efectivo')::int < 0 then
     return jsonb_build_object('ok', false, 'codigo', 'falta_efectivo_contado');
@@ -394,10 +495,10 @@ begin
 end $$;
 
 revoke all on function public._partes_cobro(text,integer), public._turno_abierto(uuid), public.turno_abrir(uuid,integer,text),
-  public.turno_resumen(uuid), public.movimiento_registrar(uuid,integer,text,text,text), public.cobro_conciliar(uuid,text,text),
+  public.turno_resumen(uuid), public.turno_bloqueos(uuid), public.movimiento_registrar(uuid,integer,text,text,text), public.cobro_conciliar(uuid,text,text),
   public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb) from public, anon, authenticated;
 grant execute on function public._partes_cobro(text,integer), public._turno_abierto(uuid), public.turno_abrir(uuid,integer,text),
-  public.turno_resumen(uuid), public.movimiento_registrar(uuid,integer,text,text,text), public.cobro_conciliar(uuid,text,text),
+  public.turno_resumen(uuid), public.turno_bloqueos(uuid), public.movimiento_registrar(uuid,integer,text,text,text), public.cobro_conciliar(uuid,text,text),
   public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb) to service_role;
 
 commit;

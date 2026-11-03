@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
-import { esProvisional } from '@/lib/turnosVista'
+import { esProvisional, agruparBloqueos, etiquetaBloqueo, RUTA_BLOQUEO, type Bloqueo } from '@/lib/turnosVista'
 
 type Medios = { efectivo: number; debito: number; credito: number; transferencia: number; qr: number; por_conciliar: number }
 type Resumen = {
@@ -13,6 +13,7 @@ type Resumen = {
   fondo: number; cobros: Medios & { cortesia: number }; gastos_caja: number; gastos_otros_medios: number; retiros: number
   propinas_registradas: number; esperado: Medios
   pendientes: { cobros_por_conciliar: number; monto_por_conciliar: number; ventas_sin_cobrar: number }
+  bloqueos?: Bloqueo[]
 }
 const provisional = esProvisional
 const abierto_ = (r: any) => Boolean(r?.abierto && r?.resumen)
@@ -84,6 +85,7 @@ export default function CierrePage() {
   const efEsp = res?.esperado.efectivo ?? 0
   const efCont = num(cont.efectivo ?? '')
   const diff = efCont === null ? null : efCont - efEsp
+  const bloqueos = res?.bloqueos ?? []
   const faltaMedio = res ? ELECTRONICOS.filter(m => res.esperado[m] > 0 && num(cont[m] ?? '') === null) : []
 
   async function cerrar() {
@@ -95,6 +97,8 @@ export default function CierrePage() {
     setOcupado(false)
     if (!r.ok) {
       if (r.codigo === 'resumen_cambio' && r.resumen) { setRes(r.resumen); visto.current = JSON.stringify(r.resumen.esperado) }
+      // Bloqueado por el servidor (comandas, cobros o Point pendientes): se muestra la lista que devolvió la base, no se cierra nada.
+      if (r.codigo === 'bloqueado' && Array.isArray(r.bloqueos)) setRes(prev => prev ? { ...prev, bloqueos: r.bloqueos } : prev)
       setMsg({ t: r.error ?? 'No se pudo cerrar', ok: false }); setConfirmando(false); return
     }
     setCerrado(r); setTicket({ resumen: r.resumen, contados, conPendientes: Boolean(r.con_pendientes), reimpresion: false, auto: false }); setAviso(null); setConfirmando(false); setCont({}); setNotas(''); await cargar()
@@ -197,11 +201,26 @@ export default function CierrePage() {
               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Retiros</span><b>−{fmt(res.retiros)}</b></div>
               {res.gastos_otros_medios > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', opacity: .7 }}><span>Gastos pagados fuera de la caja (no restan)</span><b>{fmt(res.gastos_otros_medios)}</b></div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, marginTop: 6 }}><span>Efectivo que debería haber</span><b>{fmt(efEsp)}</b></div>
-              {res.pendientes.ventas_sin_cobrar > 0 && <p style={{ color: 'var(--gold, #c8962a)' }}>Hay {res.pendientes.ventas_sin_cobrar} venta(s) sin cobrar en este turno.</p>}
             </section>
 
+            {bloqueos.length > 0 && (
+              <section style={{ ...card, borderColor: 'var(--red, #d33)' }} aria-label="Pendientes que impiden cerrar">
+                <h2 style={{ fontSize: 18 }}>No se puede cerrar todavía ({bloqueos.length})</h2>
+                <p style={{ opacity: .8 }}>Resuelve cada punto. Nada se cancela, entrega ni cobra automáticamente.</p>
+                {agruparBloqueos(bloqueos).map(g => (
+                  <div key={g.tipo} style={{ marginTop: 8 }}>
+                    <b>{g.titulo} ({g.items.length})</b>
+                    {g.items.map((x, i) => (
+                      <div key={x.venta_id + x.tipo + i} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '4px 0' }}>
+                        <span style={{ flex: 1, minWidth: 220 }}>{etiquetaBloqueo(x)}</span>
+                        <a href={RUTA_BLOQUEO[x.ir].href} style={{ fontWeight: 700 }}>{RUTA_BLOQUEO[x.ir].texto}</a>
+                      </div>))}
+                  </div>))}
+              </section>
+            )}
+
             {porConc.length > 0 && (
-              <section style={card} aria-label="Cobros Point por confirmar">
+              <section id="por-confirmar" style={card} aria-label="Cobros Point por confirmar">
                 <h2 style={{ fontSize: 18 }}>Cobros Point por confirmar</h2>
                 <p style={{ opacity: .8 }}>Point no informó con qué pagó el cliente. Mira el comprobante y elige el medio; no se asume.</p>
                 {porConc.map(c => (
@@ -247,11 +266,11 @@ export default function CierrePage() {
               {ELECTRONICOS.filter(m => res.esperado[m] > 0).map(m => (
                 <label key={m} style={{ display: 'block', marginTop: 8 }}>{NOMBRE[m]} {m === 'transferencia' ? 'comprobada' : 'comprobado'} (esperado {fmt(res.esperado[m])})
                   <input style={inp} inputMode="numeric" value={cont[m] ?? ''} onChange={e => setCont({ ...cont, [m]: e.target.value })} aria-label={`${NOMBRE[m]} ${m === 'transferencia' ? 'comprobada' : 'comprobado'}`} /></label>))}
-              {res.esperado.por_conciliar > 0 && <p style={{ color: 'var(--gold, #c8962a)' }}>Quedan {fmt(res.esperado.por_conciliar)} de Point por confirmar. Puedes cerrar, pero el cierre quedará marcado «con pendientes».</p>}
               <textarea style={{ ...inp, marginTop: 8, fontSize: 15 }} placeholder="Notas (opcional)" value={notas} onChange={e => setNotas(e.target.value)} aria-label="Notas" />
               <h2 style={{ fontSize: 18, marginTop: 12 }}>4 · Confirmar</h2>
               {!confirmando
-                ? <button style={btn()} disabled={ocupado || efCont === null} onClick={() => setConfirmando(true)}>Cerrar turno</button>
+                ? <><button style={btn()} disabled={ocupado || efCont === null || bloqueos.length > 0} onClick={() => setConfirmando(true)}>Cerrar turno</button>
+                  {bloqueos.length > 0 && <p style={{ color: 'var(--red, #d33)', marginTop: 6 }}>Primero resuelve los {bloqueos.length} pendiente(s) de arriba.</p>}</>
                 : <div role="alertdialog" aria-label="Confirmar cierre">
                     <p><b>¿Cerrar el turno ahora ({hora(new Date().toISOString())})?</b> Después no se podrá modificar.{faltaMedio.length > 0 && ` Sin comprobar: ${faltaMedio.map(m => NOMBRE[m]).join(', ')}.`}</p>
                     <button style={btn()} disabled={ocupado} onClick={cerrar}>Sí, cerrar turno</button>{' '}

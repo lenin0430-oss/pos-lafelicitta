@@ -80,7 +80,7 @@ export async function POST(req: Request) {
     const out = await iniciarCobroPoint(pagos, mp, { restauranteId, ventaId: String(ventaId), monto, terminalId: cuenta.terminal_id, venta });
     if (!out.ok) {
       console.error("Point cobrar:", { status: out.status, ventaId, orderId: out.orderId });
-      return NextResponse.json({ error: out.error, orderId: out.orderId, reintentable: out.reintentable }, { status: out.status });
+      return NextResponse.json({ error: out.error, orderId: out.orderId, reintentable: out.reintentable, codigo: out.codigo }, { status: out.status });
     }
     return NextResponse.json({ orderId: out.orderId, estado: out.estado });
   } catch (e) {

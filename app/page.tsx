@@ -35,6 +35,7 @@ export default function CajaPage() {
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
   const [tabMovil, setTabMovil] = useState<'menu'|'comanda'>('menu')
   const [cajaAbierta, setCajaAbierta] = useState<boolean | null>(null)
+  const [turnoAbierto, setTurnoAbierto] = useState<boolean | null>(null)   // turno v2 abierto: sin él no se puede COBRAR (la base también lo rechaza)
 
   // FLUJO: paso 1 = enviar a cocina, paso 2 = cobrar
   const [ventaId, setVentaId] = useState<string | null>(null)
@@ -122,16 +123,18 @@ export default function CajaPage() {
 
   async function verificarApertura() {
     const sesion = getSesion()
-    if (sesion?.rol === 'admin') { setCajaAbierta(true); return }
     const empresaId = await getEmpresaIdActual()
-    if (!empresaId) { setCajaAbierta(false); return }
-    const { data } = await supabase
+    if (!empresaId) { setCajaAbierta(sesion?.rol === 'admin'); return }
+    const { data, error } = await supabase
       .from('aperturas_caja')
       .select('id')
       .eq('empresa_id', empresaId)
       .eq('estado', 'abierta')
+      .eq('modelo', 'v2')
       .limit(1)
-    setCajaAbierta(!!(data && data.length > 0))
+    const hay = !!(data && data.length > 0)
+    if (!error) setTurnoAbierto(hay)
+    setCajaAbierta(sesion?.rol === 'admin' ? true : (error ? false : hay))
   }
 
   const total = items.reduce((s, i) => s + i.producto.precio * i.cantidad, 0)
@@ -337,6 +340,7 @@ export default function CajaPage() {
   function abrirCobro() {
     if (!enviada) { mostrarMensaje('Primero envía la comanda a cocina', 'err'); return }
     if (cobrada) return
+    if (turnoAbierto === false) { mostrarMensaje('No hay turno abierto: ábrelo en «Cierre» para cobrar', 'err'); return }
     setModalCobro(true)
   }
 
@@ -375,6 +379,7 @@ export default function CajaPage() {
         } catch(ep) { console.warn('Error propina:', ep) }
       }
     } catch (e: unknown) {
+      if ((e as { code?: string }).code === 'P0413') setTurnoAbierto(false)
       mostrarMensaje('Error al cobrar: ' + (e as Error).message, 'err')
     }
     setCobrando(false)
@@ -647,6 +652,12 @@ export default function CajaPage() {
           <SesionBar />
         </div>
       </header>
+      {turnoAbierto === false && (
+        <div role="alert" style={{ background: 'var(--red)', color: '#fff', padding: '8px 14px', fontSize: 14, fontWeight: 600, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>Sin turno abierto: no se puede cobrar (sí puedes tomar comandas).</span>
+          {esAdmin ? <a href="/cierre" style={{ color: '#fff', textDecoration: 'underline' }}>Abrir turno</a> : <span>Pide al administrador que abra el turno.</span>}
+        </div>
+      )}
 
       {/* DESKTOP */}
       <div className="no-print desktop-layout" style={{ display: 'none' }}>
