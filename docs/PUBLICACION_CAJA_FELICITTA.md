@@ -1,7 +1,7 @@
 # Publicación de la candidata con Caja/Turnos para La Felicitta (PROCEDIMIENTO — NADA EJECUTADO)
 
 Candidata: rama `claude/candidata-permisos-point-2026-11-02` (caja incluida). Producción hoy: `origin/main` 4bcd30e, despliegue `dpl_AMbvJb44WNSnrK41ui1thQzZ8y`, Supabase `xlzbqgvmwbskpfajehgi`.
-Este documento **no autoriza** nada: cada paso con ★ requiere visto bueno explícito del dueño y coordinación con Codex. Revisión 3 (03/11): reglas del dueño (cierre bloqueado, sin cobros sin turno), Fase A con servidor=1, miércoles sin jornada. Complementa `PLAN_PUBLICACION.md` y `CANDIDATA_PERMISOS_POINT.md`.
+Este documento **no autoriza** nada: cada paso con ★ requiere visto bueno explícito del dueño y coordinación con Codex. Revisión 4 (03/11, tras el ensayo cerrado de caja y correlativos): reglas del dueño (cierre bloqueado, sin cobros sin turno), Fase A con servidor=1, miércoles sin jornada, folios internos (09), respaldo y transición del turno actual (§3b). Complementa `PLAN_PUBLICACION.md` y `CANDIDATA_PERMISOS_POINT.md`.
 
 ## 0. Reglas decididas por el dueño (ya implementadas y probadas en la candidata)
 1. **Bot/WhatsApp después.** Sin configurar: el cierre muestra «NO enviado»; POS y cierre siguen funcionando.
@@ -44,7 +44,25 @@ Jornada: ~11:00 hasta «Cerrar turno» (00:00–01:00 siguiente); **el miércole
 | 12:15 | Revisar logs 30 min; decidir «queda» o reversión. **Confirmar que no queda turno abierto.** | | |
 
 Fase B (07a → flag ya en 1 → 07) en otra ventana, tras confirmar menú/bot y la rotación del secreto.
-Proyecto de pruebas (`mesapos-pruebas-aislado`): tiene 08 + 08b; para tener las reglas nuevas se aplica **`08c_bloqueos_cierre_sin_turno.sql`** (incremental, una transacción; verificado idéntico a 08 final: mismas funciones, triggers, restricciones y permisos). Nunca 08c en producción.
+Proyecto de pruebas (`mesapos-pruebas-aislado`): **ya tiene 08 + 08b + 08c + 09** aplicados (Codex, 03/11) y el ensayo de caja y correlativos quedó cerrado en pantalla (ver `ESTADO_ACTUAL.md`). 08c es solo para ese proyecto (incremental, verificado idéntico a 08 final); **nunca 08c en producción**.
+
+## 3b. Respaldo y transición del turno actual (Revisión 4)
+**Estado a 03/11:** producción tiene un turno real abierto (modelo antiguo) y NO tiene 03, 04, 04b, 07b, 07c, 08 ni 09. Nada de esto se ha ejecutado.
+
+**Condiciones para empezar (Go / No-Go, las confirma el dueño en el chat el día de la ventana):**
+1. El turno real del martes está **cerrado con el flujo antiguo** y las cifras de papel anotadas. Si V0 (fila 11) muestra un turno abierto: **No-Go**; no se cierra a la fuerza por SQL.
+2. Cero cobros Point activos (fila 14 = 0) y cero ventas sin cobrar de hoy.
+3. Respaldo hecho y verificado (R): conteos de `respaldo_pre08` = conteos de las tablas originales; CSV guardados **fuera** de Supabase; confirmado si el plan tiene copias/PITR (anotar el momento del último respaldo automático).
+4. Aprobado por el dueño: criterio de 03 y corte de 06 (comandas antiguas), `CRON_SECRET` y `PIN_MODO=legacy` creados en Vercel, y el equipo sabe que toda comanda termina «Entregado» y toda venta cobrada.
+5. Codex confirma el commit exacto a desplegar (hash) y que el build de Windows y las pruebas de ese commit pasan.
+
+**Respaldos (tres capas):** (a) panel de Supabase: copia/PITR del plan, anotando hora; (b) `respaldo_previo_08.sql` crea el esquema `respaldo_pre08` en la MISMA base (ventas, aperturas, cierres, gastos, propinas, pagos Point) + CSV exportados del panel guardados fuera; (c) la reversión de 09 crea `respaldo_correlativos` (folios, claves y contadores) y la de 08 crea `respaldo_turnos`. Ningún respaldo se borra el mismo día de la ventana.
+
+**Transición del turno actual:** el turno antiguo termina con su propio flujo (martes noche) y **nunca se convierte** al modelo nuevo; `transicion_turnos_antiguos_PROPUESTA.sql` queda solo como último recurso, sin ejecutar, y únicamente con aprobación expresa del dueño. Tras publicar: **no hay turno abierto**; el dueño abre el turno real («Turno N° 0001», fondo contado) el jueves antes de vender. Los cierres anteriores quedan en `cierres_caja` sin folio (no se renumeran); desde el primero nuevo, `Cierre N° 0001`. Si por error queda abierto un turno antiguo cuando se aplica 08, `08` lo detecta en su propia verificación previa y no continúa.
+
+**Verificación SQL de solo lectura tras cada paso:** `supabase/verificar_post_08_09.sql` (12 filas con valor y esperado). Tras 08: filas 1–4 y 12; tras 09: todas. La fila 9 debe ser 0 justo tras 09 (el histórico no se tocó) y la fila 10 muestra cada contador igual al mayor número histórico del negocio. Anotar los resultados en el registro de la ventana.
+
+**Decisión de reversión tras el despliegue (a las 12:15 y de nuevo el jueves antes de abrir):** reversión inmediata si hay cobros que no se registran, cierre imposible sin pendientes reales, errores 5xx sostenidos, o folios repetidos. Pendientes de confirmación física que **no** bloquean la publicación pero se vigilan el jueves: impresora térmica 58 mm y medio reportado por Point real (si llega sin medio, queda «por conciliar» y la cajera lo confirma).
 
 ## 4. Pruebas de miércoles: siempre identificadas como PRUEBA
 - Ninguna comprobación deja una caja real abierta ni cifras reales alteradas. Dinero real: **ninguno** (no se prueba Point real; la primera venta Point real del jueves se vigila: medio informado o confirmación manual).
