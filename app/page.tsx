@@ -717,13 +717,18 @@ export default function CajaPage() {
           {esAdmin && <a href="/configuracion/mercadopago" title="Mercado Pago" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>💳</a>}
         </nav>
         <div className="pos-header-status">
+          {mensaje && <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
+          <span className="pos-header-clock">{hora}</span>
+          <SesionBar />
+        </div>
+      </header>
           {inciertas.length > 0 && (
-            <div role="alert" style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 60, maxWidth: 'min(560px, 94vw)', background: 'var(--surface)', border: '2px solid var(--red)', borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>
+            <div role="alert" className="pos-pedido-incierto no-print">
               <strong style={{ color: 'var(--red)' }}>Pedido enviado sin confirmar</strong>
               {inciertas.map(x => (
                 <div key={x.tab} style={{ marginTop: 6 }}>
                   {x.mesa ? `${x.mesa}` : 'Un pedido'}{x.total != null ? ` · $${Math.round(x.total).toLocaleString('es-CL')}` : ''}: no se pudo comprobar si llegó a cocina. Revisa Cocina; no envíes otro igual hasta resolverlo.
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
                     <button onClick={async () => { const id = await getEmpresaIdActual(); if (id) await revisarPendientesInciertos(id, true, menu) }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', cursor: 'pointer' }}>Comprobar de nuevo</button>
                     <button onClick={() => { if (confirm('¿Confirmas que ese pedido NO está en Cocina? Se descarta y podrás enviar.')) { gestorComanda.descartar(x.tab); setInciertas(prev => prev.filter(y => y.tab !== x.tab)) } }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--red)', background: 'transparent', color: 'var(--red)', cursor: 'pointer' }}>No se guardó: descartar</button>
                   </div>
@@ -731,11 +736,6 @@ export default function CajaPage() {
               ))}
             </div>
           )}
-          {mensaje && <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
-          <span className="pos-header-clock">{hora}</span>
-          <SesionBar />
-        </div>
-      </header>
       {turnoAbierto === false && (
         <div role="alert" style={{ background: 'var(--red)', color: '#fff', padding: '8px 14px', fontSize: 14, fontWeight: 600, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <span>Sin turno abierto: no se puede cobrar (sí puedes tomar comandas).</span>
