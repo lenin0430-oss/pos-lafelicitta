@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { huellaComanda, crearGestorIntenciones, guardarComandaIdempotente, recuperarPendiente } from "../lib/intencionComanda.ts";
+import { huellaComanda, crearGestorIntenciones, guardarComandaIdempotente, recuperarPendiente, resolverHuerfanas } from "../lib/intencionComanda.ts";
 
 const EMP = "aaaaaaaa-0000-4000-8000-00000000000a";
 let u = 0; const uuid = () => `00000000-0000-4000-8000-${String(++u).padStart(12, "0")}`;
-const almacenFalso = () => { const m = new Map(); return { m, getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
+const almacenFalso = () => { const m = new Map(); return { m, getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), key: (i) => [...m.keys()][i] ?? null, get length() { return m.size; } }; };
 const roto = { getItem() { throw new Error("sin almacenamiento"); }, setItem() { throw new Error("cuota"); }, removeItem() { throw new Error("x"); } };
 // Una "pestaña" = un gestor (memoria propia) + su sessionStorage; el localStorage es compartido entre pestañas del mismo navegador.
 let reloj = 1_000_000; const pestana = (local, sesion = almacenFalso()) => crearGestorIntenciones({ local, sesion, nuevoUuid: uuid, ahora: () => reloj });
@@ -178,4 +178,76 @@ test("duplicada con almacenamiento roto: no hay intención compartida, la clave 
   const A = crearGestorIntenciones({ local: roto, sesion: roto, nuevoUuid: uuid }), B = crearGestorIntenciones({ local: roto, sesion: roto, nuevoUuid: uuid });
   const ca = A.claveParaEnvio(EMP, H()), cb = B.claveParaEnvio(EMP, H());
   assert.notEqual(ca, cb); assert.equal(A.claveParaEnvio(EMP, H()), ca);
+});
+
+// ---- Reapertura inmediata sin liberar, canal entre pestañas y huérfanas ----
+const hub = () => { const peers = new Set(); return () => { const c = { onmessage: null, postMessage(m) { for (const p of peers) if (p !== c) setTimeout(() => p.onmessage && p.onmessage({ data: m }), 0); } }; peers.add(c); return c; }; };
+const pagina = (local, ses, h) => { let c = null; const g = crearGestorIntenciones({ local, sesion: ses, nuevoUuid: uuid, ahora: () => reloj, canal: h ? () => (c = h()) : undefined, esperaMs: 20 }); return { g, matar: () => { if (c) c.onmessage = null; } }; };   // matar = cierre brusco: no responde más
+
+test("respuesta perdida → cierre SIN liberar → reapertura inmediata (+130 s): misma identidad, misma venta y folio, misma clave", async () => {
+  const db = baseFalsa({ perderRespuestaEnInsert: 1 }); const local = almacenFalso(), ses = almacenFalso(), h = hub();
+  const A = pagina(local, ses, h); await A.g.iniciar();
+  const ca = A.g.claveParaEnvio(EMP, H(), { mesa: "Mesa 1", total: 10000 }); const idA = A.g.tabId();
+  assert.ok((await guardarComandaIdempotente(db, EMP, ca, fila())).error);                  // guardada, respuesta perdida
+  A.matar();                                                                                // el navegador se cierra sin pagehide
+  const A2 = pagina(local, ses, h); await A2.g.iniciar();                                   // reapertura inmediata (el arrendamiento viejo sigue "fresco")
+  assert.equal(A2.g.tabId(), idA); assert.equal(A2.g.duplicada, false);                     // retoma su identidad: nadie contestó
+  assert.equal((await recuperarPendiente(db, A2.g, EMP)).numero, db.filas[0].numero);       // misma venta y folio
+  reloj += 140_000; A2.g.latido();                                                          // pasan más de 130 s
+  assert.equal(A2.g.claveParaEnvio(EMP, H()), ca);                                          // el reintento usa la MISMA clave
+  const r = await guardarComandaIdempotente(db, EMP, ca, fila());
+  assert.equal(r.recuperada, true); assert.equal(db.filas.length, 1);
+  assert.deepEqual((await resolverHuerfanas(db, A2.g, EMP)), { recuperadas: [], inciertas: [] });
+});
+
+test("con una pestaña duplicada VIVA el canal responde: la copia toma otra identidad y sus pedidos son independientes", async () => {
+  const db = baseFalsa(); const local = almacenFalso(), sa = almacenFalso(), h = hub();
+  const A = pagina(local, sa, h); await A.g.iniciar(); const ca = A.g.claveParaEnvio(EMP, H());
+  const B = pagina(local, copiar(sa), h); await B.g.iniciar();
+  assert.equal(B.g.duplicada, true); assert.notEqual(B.g.tabId(), A.g.tabId());
+  const cb = B.g.claveParaEnvio(EMP, H()); assert.notEqual(cb, ca);
+  assert.deepEqual((await resolverHuerfanas(db, B.g, EMP)).inciertas, []);                   // la intención de A (viva) no es huérfana
+  await guardarComandaIdempotente(db, EMP, ca, fila()); await guardarComandaIdempotente(db, EMP, cb, fila());
+  assert.equal(db.filas.length, 2);
+});
+
+test("SIN canal (navegador antiguo): reapertura inmediata → identidad nueva, pero el pedido anterior se COMPRUEBA y se recupera con su folio", async () => {
+  const db = baseFalsa({ perderRespuestaEnInsert: 1 }); const local = almacenFalso(), ses = almacenFalso();
+  const A = pagina(local, ses); await A.g.iniciar(); const ca = A.g.claveParaEnvio(EMP, H(), { mesa: "Mesa 1", total: 10000 });
+  await guardarComandaIdempotente(db, EMP, ca, fila());
+  A.matar();
+  const A2 = pagina(local, ses); await A2.g.iniciar(); assert.equal(A2.g.duplicada, true);   // sin canal no puede saber si A sigue viva
+  const r = await resolverHuerfanas(db, A2.g, EMP);
+  assert.equal(r.recuperadas.length, 1); assert.equal(r.recuperadas[0].numero, db.filas[0].numero); assert.deepEqual(r.inciertas, []);
+  assert.equal(db.filas.length, 1);
+});
+
+test("pedido incierto que la base NO tiene: queda BLOQUEADO (incierta) hasta comprobar de nuevo o descartar; pasados 130 s sigue sin perderse", async () => {
+  const db = baseFalsa(); const local = almacenFalso(), ses = almacenFalso();
+  const A = pagina(local, ses); await A.g.iniciar(); A.g.claveParaEnvio(EMP, H(), { mesa: "Mesa 7", total: 12345 });   // nunca llegó a la base
+  A.matar();
+  const A2 = pagina(local, ses); await A2.g.iniciar();
+  let r = await resolverHuerfanas(db, A2.g, EMP);
+  assert.equal(r.inciertas.length, 1); assert.equal(r.inciertas[0].mesa, "Mesa 7"); assert.equal(r.inciertas[0].total, 12345);
+  reloj += 140_000; r = await resolverHuerfanas(db, A2.g, EMP);
+  assert.equal(r.inciertas.length, 1);                                                      // sigue bloqueado: no se pierde por el tiempo
+  // aparece en la base (respuesta tardía) → al comprobar de nuevo se recupera
+  db.filas.push({ id: uuid(), empresa_id: EMP, clave_idempotencia: r.inciertas[0].clave, numero: 777, mesa: "Mesa 7" });
+  r = await resolverHuerfanas(db, A2.g, EMP);
+  assert.equal(r.recuperadas[0].numero, 777); assert.deepEqual(r.inciertas, []);
+  // y el descarte explícito resuelve un incierto que de verdad no se guardó
+  const B = pagina(local, almacenFalso()); await B.g.iniciar(); B.g.claveParaEnvio(EMP, H(), { mesa: "Mesa 8" }); B.matar(); reloj += 140_000;
+  const C = pagina(local, almacenFalso()); await C.g.iniciar();
+  const rc = await resolverHuerfanas(db, C.g, EMP); assert.equal(rc.inciertas.length, 1);
+  C.g.descartar(rc.inciertas[0].tab); assert.deepEqual((await resolverHuerfanas(db, C.g, EMP)).inciertas, []);
+});
+
+test("un error al comprobar en el servidor NO libera el bloqueo", async () => {
+  const local = almacenFalso(), ses = almacenFalso();
+  const A = pagina(local, ses); await A.g.iniciar(); A.g.claveParaEnvio(EMP, H()); A.matar();
+  const A2 = pagina(local, ses); await A2.g.iniciar();
+  const caida = { from: () => { throw new Error("sin red"); } };
+  assert.equal((await resolverHuerfanas(caida, A2.g, EMP)).inciertas.length, A2.g.duplicada ? 1 : 0);
+  reloj += 140_000; const A3 = pagina(local, almacenFalso()); await A3.g.iniciar();
+  assert.equal((await resolverHuerfanas(caida, A3.g, EMP)).inciertas.length, 1);
 });

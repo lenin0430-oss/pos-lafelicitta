@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
 import { getEmpresaIdActual, getSesion } from '@/lib/auth'
-import { huellaComanda, crearGestorIntenciones, recuperarPendiente, guardarComandaIdempotente } from '@/lib/intencionComanda'
+import { huellaComanda, crearGestorIntenciones, recuperarPendiente, resolverHuerfanas, guardarComandaIdempotente, type Canal } from '@/lib/intencionComanda'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
 import BotonCobrarPoint from '@/components/BotonCobrarPoint'
@@ -23,6 +23,7 @@ const gestorComanda = crearGestorIntenciones({
   local: typeof window !== 'undefined' ? safeStorage('localStorage') : null,
   sesion: typeof window !== 'undefined' ? safeStorage('sessionStorage') : null,
   nuevoUuid: () => crypto.randomUUID(),
+  canal: () => (typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('lf_comanda_tabs') as unknown as Canal : null), // para saber si la página anterior sigue viva
 })
 function safeStorage(n: 'localStorage' | 'sessionStorage'): Storage | null { try { return window[n] } catch { return null } }
 
@@ -40,6 +41,7 @@ export default function CajaPage() {
   const [busqueda, setBusqueda] = useState('')
   const [guardando, setGuardando] = useState(false)
   // Folio de la comanda: lo asigna la base al guardar (nunca localStorage ni contadores del navegador)
+  const [inciertas, setInciertas] = useState<{ tab: string; clave: string; mesa?: string; total?: number }[]>([])
   const [numeroComanda, setNumeroComanda] = useState<number | null>(null)
   const [hora, setHora] = useState('')
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
@@ -83,13 +85,13 @@ export default function CajaPage() {
 
   // Identidad de pestaña: latido mientras la página vive y liberación al salir (permite detectar una pestaña duplicada y recuperar tras recargar).
   useEffect(() => {
-    gestorComanda.latido()
-    const t = setInterval(() => gestorComanda.latido(), 20000)
+    let t: ReturnType<typeof setInterval> | undefined
+    gestorComanda.iniciar().then(() => { gestorComanda.latido(); t = setInterval(() => gestorComanda.latido(), 20000) })
     const ver = () => { if (document.visibilityState === 'visible') gestorComanda.latido() }
     const salir = () => gestorComanda.liberar()
     document.addEventListener('visibilitychange', ver)
     window.addEventListener('pagehide', salir)
-    return () => { clearInterval(t); document.removeEventListener('visibilitychange', ver); window.removeEventListener('pagehide', salir) }
+    return () => { if (t) clearInterval(t); document.removeEventListener('visibilitychange', ver); window.removeEventListener('pagehide', salir) }
   }, [])
 
   async function inicializarCaja() {
@@ -109,12 +111,29 @@ export default function CajaPage() {
     try {
       const empresaId = await getEmpresaIdActual()
       if (!empresaId) return
+      await gestorComanda.iniciar()                      // decide la identidad de la pestaña (¿sigue viva la anterior?) antes de leer nada
       const data = await recuperarPendiente(supabase, gestorComanda, empresaId)
-      if (!data) return
-      await cargarComandaParaEditar(data.id, menuActual)
-      gestorComanda.cerrar()
-      mostrarMensaje(`Se recuperó la comanda #${data.numero}, que ya estaba guardada (no se creó otra)`, 'ok')
+      if (data) {
+        await cargarComandaParaEditar(data.id, menuActual)
+        gestorComanda.cerrar()
+        mostrarMensaje(`Se recuperó la comanda #${data.numero}, que ya estaba guardada (no se creó otra)`, 'ok')
+      }
+      await revisarPendientesInciertos(empresaId, !data, menuActual)
     } catch { /* sin conexión: se reintenta al enviar */ }
+  }
+
+  // Pedidos inciertos de una página que ya no existe: si la base los tiene se recuperan (mismo folio); si no se puede confirmar, se BLOQUEA otro envío.
+  async function revisarPendientesInciertos(empresaId: string, abrir: boolean, menuActual?: Producto[]): Promise<boolean> {
+    await gestorComanda.iniciar()
+    const r = await resolverHuerfanas(supabase, gestorComanda, empresaId)
+    setInciertas(r.inciertas)
+    if (r.recuperadas.length) {
+      const n = r.recuperadas.map(x => '#' + x.numero).join(', ')
+      if (abrir && items.length === 0 && !ventaId) await cargarComandaParaEditar(r.recuperadas[0].id, menuActual)
+      mostrarMensaje(`Un pedido anterior ya estaba guardado: comanda ${n}. No se creó otra`, 'ok')
+      return !abrir
+    }
+    return r.inciertas.length > 0
   }
 
   async function cargarCatalogo() {
@@ -345,10 +364,23 @@ export default function CajaPage() {
       return
     }
 
+    // Antes de crear una comanda NUEVA: ¿quedó un pedido anterior sin confirmar? Se comprueba en el servidor; si no se puede confirmar, no se envía.
+    try {
+      if (await revisarPendientesInciertos(empresaId, false)) {
+        if (printWindow && !printWindow.closed) printWindow.close()
+        mostrarMensaje('Hay un pedido enviado sin confirmar. Compruébalo o descártalo (aviso rojo) antes de enviar otro', 'err')
+        return
+      }
+    } catch (e: unknown) {
+      if (printWindow && !printWindow.closed) printWindow.close()
+      mostrarMensaje('No se pudo comprobar el pedido anterior: ' + (e as Error).message, 'err')
+      return
+    }
     setGuardando(true)
     try {
+      await gestorComanda.iniciar()
       // La clave se guarda en el navegador ANTES de enviar: si se pierde la respuesta y se recarga, se recupera la misma comanda.
-      const clave = gestorComanda.claveParaEnvio(empresaId, huellaComanda(mesa, items))
+      const clave = gestorComanda.claveParaEnvio(empresaId, huellaComanda(mesa, items), { mesa, total })
       const fila = {
         empresa_id: empresaId,
         mesa, mesero: mesero || 'Caja', personas,
@@ -685,6 +717,20 @@ export default function CajaPage() {
           {esAdmin && <a href="/configuracion/mercadopago" title="Mercado Pago" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>💳</a>}
         </nav>
         <div className="pos-header-status">
+          {inciertas.length > 0 && (
+            <div role="alert" style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 60, maxWidth: 'min(560px, 94vw)', background: 'var(--surface)', border: '2px solid var(--red)', borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>
+              <strong style={{ color: 'var(--red)' }}>Pedido enviado sin confirmar</strong>
+              {inciertas.map(x => (
+                <div key={x.tab} style={{ marginTop: 6 }}>
+                  {x.mesa ? `${x.mesa}` : 'Un pedido'}{x.total != null ? ` · $${Math.round(x.total).toLocaleString('es-CL')}` : ''}: no se pudo comprobar si llegó a cocina. Revisa Cocina; no envíes otro igual hasta resolverlo.
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                    <button onClick={async () => { const id = await getEmpresaIdActual(); if (id) await revisarPendientesInciertos(id, true, menu) }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', cursor: 'pointer' }}>Comprobar de nuevo</button>
+                    <button onClick={() => { if (confirm('¿Confirmas que ese pedido NO está en Cocina? Se descarta y podrás enviar.')) { gestorComanda.descartar(x.tab); setInciertas(prev => prev.filter(y => y.tab !== x.tab)) } }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--red)', background: 'transparent', color: 'var(--red)', cursor: 'pointer' }}>No se guardó: descartar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {mensaje && <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
           <span className="pos-header-clock">{hora}</span>
           <SesionBar />
