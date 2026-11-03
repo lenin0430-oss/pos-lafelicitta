@@ -180,3 +180,4 @@ Estado: **propuesta probada en PGlite y en PostgreSQL 16 local; NO aplicada en n
 - Caso real: diferencia provisional −$9.090 (pendiente de comprobar); histórico no se corrige.
 - Archivos de transferencia temporales en `mesapos-unified/_transfer_turnos/` (carpeta del usuario; el dueño puede borrarla).
 - Rev. 2 de caja (tras revisión de Codex): corregidos gasto tardío, anular/recobrar, caminos antiguos de /api/datos, resumen desactualizado, Point identificable. PG16 52/52, suite 150/150, tsc limpio. 08 sigue sin aplicar.
+- Rev. 3 de caja (Codex sobre aa2731b): bloqueo del turno en UPDATE/DELETE de gastos (carrera probada en ambos órdenes) y esperado negativo admitido. PG16 53/53 + carrera 4/4, suite 151/151. 08 sigue sin aplicar.

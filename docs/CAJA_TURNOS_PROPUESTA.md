@@ -1,6 +1,6 @@
 # Caja y turnos — propuesta e implementación (candidata, sin publicar)
 
-Estado (rev. 2, tras revisión de Codex sobre e848547): implementado en la rama `claude/candidata-permisos-point-2026-11-02`. Probado en PostgreSQL 16 local (52 comprobaciones) y 150/150 pruebas de la suite, `tsc` sin errores. **Migración 08 sin aplicar en ningún proyecto**; producción intacta.
+Estado (rev. 2, tras revisión de Codex sobre e848547): implementado en la rama `claude/candidata-permisos-point-2026-11-02`. Probado en PostgreSQL 16 local (53 comprobaciones + 4 carreras con conexiones reales) y 151/151 pruebas de la suite, `tsc` sin errores. **Migración 08 sin aplicar en ningún proyecto**; producción intacta.
 
 ## Regla de horario (confirmada por el dueño)
 La jornada empieza hacia las 11:00 y termina cuando se confirma «Cerrar turno», entre las 00:00 y la 01:00 del día siguiente. A las 00:00 no se reinicia nada y el miércoles no se abre una nueva jornada. El turno se identifica por la **fecha de apertura** (hora de Chile) y guarda las **horas reales** de apertura y cierre. Ninguna función de 08 usa la fecha del día para agrupar: el turno es una fila que se abre y se cierra explícitamente.
@@ -46,3 +46,7 @@ Efectivo esperado = 1.000 + 149.490 − 121.400 − 10.000 = **$19.090** → dif
 3. **Caminos antiguos**: `/api/datos` ya no escribe `aperturas_caja` ni `cierres_caja` (solo lectura; abrir y cerrar solo por `/api/turno`). Además, la base rechaza UPDATE/DELETE/INSERT directo sobre turnos v2 y `cierres_caja` contra un turno v2 fuera de las funciones. Borrar gastos de turnos cerrados lo bloquea la base. Pendiente: un turno `legacy` abierto ya no tiene botón para cerrarse; hay que cerrarlo antes de desplegar (o con SQL).
 4. **Pantalla desactualizada**: refresco cada 15 s y al volver a la ventana; si cambia el esperado se cancela la confirmación y se avisa. Al confirmar, la pantalla envía las cifras que vio; si el servidor tiene otras, **no cierra** y devuelve las nuevas (`resumen_cambio`, 409).
 5. **Point pendiente identificable**: cada «por confirmar» muestra comanda, mesa, mesero, hora y referencia de la orden.
+
+## Revisión 3 — dos casos de Codex sobre aa2731b
+1. **Carrera DELETE/UPDATE de gasto contra cierre**: el trigger ahora toma bloqueo compartido del turno también en UPDATE/DELETE (y la anulación de un cobro lo toma antes de registrar), igual que el cierre toma `FOR UPDATE`. `scripts/prueba-caja/carrera.sh` prueba con dos conexiones reales, en ambos órdenes y para DELETE y UPDATE: si la operación sobre el gasto empieza primero, el cierre espera y guarda el estado final (gasto borrado → 0; actualizado → 1); si el cierre empieza primero, la operación se rechaza (`TURNO_CERRADO`) y el cierre conserva $500. 4/4 correctas.
+2. **Esperado negativo**: `esperado_visto` admite enteros con signo (se acota a ±100.000.000); lo contado sigue siendo no negativo. Prueba de servidor (esperado −1000, contado 0 → 200; contado −1, decimales o texto → 400) y de base (cierre con esperado −1000 y diferencia +1000).

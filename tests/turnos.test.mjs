@@ -118,6 +118,18 @@ test("Point por confirmar: comanda, mesa, hora y referencia para distinguirlos",
   assert.notEqual(a.hora, b.hora);
 });
 
+test("esperado negativo (−1000) con contado 0 se acepta; contado negativo sigue rechazado", async () => {
+  const db = dbFalsa();
+  const neg = { ...VISTO, efectivo: -1000 };
+  const r = await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: neg });
+  assert.equal(r.status, 200);
+  assert.deepEqual(db.llamadas.at(-1)[1].p_esperado_visto, neg);
+  assert.deepEqual(db.llamadas.at(-1)[1].p_contados, { efectivo: 0 });
+  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: -1 }, esperado_visto: neg })).status, 400);
+  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: { ...neg, efectivo: 1.5 } })).status, 400);
+  assert.equal((await accionTurno(db, ses, { accion: "cerrar", turno_id: T1, clave: CL, contados: { efectivo: 0 }, esperado_visto: { ...neg, efectivo: "x" } })).status, 400);
+});
+
 test("error de base no filtra detalle", async () => {
   const db = dbFalsa({ rpc: () => ({ error: { message: "secreto interno" } }) });
   const r = await accionTurno(db, ses, { accion: "abrir", fondo: 1 });

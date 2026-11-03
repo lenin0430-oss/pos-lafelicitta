@@ -11,6 +11,8 @@ const MEDIOS_CONTADOS = ["efectivo", "debito", "credito", "transferencia", "qr",
 const MAX_MONTO = 100_000_000;
 const err = (status: number, error: string): RespT => ({ status, body: { ok: false, error } });
 const entero = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= MAX_MONTO ? v : null);
+// El ESPERADO que se confirma puede ser negativo (gastos y retiros mayores que el efectivo registrado); lo CONTADO nunca.
+const enteroConSigno = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && Math.abs(v) <= MAX_MONTO ? v : null);
 
 const MENSAJES: Record<string, [number, string]> = {
   ya_abierto: [409, "Ya hay un turno abierto"],
@@ -109,7 +111,7 @@ export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
     }
     // Lo que la cajera tenía en pantalla: si cambió en el servidor, la base rechaza el cierre y devuelve las cifras nuevas.
     const visto: Record<string, number> = {};
-    for (const m of MEDIOS_CONTADOS) { const v = entero(b.esperado_visto?.[m]); if (v === null) return err(400, "Falta el resumen que se está confirmando"); visto[m] = v; }
+    for (const m of MEDIOS_CONTADOS) { const v = enteroConSigno(b.esperado_visto?.[m]); if (v === null) return err(400, "Falta el resumen que se está confirmando"); visto[m] = v; }
     const notas = typeof b.notas === "string" ? b.notas.trim().slice(0, 500) : null;
     return desdeRpc(await db.rpc("turno_cerrar", { p_turno: turno, p_contados: contados, p_notas: notas, p_clave: b.clave, p_por: s.nombre, p_esperado_visto: visto }));
   }
