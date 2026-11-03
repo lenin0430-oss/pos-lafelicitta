@@ -1,33 +1,57 @@
-// Intención de comanda pendiente: la clave anti-duplicado sobrevive a una recarga, para que una comanda guardada cuya
+// Intención de comanda pendiente: la clave anti-duplicado sobrevive a fallos y a recargas, para que una comanda guardada cuya
 // respuesta se perdió se RECUPERE (misma venta, mismo folio) en vez de crear otra. El folio lo asigna solo la base.
+//  · Una intención por PESTAÑA (id de pestaña en sessionStorage): dos pestañas con los mismos productos NO comparten clave.
+//  · La clave vive SIEMPRE en memoria; el almacenamiento del navegador es un respaldo para recargas (si falla, no cambia nada).
+//  · «Comanda nueva» es una acción explícita (cerrar): comandas con productos idénticos, pero distintas, usan claves distintas.
 export type Almacen = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-export type Intencion = { clave: string; empresa_id: string; huella: string };
-const LLAVE = "lf_intencion_comanda";
+export type Intencion = { clave: string; empresa_id: string; huella: string; ts: number };
+const LLAVE = "lf_intencion_comanda:";
+const LLAVE_TAB = "lf_tab_id";
+const VIGENCIA_MS = 24 * 3600 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ItemH = { producto: { nombre: string; precio: number }; cantidad: number; nota?: string };
-// Identifica "esta comanda": mismo negocio, mesa y líneas. Si la cajera arma otra distinta, se usa otra clave.
+// Identifica «esta comanda» mientras se reintenta: mismo negocio, mesa y líneas. Si la cajera cambia el pedido, es otra intención.
 export function huellaComanda(mesa: string, items: ItemH[]): string {
   return JSON.stringify([mesa, items.map((i) => [i.producto.nombre, i.producto.precio, i.cantidad, i.nota ?? ""])]);
 }
 
-export function leerIntencion(a: Almacen | null | undefined, empresaId: string): Intencion | null {
-  try {
-    const x = JSON.parse(a?.getItem(LLAVE) ?? "null");
-    return x && x.empresa_id === empresaId && typeof x.huella === "string" && UUID.test(x.clave) ? x : null;
-  } catch { return null; }
-}
-export function guardarIntencion(a: Almacen | null | undefined, i: Intencion): void { try { a?.setItem(LLAVE, JSON.stringify(i)); } catch { /* sin almacenamiento: queda solo la clave en memoria */ } }
-export function borrarIntencion(a: Almacen | null | undefined): void { try { a?.removeItem(LLAVE); } catch { /* nada */ } }
+const seguro = <T,>(f: () => T, otro: T): T => { try { return f(); } catch { return otro; } };
 
-// Clave para enviar: la pendiente si es la misma comanda; si no, una nueva (y se persiste ANTES de enviar).
-export function claveParaEnvio(a: Almacen | null | undefined, empresaId: string, huella: string, nueva: () => string): string {
-  const p = leerIntencion(a, empresaId);
-  if (p && p.huella === huella) return p.clave;
-  const clave = nueva();
-  guardarIntencion(a, { clave, empresa_id: empresaId, huella });
-  return clave;
+export function crearGestorIntenciones(opc: { local?: Almacen | null; sesion?: Almacen | null; nuevoUuid: () => string; ahora?: () => number }) {
+  const ahora = opc.ahora ?? Date.now;
+  let tabMem: string | null = null;
+  let memoria: Intencion | null = null;
+  const tabId = (): string => {
+    if (tabMem) return tabMem;
+    const g = seguro(() => opc.sesion?.getItem(LLAVE_TAB) ?? null, null);
+    tabMem = g && UUID.test(g) ? g : opc.nuevoUuid();
+    if (tabMem !== g) seguro(() => opc.sesion?.setItem(LLAVE_TAB, tabMem as string), undefined);
+    return tabMem;
+  };
+  const llave = () => LLAVE + tabId();
+  const vigente = (x: Intencion | null | undefined, empresaId: string): x is Intencion => !!x && x.empresa_id === empresaId && typeof x.huella === "string" && UUID.test(x.clave) && ahora() - (x.ts ?? 0) < VIGENCIA_MS;
+  const leer = (empresaId: string): Intencion | null => {
+    if (vigente(memoria, empresaId)) return memoria;
+    const d = seguro(() => JSON.parse(opc.local?.getItem(llave()) ?? "null") as Intencion | null, null);   // tras una recarga
+    if (vigente(d, empresaId)) { memoria = d; return d; }
+    return null;
+  };
+  return {
+    tabId, leer,
+    claveParaEnvio(empresaId: string, huella: string): string {
+      const p = leer(empresaId);
+      if (p && p.huella === huella) return p.clave;                       // reintento de la misma comanda
+      const n: Intencion = { clave: opc.nuevoUuid(), empresa_id: empresaId, huella, ts: ahora() };
+      memoria = n;                                                         // en memoria SIEMPRE, aunque el almacenamiento falle
+      seguro(() => opc.local?.setItem(llave(), JSON.stringify(n)), undefined);
+      return n.clave;
+    },
+    // Comanda confirmada, o «Comanda nueva» pedida a propósito: la siguiente usa otra clave aunque lleve los mismos productos.
+    cerrar(): void { memoria = null; seguro(() => opc.local?.removeItem(llave()), undefined); },
+  };
 }
+export type GestorIntenciones = ReturnType<typeof crearGestorIntenciones>;
 
 // ---- Guardado idempotente (lo usa app/page.tsx; se prueba con una base falsa que reproduce la restricción única) ----
 type Cliente = { from: (t: string) => any };
@@ -45,8 +69,8 @@ export async function guardarComandaIdempotente(sb: Cliente, empresaId: string, 
   return { data: r?.data ?? null, error: r?.error ?? null, recuperada: false };
 }
 // Al recargar: ¿la comanda pendiente ya está en la base? Devuelve su id y folio, o null (la clave queda para reintentar).
-export async function recuperarPendiente(sb: Cliente, a: Almacen | null | undefined, empresaId: string): Promise<{ id: string; numero: number } | null> {
-  const p = leerIntencion(a, empresaId);
+export async function recuperarPendiente(sb: Cliente, g: GestorIntenciones, empresaId: string): Promise<{ id: string; numero: number } | null> {
+  const p = g.leer(empresaId);
   if (!p) return null;
   const r = await sb.from("ventas").select("id,numero").eq("empresa_id", empresaId).eq("clave_idempotencia", p.clave).maybeSingle();
   return r?.data ?? null;

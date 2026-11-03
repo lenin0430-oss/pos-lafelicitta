@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
 import { getEmpresaIdActual, getSesion } from '@/lib/auth'
-import { huellaComanda, claveParaEnvio, recuperarPendiente, guardarComandaIdempotente, borrarIntencion } from '@/lib/intencionComanda'
+import { huellaComanda, crearGestorIntenciones, recuperarPendiente, guardarComandaIdempotente } from '@/lib/intencionComanda'
 import AuthGuard from '@/components/AuthGuard'
 import SesionBar from '@/components/SesionBar'
 import BotonCobrarPoint from '@/components/BotonCobrarPoint'
@@ -17,6 +17,14 @@ interface ItemComanda {
   cantidad: number
   nota: string
 }
+
+// Un gestor por carga de página: la clave se conserva en memoria aunque falle el almacenamiento; una intención por pestaña.
+const gestorComanda = crearGestorIntenciones({
+  local: typeof window !== 'undefined' ? safeStorage('localStorage') : null,
+  sesion: typeof window !== 'undefined' ? safeStorage('sessionStorage') : null,
+  nuevoUuid: () => crypto.randomUUID(),
+})
+function safeStorage(n: 'localStorage' | 'sessionStorage'): Storage | null { try { return window[n] } catch { return null } }
 
 export default function CajaPage() {
   const [mesa, setMesa] = useState('Mesa 1')
@@ -90,10 +98,10 @@ export default function CajaPage() {
     try {
       const empresaId = await getEmpresaIdActual()
       if (!empresaId) return
-      const data = await recuperarPendiente(supabase, window.localStorage, empresaId)
+      const data = await recuperarPendiente(supabase, gestorComanda, empresaId)
       if (!data) return
       await cargarComandaParaEditar(data.id, menuActual)
-      borrarIntencion(window.localStorage)
+      gestorComanda.cerrar()
       mostrarMensaje(`Se recuperó la comanda #${data.numero}, que ya estaba guardada (no se creó otra)`, 'ok')
     } catch { /* sin conexión: se reintenta al enviar */ }
   }
@@ -329,8 +337,7 @@ export default function CajaPage() {
     setGuardando(true)
     try {
       // La clave se guarda en el navegador ANTES de enviar: si se pierde la respuesta y se recarga, se recupera la misma comanda.
-      const almacen = typeof window !== 'undefined' ? window.localStorage : null
-      const clave = claveParaEnvio(almacen, empresaId, huellaComanda(mesa, items), () => crypto.randomUUID())
+      const clave = gestorComanda.claveParaEnvio(empresaId, huellaComanda(mesa, items))
       const fila = {
         empresa_id: empresaId,
         mesa, mesero: mesero || 'Caja', personas,
@@ -344,7 +351,7 @@ export default function CajaPage() {
       setVentaId(data.id)
       setNumeroComanda(data.numero)
       setEnviada(true)
-      borrarIntencion(almacen)
+      gestorComanda.cerrar()
       mostrarMensaje(`Comanda #${data.numero} enviada a cocina ✓`, 'ok')
       imprimirComandaRaw(data.numero, printWindow)
     } catch (e: unknown) {
@@ -413,6 +420,7 @@ export default function CajaPage() {
     setCobrada(false)
     setVentaId(null)
     setNumeroComanda(null)
+    gestorComanda.cerrar() // «Comanda nueva»: la siguiente usa otra clave aunque lleve los mismos productos
     setModalCobro(false)
     setTabMovil('menu')
     setPropinaMonto('')
