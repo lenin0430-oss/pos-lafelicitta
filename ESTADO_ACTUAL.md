@@ -207,3 +207,23 @@ Negocio nuevo E2E Cierre limpio Codex: cinco comandas entregadas y pagadas (efec
 ## Revisión de publicación de Codex — 03/11/2026
 
 Sobre 19287f2: verificaciones separadas tras 08 y tras 09, porque el script conjunto referencia objetos de 09 y no puede ejecutarse antes. Verificación de 03/04 trasladada después de sus migraciones. Corregido: 08 no rechaza automáticamente turnos legacy abiertos; V0 debe detener el procedimiento. Copias automáticas solo si están confirmadas; copia en el mismo proyecto y respaldos de reversión no sustituyen exportación externa previa. Probados ambos SELECT en PostgreSQL 17 local, 5 y 12 filas. La fila de turnos abiertos detectó el turno legacy de la fixture (1 frente a 0), tal como debe. No hubo SQL remoto, cambios de producto ni publicación.
+
+## PUBLICADO en producción — 03/11/2026, verificación 19:24 Chile
+
+Este registro reemplaza el estado pendiente de publicación de las entradas anteriores. El dueño autorizó la ventana inmediata con ventas pausadas, los criterios históricos de 03, el archivo limitado de 06 y respaldo solamente interno (sin CSV externo).
+
+- Destino: `xlzbqgvmwbskpfajehgi`. No se ejecutaron estas operaciones en el proyecto de pruebas `wcoaulvlicfimdfmwhid`.
+- Respaldo interno `respaldo_pre08` comprobado antes de empezar. Las dos aperturas antiguas de junio ya estaban cerradas y respaldadas. No había aperturas abiertas.
+- Aplicadas en orden, una transacción por archivo: **03 → 04 → 04b → 07b → 07c → 06 limitada → 08 final**. No se aplicaron 08b/08c por separado. 07a y 07 quedan fuera de esta publicación.
+- 03: 6.165 ventas y $36.841.500 intactos; estados de cocina, métodos, importes y líneas sin cambios. Clasificación: 5.574 pagadas, 583 sin identificar, 6 cortesías y 2 pendientes; no se inventaron fechas históricas de cobro.
+- 04/04b: 71 pagos Point conservados, cero incompatibles, reserva e aislamiento instalados. 04b contiene dos triggers combinados, verificados contra el archivo exacto.
+- 07b/07c: funciones privadas del servidor instaladas; sin permisos de ejecución para anon/authenticated. PINs sin modificación; `pin_hash` sigue vacío.
+- 06: únicamente empresa `382de687-99e1-4303-bbac-783561f663f0` (La Felicitta), estado `listo`, creación anterior a `2026-11-03 21:15:00+00`. **6.163 ids** guardados en `respaldo_pre08.cocina_archivada_06` antes de archivarlos. Cero filas fuera del alcance. No se borró ni entregó ninguna comanda. SQL específico y reversión por esos ids: `consolidacion/06_produccion_felicitta_2026-11-03.sql` y `consolidacion/06_produccion_felicitta_REVERSION.sql`, en la carpeta de trabajo superior; no usar la reversión global de 06.
+- Tras 08: 5 tablas, 4 funciones y 7 triggers esperados; cierre protegido por bloqueos; cero turnos abiertos.
+- PR #1 fusionado desde candidata `003e2a1df6da7f2e46bf972768a60432ecf0e7de`. **Main publicado: `79644662f0dbfa48c7800c471bd6f0cfd32cd54d`**.
+- Vercel producción **READY**, despliegue `dpl_GKQpi7FT9fVDDjBfzJeUUGEB8tc2`, dominios `mesapos.app` y `pos-lafelicitta-ndkb.vercel.app`, sin error de alias. Versión anterior: `dpl_AMbvJb44VrwNSnrK41ui1thQzZ8y` (volver al código antiguo exige revertir previamente las migraciones incompatibles según el plan).
+- **09 aplicada después de READY**. Las 12 comprobaciones de `verificar_post_08_09.sql` coinciden: folios y claves presentes, 5 índices, permisos privados, ningún folio impuesto al histórico, cero turnos abiertos. Contador inicial La Felicitta: comanda 1.742; siguiente nueva comanda 1.743. Turno y cierre nuevos comienzan en 0001.
+- Control final: 6.165 ventas, $36.841.500, cero cambios históricos en número/estado/importe/líneas; 71 pagos Point, cero activos; cero bloqueos de La Felicitta. Pollo broaster $5.500 y Pollo al horno $5.000 activos, sin modificar precios.
+- Observación contable preservada: apareció un gasto de $6.550 a las 19:13:44 Chile, posterior al respaldo y anterior a 08, sin apertura asociada. Los 1.673 gastos del respaldo siguen idénticos; ahora hay 1.674 ($18.097.007). No se borró ni se reasignó ese gasto. El efectivo real informado por el dueño fue $14.000; no se sobrescribió el cierre antiguo que guardó $0. Recontar el fondo actual al abrir el nuevo turno.
+- Acceso publicado: login y cierre HTTP 200; `/api/turno` sin sesión HTTP 401 con `Sin sesión`; menú digital HTTP 200. No se hicieron cobros reales de prueba ni se abrió un turno productivo.
+- Listo para que el dueño recargue la página y abra **Turno N° 0001** con el efectivo contado. No volver a ejecutar catálogo ni precios. WhatsApp/bot queda para después (puede mostrar NO enviado); impresora real de 58 mm y medio real de Point se comprueban en operación, sin afirmar que ya fueron probados en esta versión productiva.
