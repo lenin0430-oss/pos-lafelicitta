@@ -20,6 +20,7 @@ const provisional = esProvisional
 const abierto_ = (r: any) => Boolean(r?.abierto && r?.resumen)
 type Cobro = { id: string; medio?: string; monto: number; proveedor: string; hora: string; comanda: number | null; mesa: string | null; mesero: string | null; referencia: string | null }
 type Cierre = { id: string; numero_cierre?: number | null; resumen: Resumen | null; fecha_apertura: string; apertura_at: string; cierre_at: string; con_pendientes: boolean; notas: string | null; medios: { medio: string; esperado: number; contado: number | null; diferencia: number | null }[] }
+type Arqueo = { id: string; estado: 'pendiente' | 'devuelto' | 'aprobado'; contado: Record<string, number>; resumen?: Resumen; notas: string | null; presentado_por: string; presentado_at: string; motivo_devolucion: string | null }
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' })
@@ -53,18 +54,24 @@ export default function CierrePage() {
   const [ticket, setTicket] = useState<{ resumen: Resumen; contados: Record<string, number>; conPendientes: boolean; reimpresion: boolean; auto: boolean } | null>(null)
   const [aviso, setAviso] = useState<{ ok: boolean; msg?: string } | null>(null)
   const [hist, setHist] = useState<Cierre[]>([])
+  const [rol, setRol] = useState<'admin' | 'garzon'>('garzon')
+  const [arqueo, setArqueo] = useState<Arqueo | null>(null)
+  const [motivoDevolucion, setMotivoDevolucion] = useState('')
 
   const visto = useRef<string>('')   // resumen que la cajera tiene en pantalla (para detectar cambios de otro equipo)
   const cargar = useCallback(async () => {
     const r = await api('GET')
     if (r.ok) {
-      const firma = abierto_(r) ? JSON.stringify(r.resumen.esperado) : ''
+      setRol(r.rol === 'admin' ? 'admin' : 'garzon'); setArqueo(r.arqueo ?? null)
+      const firma = abierto_(r) && r.resumen.esperado ? JSON.stringify(r.resumen.esperado) : ''
       if (visto.current && firma && visto.current !== firma) { setConfirmando(false); setMsg({ t: 'Entraron cobros o gastos nuevos en este turno. Revisa las cifras actualizadas antes de cerrar.', ok: false }) }
       visto.current = firma
       setRes(r.resumen ?? null); setAbierto(Boolean(r.abierto)); setPorConc(r.por_conciliar ?? []); setConfirmados(r.point_confirmados ?? [])
     } else setMsg({ t: r.error ?? 'No se pudo leer el turno', ok: false })
-    const h = await api('GET', undefined, '?historial=1')
-    if (h.ok) setHist(h.cierres)
+    if (r.ok && r.rol === 'admin') {
+      const h = await api('GET', undefined, '?historial=1')
+      if (h.ok) setHist(h.cierres)
+    } else setHist([])
     setCargando(false)
   }, [])
   useEffect(() => {
@@ -76,6 +83,7 @@ export default function CierrePage() {
   }, [cargar])
   useEffect(() => { setClaveAbrir(crypto.randomUUID()) }, [])
   useEffect(() => { setClave(crypto.randomUUID()) }, [res?.turno.id]) // misma clave en cada reintento del mismo cierre
+  useEffect(() => { if (arqueo?.estado === 'devuelto') setClave(crypto.randomUUID()) }, [arqueo?.id, arqueo?.estado])
 
   async function accion(cuerpo: Record<string, unknown>, okMsg: string) {
     setOcupado(true); setMsg(null)
@@ -85,18 +93,25 @@ export default function CierrePage() {
     return r
   }
 
-  const efEsp = res?.esperado.efectivo ?? 0
+  const efEsp = res?.esperado?.efectivo ?? 0
   const efCont = num(cont.efectivo ?? '')
   const diff = efCont === null ? null : efCont - efEsp
   const bloqueos = res?.bloqueos ?? []
-  const faltaMedio = res ? ELECTRONICOS.filter(m => res.esperado[m] > 0 && num(cont[m] ?? '') === null) : []
+  const faltaMedio = rol === 'admin' && res?.esperado ? ELECTRONICOS.filter(m => res.esperado[m] > 0 && num(cont[m] ?? '') === null) : []
 
-  async function cerrar() {
+  async function presentarArqueo() {
     if (!res || efCont === null) return
     const contados: Record<string, number> = { efectivo: efCont }
     for (const m of ELECTRONICOS) { const v = num(cont[m] ?? ''); if (v !== null) contados[m] = v }
+    const r = await accion({ accion: 'presentar_arqueo', turno_id: res.turno.id, contados, notas, clave, ...(rol === 'admin' ? { esperado_visto: res.esperado } : {}) }, 'Arqueo guardado y pendiente de aprobación del dueño. El turno aún no está cerrado.')
+    if (r.ok) { setConfirmando(false); setCont({}); setNotas('') }
+  }
+
+  async function cerrar() {
+    if (!res || rol !== 'admin' || arqueo?.estado !== 'pendiente') return
+    const contados = arqueo.contado
     setOcupado(true)
-    const r = await api('POST', { accion: 'cerrar', turno_id: res.turno.id, contados, notas, clave, esperado_visto: res.esperado })
+    const r = await api('POST', { accion: 'cerrar', turno_id: res.turno.id, arqueo_id: arqueo.id })
     setOcupado(false)
     if (!r.ok) {
       if (r.codigo === 'resumen_cambio' && r.resumen) { setRes(r.resumen); visto.current = JSON.stringify(r.resumen.esperado) }
@@ -135,7 +150,7 @@ export default function CierrePage() {
   const btn = (principal = true): React.CSSProperties => ({ padding: '12px 18px', fontSize: 16, fontWeight: 700, borderRadius: 10, border: principal ? 'none' : '1px solid var(--border, #bbb)', background: principal ? 'var(--gold, #c8962a)' : 'transparent', color: principal ? '#000' : 'inherit', cursor: ocupado ? 'wait' : 'pointer' })
 
   return (
-    <AuthGuard rolRequerido="admin">
+    <AuthGuard>
       <>
         {/* Ticket 58 mm: solo se ve al imprimir (globals.css) */}
         <div id="cierre-print" style={{ display: 'none' }}>
@@ -182,7 +197,7 @@ export default function CierrePage() {
           {!cargando && !abierto && (
             <section style={card} aria-label="Abrir turno">
               <h2 style={{ fontSize: 18 }}>1 · Abrir turno</h2>
-              <p style={{ opacity: .8 }}>Cuenta el efectivo que hay en la caja ahora. El turno seguirá abierto, aunque pase de medianoche, hasta que lo cierres.</p>
+              <p style={{ opacity: .8 }}>Cuenta el efectivo que hay en la caja ahora. El turno continúa después de medianoche. La cajera presenta el arqueo y el dueño confirma el cierre.</p>
               <input style={inp} inputMode="numeric" placeholder="Fondo contado (ej. 20000)" value={fondo} onChange={e => setFondo(e.target.value)} aria-label="Fondo contado" />
               <div style={{ marginTop: 12 }}><button style={btn()} disabled={ocupado || num(fondo) === null} onClick={() => accion({ accion: 'abrir', fondo: num(fondo), clave: claveAbrir }, 'Turno abierto').then(r => { if (r.ok) { setFondo(''); setClaveAbrir(crypto.randomUUID()) } })}>Abrir turno</button></div>
             </section>
@@ -192,12 +207,12 @@ export default function CierrePage() {
             <section style={card} aria-label="Turno abierto">
               <div style={{ fontSize: 13, opacity: .75 }}>TURNO ABIERTO</div>
               <div style={{ fontSize: 20, fontWeight: 700 }}>{etiquetaFolio('Turno', res.turno.numero)}{res.turno.numero != null ? ' · ' : ''}Turno del {dia(res.turno.apertura_at)}</div>
-              <div>Abierto a las {hora(res.turno.apertura_at)} · lleva {res.turno.horas_abiertas.toFixed(1)} h · fondo {fmt(res.fondo)}</div>
+              <div>Abierto a las {hora(res.turno.apertura_at)} · lleva {res.turno.horas_abiertas.toFixed(1)} h{rol === 'admin' && ` · fondo ${fmt(res.fondo)}`}</div>
               <div style={{ fontSize: 13, opacity: .75, marginTop: 4 }}>Todo lo que se cobre, gaste o retire queda en este turno hasta «Cerrar turno». A las 00:00 no cambia nada.</div>
               {res.turno.horas_abiertas > 16 && <div style={{ color: 'var(--red, #d33)', marginTop: 6 }}>Este turno lleva más de 16 horas abierto: revisa si olvidaste cerrarlo.</div>}
             </section>
 
-            <section style={card} aria-label="Resumen del turno">
+            {rol === 'admin' && <section style={card} aria-label="Resumen del turno">
               <h2 style={{ fontSize: 18 }}>2 · Lo registrado</h2>
               {(['efectivo', 'debito', 'credito', 'transferencia', 'qr', 'por_conciliar'] as const).map(m => (
                 <div key={m} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span>{NOMBRE[m]}</span><b>{fmt(res.cobros[m])}</b></div>))}
@@ -206,7 +221,7 @@ export default function CierrePage() {
               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Retiros</span><b>−{fmt(res.retiros)}</b></div>
               {res.gastos_otros_medios > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', opacity: .7 }}><span>Gastos pagados fuera de la caja (no restan)</span><b>{fmt(res.gastos_otros_medios)}</b></div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, marginTop: 6 }}><span>Efectivo que debería haber</span><b>{fmt(efEsp)}</b></div>
-            </section>
+            </section>}
 
             {bloqueos.length > 0 && (
               <section style={{ ...card, borderColor: 'var(--red, #d33)' }} aria-label="Pendientes que impiden cerrar">
@@ -261,26 +276,43 @@ export default function CierrePage() {
               </div>
             </section>
 
-            <section style={card} aria-label="Cerrar turno">
+            {arqueo?.estado === 'devuelto' && <section style={card} role="status"><h2>Volver a contar</h2><p>El dueño devolvió el arqueo: {arqueo.motivo_devolucion}</p><p>El registro anterior se conserva. Cuenta de nuevo y presenta otro arqueo.</p></section>}
+            {arqueo?.estado === 'pendiente' && (
+              <section style={card} aria-label="Arqueo pendiente de aprobación">
+                <h2 style={{ fontSize: 18 }}>Arqueo pendiente de aprobación del dueño</h2>
+                <p>Presentado por {arqueo.presentado_por} a las {hora(arqueo.presentado_at)}. El turno sigue abierto hasta que el dueño lo confirme.</p>
+                {(['efectivo', ...ELECTRONICOS] as const).map(m => <div key={m} style={{ marginBottom: 8 }}><b>{NOMBRE[m]}</b>: declarado {arqueo.contado[m] === undefined ? 'sin comprobar' : fmt(arqueo.contado[m])}{rol === 'admin' && arqueo.resumen && <> · esperado al presentar {fmt(arqueo.resumen.esperado[m])}{arqueo.contado[m] !== undefined && ` · diferencia ${fmt(arqueo.contado[m] - arqueo.resumen.esperado[m])}`}</>}</div>)}
+                {arqueo.notas && <p>Notas: {arqueo.notas}</p>}
+                <p>No modifiques este registro. Si entra algún movimiento nuevo, el dueño deberá devolverlo para repetir el conteo.</p>
+                {rol === 'admin' ? <>
+                  <button style={btn()} disabled={ocupado || bloqueos.length > 0} onClick={() => setConfirmando(true)}>Revisar y confirmar cierre</button>
+                  {confirmando && <div role="alertdialog" aria-label="Aprobar arqueo y cerrar"><p>¿Apruebas los importes declarados y cierras este turno? Se conservarán quién contó y quién aprobó.</p><button style={btn()} disabled={ocupado} onClick={cerrar}>Sí, aprobar y cerrar turno</button>{' '}<button style={btn(false)} disabled={ocupado} onClick={() => setConfirmando(false)}>Volver</button></div>}
+                  <label style={{ display: 'block', marginTop: 16 }}>Motivo para devolver a la cajera<input style={inp} value={motivoDevolucion} onChange={e => setMotivoDevolucion(e.target.value)} maxLength={500} /></label>
+                  <button style={{ ...btn(false), marginTop: 8 }} disabled={ocupado || !motivoDevolucion.trim()} onClick={() => accion({ accion: 'devolver_arqueo', turno_id: res.turno.id, arqueo_id: arqueo.id, motivo: motivoDevolucion }, 'Arqueo devuelto: la cajera debe contar nuevamente').then(r => { if (r.ok) { setMotivoDevolucion(''); setConfirmando(false) } })}>Devolver para volver a contar</button>
+                </> : <p><b>Solo el dueño puede confirmar el cierre.</b> Avísale que el arqueo ya está disponible en su cuenta. No se envía WhatsApp automáticamente.</p>}
+              </section>
+            )}
+            {arqueo?.estado !== 'pendiente' && <section style={card} aria-label="Presentar arqueo">
               <h2 style={{ fontSize: 18 }}>3 · Contar y comprobar</h2>
+              {rol !== 'admin' && <p>Cuenta los billetes y monedas sin calcular cuánto debería haber. El dueño compara tu declaración con el sistema. Una vez enviada, no puedes cambiarla sin que él la devuelva.</p>}
               <label>Efectivo contado (obligatorio)
                 <input style={inp} inputMode="numeric" value={cont.efectivo ?? ''} onChange={e => setCont({ ...cont, efectivo: e.target.value })} aria-label="Efectivo contado" /></label>
-              {diff !== null && (provisional(res)
+              {rol === 'admin' && diff !== null && (provisional(res)
                 ? <p style={{ fontSize: 16, color: 'var(--gold, #c8962a)' }}><b>Diferencia PROVISIONAL: {diff > 0 ? '+' : diff < 0 ? '−' : ''}{fmt(Math.abs(diff))}</b> (esperado {fmt(efEsp)}). Hay {fmt(res.esperado.por_conciliar)} de Point por confirmar; si alguno fue efectivo, el esperado cambia. Confírmalos antes de cerrar para tener la diferencia definitiva.</p>
                 : <p style={{ fontSize: 18, color: diff === 0 ? 'var(--green, #2a9d5c)' : 'var(--red, #d33)' }}>Esperado {fmt(efEsp)} · {diff === 0 ? 'cuadra' : diff > 0 ? `sobran ${fmt(diff)}` : `faltan ${fmt(-diff)}`}</p>)}
-              {ELECTRONICOS.filter(m => res.esperado[m] > 0).map(m => (
-                <label key={m} style={{ display: 'block', marginTop: 8 }}>{NOMBRE[m]} {m === 'transferencia' ? 'comprobada' : 'comprobado'} (esperado {fmt(res.esperado[m])})
+              {ELECTRONICOS.filter(m => rol !== 'admin' || res.esperado[m] > 0).map(m => (
+                <label key={m} style={{ display: 'block', marginTop: 8 }}>{NOMBRE[m]} {m === 'transferencia' ? 'comprobada' : 'comprobado'}{rol === 'admin' && ` (esperado ${fmt(res.esperado[m])})`}
                   <input style={inp} inputMode="numeric" value={cont[m] ?? ''} onChange={e => setCont({ ...cont, [m]: e.target.value })} aria-label={`${NOMBRE[m]} ${m === 'transferencia' ? 'comprobada' : 'comprobado'}`} /></label>))}
               <textarea style={{ ...inp, marginTop: 8, fontSize: 15 }} placeholder="Notas (opcional)" value={notas} onChange={e => setNotas(e.target.value)} aria-label="Notas" />
-              <h2 style={{ fontSize: 18, marginTop: 12 }}>4 · Confirmar</h2>
+              <h2 style={{ fontSize: 18, marginTop: 12 }}>4 · Presentar al dueño</h2>
               {!confirmando
-                ? <><button style={btn()} disabled={ocupado || efCont === null || bloqueos.length > 0} onClick={() => setConfirmando(true)}>Cerrar turno</button>
+                ? <><button style={btn()} disabled={ocupado || efCont === null || bloqueos.length > 0} onClick={() => setConfirmando(true)}>Enviar arqueo para revisión</button>
                   {bloqueos.length > 0 && <p style={{ color: 'var(--red, #d33)', marginTop: 6 }}>Primero resuelve los {bloqueos.length} pendiente(s) de arriba.</p>}</>
                 : <div role="alertdialog" aria-label="Confirmar cierre">
-                    <p><b>¿Cerrar el turno ahora ({hora(new Date().toISOString())})?</b> Después no se podrá modificar.{faltaMedio.length > 0 && ` Sin comprobar: ${faltaMedio.map(m => NOMBRE[m]).join(', ')}.`}</p>
-                    <button style={btn()} disabled={ocupado} onClick={cerrar}>Sí, cerrar turno</button>{' '}
+                    <p><b>¿Guardar este arqueo para que el dueño lo revise?</b> El turno no se cierra todavía.{faltaMedio.length > 0 && ` Sin comprobar: ${faltaMedio.map(m => NOMBRE[m]).join(', ')}.`}</p>
+                    <button style={btn()} disabled={ocupado} onClick={presentarArqueo}>Sí, guardar y enviar a revisión</button>{' '}
                     <button style={btn(false)} disabled={ocupado} onClick={() => setConfirmando(false)}>Volver</button></div>}
-            </section>
+            </section>}
           </>)}
 
           {cerrado?.ok && (

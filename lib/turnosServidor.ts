@@ -31,6 +31,11 @@ const MENSAJES: Record<string, [number, string]> = {
   medio_duplicado_en_venta: [409, "Esa venta ya tiene ese medio"],
   bloqueado: [409, "No se puede cerrar el turno: hay pendientes por resolver"],
   resumen_cambio: [409, "Entraron cobros o gastos nuevos mientras revisabas. Revisa las cifras actualizadas y confirma de nuevo"],
+  arqueo_pendiente: [409, "Ya hay un arqueo pendiente de revisión del dueño"],
+  arqueo_cambio: [409, "Hubo movimientos después del arqueo. Devuélvelo para que la cajera cuente de nuevo"],
+  arqueo_no_encontrado: [404, "Arqueo no encontrado"],
+  arqueo_resuelto: [409, "Este arqueo ya fue revisado"],
+  clave_reutilizada: [409, "La clave ya se usó con otros datos. Inicia un arqueo nuevo"],
 };
 function desdeRpc(r: any): RespT {
   if (r?.error) return err(500, "No se pudo completar la operación");
@@ -38,6 +43,17 @@ function desdeRpc(r: any): RespT {
   if (d.ok) return { status: 200, body: d };
   const [st, msg] = MENSAJES[d.codigo] ?? [400, "Operación rechazada"];
   return { status: st, body: { ok: false, error: msg, codigo: d.codigo, turno_id: d.turno_id, resumen: d.resumen, bloqueos: d.bloqueos } };
+}
+
+// Arqueo ciego: los totales y diferencias ni siquiera se envían al navegador de la cajera.
+export function vistaArqueo(a: any, rol: SesionT['rol']) {
+  if (!a || rol === 'admin') return a;
+  const { resumen: _r, huella: _h, ...declarado } = a;
+  return declarado;
+}
+export function vistaTurno(r: any, rol: SesionT['rol']) {
+  if (rol === 'admin' || !r) return r;
+  return { turno: r.turno, bloqueos: r.bloqueos ?? [] };
 }
 
 export async function turnoAbiertoDe(db: Db, empresaId: string): Promise<string | null> {
@@ -58,7 +74,7 @@ export async function estadoTurno(db: Db, s: SesionT): Promise<RespT> {
     const u = await db.from("aperturas_caja").select("id").eq("empresa_id", s.empresa_id).eq("modelo", "v2").order("created_at", { ascending: false }).limit(1).maybeSingle();
     id = u?.data?.id ?? null; abierto = false;
   }
-  if (!id) return { status: 200, body: { ok: true, turno: null } };
+  if (!id) return { status: 200, body: { ok: true, turno: null, rol: s.rol } };
   const r = await db.rpc("turno_resumen", { p_turno: id });
   if (r?.error) return err(500, "No se pudo leer el turno");
   let porConciliar: unknown[] = [];
@@ -83,11 +99,15 @@ export async function estadoTurno(db: Db, s: SesionT): Promise<RespT> {
     const k = await db.from("cobros_turno").select("id,venta_id,monto,proveedor,medio,created_at").eq("turno_id", id).eq("proveedor", "point").neq("medio", "por_conciliar").not("conciliado_at", "is", null).is("anulado_at", null).order("created_at", { ascending: true }).limit(200);
     pointConfirmados = await detalle(k?.data ?? []);
   }
-  return { status: 200, body: { ok: true, abierto, resumen: r.data, por_conciliar: porConciliar, point_confirmados: pointConfirmados } };
+  const arqueos = await db.from("arqueos_turno").select("id,estado,contado,resumen,notas,presentado_por,presentado_at,revisado_por,revisado_at,motivo_devolucion").eq("empresa_id", s.empresa_id).eq("turno_id", id).order("presentado_at", { ascending: false }).limit(1).maybeSingle();
+  if (arqueos?.error) return err(503, "La revisión de arqueos no está disponible. Contacta al administrador");
+  return { status: 200, body: { ok: true, rol: s.rol, abierto, resumen: vistaTurno(r.data, s.rol), arqueo: vistaArqueo(arqueos?.data ?? null, s.rol), por_conciliar: porConciliar, point_confirmados: pointConfirmados } };
 }
 
 export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
   const a = b?.accion;
+  // El permiso se comprueba en el servidor; ocultar un botón no protege el cierre.
+  if (["cerrar", "devolver_arqueo"].includes(a) && s.rol !== "admin") return err(403, "Solo el dueño o administrador puede confirmar o devolver un cierre");
   if (a === "abrir") {
     const fondo = entero(b.fondo);
     if (fondo === null) return err(400, "Fondo inválido");
@@ -110,7 +130,13 @@ export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
     if (!c?.data) return err(404, "Cobro no encontrado");
     return desdeRpc(await db.rpc("cobro_conciliar", { p_cobro: b.cobro_id, p_medio: String(b.medio ?? ""), p_por: s.nombre }));
   }
-  if (a === "cerrar") {
+  if (a === "cerrar" || a === "devolver_arqueo") {
+    if (typeof b.arqueo_id !== "string" || !UUID.test(b.arqueo_id)) return err(400, "Selecciona el arqueo que vas a revisar");
+    const motivo = typeof b.motivo === "string" ? b.motivo.trim().slice(0, 500) : "";
+    if (a === "devolver_arqueo" && !motivo) return err(400, "Indica por qué debe contar de nuevo");
+    return desdeRpc(await db.rpc("turno_revisar_arqueo", { p_empresa: s.empresa_id, p_turno: turno, p_arqueo: b.arqueo_id, p_aprobar: a === "cerrar", p_motivo: motivo || null, p_por: s.nombre }));
+  }
+  if (a === "presentar_arqueo") {
     if (typeof b.clave !== "string" || !UUID.test(b.clave)) return err(400, "Falta la clave de cierre");
     const contados: Record<string, number> = {};
     for (const m of MEDIOS_CONTADOS) {
@@ -121,15 +147,20 @@ export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
     }
     // Lo que la cajera tenía en pantalla: si cambió en el servidor, la base rechaza el cierre y devuelve las cifras nuevas.
     const visto: Record<string, number> = {};
-    for (const m of MEDIOS_CONTADOS) { const v = enteroConSigno(b.esperado_visto?.[m]); if (v === null) return err(400, "Falta el resumen que se está confirmando"); visto[m] = v; }
+    if (s.rol === 'admin') for (const m of MEDIOS_CONTADOS) { const v = enteroConSigno(b.esperado_visto?.[m]); if (v === null) return err(400, "Falta el resumen que se está confirmando"); visto[m] = v; }
     const notas = typeof b.notas === "string" ? b.notas.trim().slice(0, 500) : null;
-    return desdeRpc(await db.rpc("turno_cerrar", { p_turno: turno, p_contados: contados, p_notas: notas, p_clave: b.clave, p_por: s.nombre, p_esperado_visto: visto }));
+    if (contados.efectivo === undefined) return err(400, "Falta contar el efectivo");
+    const r = desdeRpc(await db.rpc("turno_presentar_arqueo", { p_empresa: s.empresa_id, p_turno: turno, p_contados: contados, p_notas: notas, p_clave: b.clave, p_por: s.nombre, p_esperado_visto: s.rol === 'admin' ? visto : null }));
+    if (r.body.arqueo) r.body.arqueo = vistaArqueo(r.body.arqueo, s.rol);
+    if (r.body.resumen) r.body.resumen = vistaTurno(r.body.resumen, s.rol);
+    return r;
   }
   return err(400, "Acción desconocida");
 }
 
 // Historial auditable: últimos cierres del negocio con esperado/contado/diferencia por medio.
 export async function historialTurnos(db: Db, s: SesionT): Promise<RespT> {
+  if (s.rol !== 'admin') return err(403, "Solo el dueño puede consultar los cierres y sus diferencias");
   const c = await db.from("cierres_turno").select("id,numero_cierre,turno_id,fecha_apertura,apertura_at,cierre_at,fondo_contado,cerrado_por,notas,con_pendientes,resumen").eq("empresa_id", s.empresa_id).order("cierre_at", { ascending: false }).limit(30);
   const ids = (c?.data ?? []).map((x: any) => x.id);
   const m = ids.length ? await db.from("cierres_turno_medios").select("cierre_id,medio,esperado,contado,diferencia").in("cierre_id", ids) : { data: [] };

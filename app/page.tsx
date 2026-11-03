@@ -527,7 +527,7 @@ export default function CajaPage() {
         </div>
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar producto..." style={{ ...inp, background: 'var(--surface)' }} />
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔒 Cerrar Turno</button>
+          <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>{esAdmin ? '🔒 Revisar cierre' : '🧾 Presentar arqueo'}</button>
           <button onClick={() => window.location.href = '/cierre'} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--green)', background: 'transparent', color: 'var(--green)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔓 Abrir Turno</button>
         </div>
       </div>
@@ -638,9 +638,9 @@ export default function CajaPage() {
         <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font)', padding: 24 }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🔴</div>
           <div style={{ fontFamily: 'var(--display)', fontSize: 24, letterSpacing: 3, color: 'var(--gold)', marginBottom: 8 }}>CAJA CERRADA</div>
-          <div style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', marginBottom: 32, maxWidth: 280 }}>El administrador no ha abierto la caja hoy.</div>
+          <div style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', marginBottom: 32, maxWidth: 280 }}>No hay un turno abierto. Cuenta el fondo antes de abrir la caja.</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 280 }}>
-            <button onClick={() => window.location.href = '/cierre'} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔓 Abrir Caja (Admin)</button>
+            <button onClick={() => window.location.href = '/cierre'} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔓 Abrir caja</button>
             <button onClick={verificarApertura} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>🔄 Verificar nuevamente</button>
             <button onClick={() => { localStorage.removeItem('lf_sesion'); window.location.href = '/login' }} style={{ padding: '10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>🚪 Cambiar usuario</button>
           </div>
@@ -739,7 +739,7 @@ export default function CajaPage() {
       {turnoAbierto === false && (
         <div role="alert" style={{ background: 'var(--red)', color: '#fff', padding: '8px 14px', fontSize: 14, fontWeight: 600, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <span>Sin turno abierto: no se puede cobrar (sí puedes tomar comandas).</span>
-          {esAdmin ? <a href="/cierre" style={{ color: '#fff', textDecoration: 'underline' }}>Abrir turno</a> : <span>Pide al administrador que abra el turno.</span>}
+          <a href="/cierre" style={{ color: '#fff', textDecoration: 'underline' }}>Abrir turno</a>
         </div>
       )}
 
