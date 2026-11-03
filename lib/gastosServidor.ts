@@ -16,8 +16,8 @@ export async function registrarGasto(db: Db, s: { rol: "admin" | "garzon"; empre
     const usada = await consumirAprobacion(db, (b as any).aprobacion, { empresa_id: s.empresa_id, tipo: "gasto", actor: s.nombre, monto, huella: huellaGasto(categoria, descripcion) });
     if (!usada) return { status: 403, body: { ok: false, error: "Este gasto requiere la aprobación vigente de un administrador" } };
   }
-  const ap = await db.from("aperturas_caja").select("id").eq("empresa_id", s.empresa_id).eq("estado", "abierta").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  const { error } = await db.from("gastos").insert({ empresa_id: s.empresa_id, categoria: cat, descripcion, monto, cajero: s.nombre, apertura_id: ap?.data?.id ?? null, afecto_caja, created_at: new Date().toISOString() });
+  // El turno lo asigna la base al insertar (trigger, serializado con el cierre): no se lee aparte ni se envía apertura_id.
+  const { error } = await db.from("gastos").insert({ empresa_id: s.empresa_id, categoria: cat, descripcion, monto, cajero: s.nombre, afecto_caja, created_at: new Date().toISOString() });
   if (error) return { status: 500, body: { ok: false, error: "No se pudo registrar el gasto" } };
   return { status: 200, body: { ok: true } };
 }

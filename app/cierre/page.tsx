@@ -2,7 +2,7 @@
 // Caja por turnos. Un turno empieza al abrirlo y termina SOLO al confirmar «Cerrar turno» (puede pasar de medianoche).
 // Pasos: 1 abrir con fondo contado → 2 registrar cobros/gastos (otras pantallas) y retiros aquí → 3 contar y comprobar → 4 confirmar.
 // El navegador solo manda lo contado; el servidor recalcula esperado y diferencia con lo guardado.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
 
@@ -13,7 +13,7 @@ type Resumen = {
   propinas_registradas: number; esperado: Medios
   pendientes: { cobros_por_conciliar: number; monto_por_conciliar: number; ventas_sin_cobrar: number }
 }
-type Cobro = { id: string; venta_id: string; monto: number; proveedor: string }
+type Cobro = { id: string; monto: number; proveedor: string; hora: string; comanda: number | null; mesa: string | null; mesero: string | null; referencia: string | null }
 type Cierre = { id: string; fecha_apertura: string; apertura_at: string; cierre_at: string; con_pendientes: boolean; notas: string | null; medios: { medio: string; esperado: number; contado: number | null; diferencia: number | null }[] }
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
@@ -44,15 +44,26 @@ export default function CierrePage() {
   const [cerrado, setCerrado] = useState<any>(null)
   const [hist, setHist] = useState<Cierre[]>([])
 
+  const visto = useRef<string>('')   // resumen que la cajera tiene en pantalla (para detectar cambios de otro equipo)
   const cargar = useCallback(async () => {
     const r = await api('GET')
-    if (r.ok) { setRes(r.resumen ?? null); setAbierto(Boolean(r.abierto)); setPorConc(r.por_conciliar ?? []) }
-    else setMsg({ t: r.error ?? 'No se pudo leer el turno', ok: false })
+    if (r.ok) {
+      const firma = JSON.stringify(r.resumen?.esperado ?? null)
+      if (visto.current && visto.current !== firma) { setConfirmando(false); setMsg({ t: 'Entraron cobros o gastos nuevos en este turno. Revisa las cifras actualizadas antes de cerrar.', ok: false }) }
+      visto.current = firma
+      setRes(r.resumen ?? null); setAbierto(Boolean(r.abierto)); setPorConc(r.por_conciliar ?? [])
+    } else setMsg({ t: r.error ?? 'No se pudo leer el turno', ok: false })
     const h = await api('GET', undefined, '?historial=1')
     if (h.ok) setHist(h.cierres)
     setCargando(false)
   }, [])
-  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => {
+    cargar()
+    const t = setInterval(() => { if (document.visibilityState === 'visible') cargar() }, 15000)   // otros equipos pueden cobrar o gastar
+    const f = () => cargar()
+    window.addEventListener('focus', f)
+    return () => { clearInterval(t); window.removeEventListener('focus', f) }
+  }, [cargar])
   useEffect(() => { setClave(crypto.randomUUID()) }, [res?.turno.id]) // misma clave en cada reintento del mismo cierre
 
   async function accion(cuerpo: Record<string, unknown>, okMsg: string) {
@@ -73,9 +84,12 @@ export default function CierrePage() {
     const contados: Record<string, number> = { efectivo: efCont }
     for (const m of ELECTRONICOS) { const v = num(cont[m] ?? ''); if (v !== null) contados[m] = v }
     setOcupado(true)
-    const r = await api('POST', { accion: 'cerrar', turno_id: res.turno.id, contados, notas, clave })
+    const r = await api('POST', { accion: 'cerrar', turno_id: res.turno.id, contados, notas, clave, esperado_visto: res.esperado })
     setOcupado(false)
-    if (!r.ok) { setMsg({ t: r.error ?? 'No se pudo cerrar', ok: false }); setConfirmando(false); return }
+    if (!r.ok) {
+      if (r.codigo === 'resumen_cambio' && r.resumen) { setRes(r.resumen); visto.current = JSON.stringify(r.resumen.esperado) }
+      setMsg({ t: r.error ?? 'No se pudo cerrar', ok: false }); setConfirmando(false); return
+    }
     setCerrado(r); setConfirmando(false); setCont({}); setNotas(''); await cargar()
     try { // aviso al dueño (mismo canal de antes); los "por confirmar" NO se cuentan como QR
       const x = r.resumen
@@ -139,6 +153,7 @@ export default function CierrePage() {
                 {porConc.map(c => (
                   <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '6px 0' }}>
                     <b style={{ minWidth: 80 }}>{fmt(c.monto)}</b>
+                    <span style={{ fontSize: 13, opacity: .8, flexBasis: '100%' }}>Comanda {c.comanda ? `#${c.comanda}` : '—'}{c.mesa ? ` · mesa ${c.mesa}` : ''} · {hora(c.hora)}{c.mesero ? ` · ${c.mesero}` : ''}{c.referencia ? ` · ref …${c.referencia}` : ''}</span>
                     {(['efectivo', 'debito', 'credito', 'qr'] as const).map(m => <button key={m} style={btn(false)} disabled={ocupado} onClick={() => accion({ accion: 'conciliar', turno_id: res.turno.id, cobro_id: c.id, medio: m }, 'Cobro confirmado')}>{NOMBRE[m]}</button>)}
                   </div>))}
               </section>

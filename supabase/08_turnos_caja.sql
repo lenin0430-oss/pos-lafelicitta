@@ -37,9 +37,10 @@ create table if not exists public.cobros_turno (
   conciliado_por text,
   conciliado_at timestamptz,
   anulado_at timestamptz,
-  created_at timestamptz not null default clock_timestamp(),
-  unique (venta_id, medio)
+  created_at timestamptz not null default clock_timestamp()
 );
+-- Un cobro ACTIVO por venta y medio; uno anulado no impide volver a cobrar la venta.
+create unique index if not exists cobros_turno_activo_uq on public.cobros_turno (venta_id, medio) where anulado_at is null;
 create index if not exists cobros_turno_turno_idx on public.cobros_turno (turno_id);
 
 create table if not exists public.movimientos_caja (
@@ -146,9 +147,14 @@ declare v_turno uuid; v_medio_point text; p record; v_anulado boolean := false;
 begin
   if new.empresa_id is null then return new; end if;
   if tg_op = 'UPDATE' and old.estado_pago = 'pagado' and new.estado_pago is distinct from 'pagado' then
-    update public.cobros_turno set anulado_at = clock_timestamp() where venta_id = new.id and anulado_at is null;
+    -- La anulación queda registrada con su turno; si ese turno ya estaba cerrado, su cierre NO cambia (usa su instantánea).
     insert into public.turno_eventos(empresa_id, turno_id, evento, detalle)
-      values (new.empresa_id, new.turno_id, 'cobro_anulado', jsonb_build_object('venta_id', new.id, 'nuevo_estado_pago', new.estado_pago));
+      select new.empresa_id, c.turno_id,
+             case when a.estado = 'cerrada' then 'anulacion_posterior_al_cierre' else 'cobro_anulado' end,
+             jsonb_build_object('venta_id', new.id, 'cobro_id', c.id, 'medio', c.medio, 'monto', c.monto, 'nuevo_estado_pago', new.estado_pago)
+        from public.cobros_turno c left join public.aperturas_caja a on a.id = c.turno_id
+       where c.venta_id = new.id and c.anulado_at is null;
+    update public.cobros_turno set anulado_at = clock_timestamp() where venta_id = new.id and anulado_at is null;
     return new;
   end if;
   if new.estado_pago not in ('pagado','cortesia') then return new; end if;
@@ -163,7 +169,7 @@ begin
             new.id,
             case when p.proveedor = 'point' and v_medio_point is not null then v_medio_point else p.medio end,
             p.proveedor, p.monto)
-    on conflict (venta_id, medio) do nothing;
+    on conflict (venta_id, medio) where anulado_at is null do nothing;
   end loop;
   if v_turno is null then
     insert into public.turno_eventos(empresa_id, turno_id, evento, detalle)
@@ -177,16 +183,58 @@ create trigger ventas_cobro_a_turno before insert or update of estado_pago on pu
 
 create or replace function public.trg_gasto_propina_a_turno() returns trigger
 language plpgsql set search_path = public, pg_temp as $$
+declare a public.aperturas_caja;
 begin
-  if new.apertura_id is null and new.empresa_id is not null then
-    new.apertura_id := public._turno_abierto(new.empresa_id);
+  if tg_op = 'INSERT' then
+    if new.apertura_id is null then
+      if new.empresa_id is not null then new.apertura_id := public._turno_abierto(new.empresa_id); end if;
+      if new.apertura_id is null then
+        insert into public.turno_eventos(empresa_id, turno_id, evento, detalle)
+          values (new.empresa_id, null, tg_table_name || '_sin_turno', jsonb_build_object('monto', new.monto));
+      end if;
+    else
+      -- apertura_id explícito: debe ser de este negocio y, si es un turno v2, seguir ABIERTO (bloqueo compartido: se serializa con el cierre).
+      select * into a from public.aperturas_caja where id = new.apertura_id for share;
+      if not found or a.empresa_id is distinct from new.empresa_id then raise exception 'TURNO_NO_PERTENECE' using errcode = 'P0411'; end if;
+      if a.modelo = 'v2' and a.estado <> 'abierta' then raise exception 'TURNO_CERRADO' using errcode = 'P0411'; end if;
+    end if;
+    return new;
+  end if;
+  -- UPDATE / DELETE: nada de lo registrado en un turno v2 cerrado se modifica ni se borra.
+  select * into a from public.aperturas_caja where id = old.apertura_id;
+  if found and a.modelo = 'v2' and a.estado <> 'abierta' then raise exception 'TURNO_CERRADO' using errcode = 'P0411'; end if;
+  if tg_op = 'UPDATE' and new.apertura_id is distinct from old.apertura_id then raise exception 'TURNO_NO_CAMBIA' using errcode = 'P0411'; end if;
+  if tg_op = 'DELETE' then
+    insert into public.turno_eventos(empresa_id, turno_id, evento, detalle)
+      values (old.empresa_id, old.apertura_id, tg_table_name || '_eliminado', jsonb_build_object('monto', old.monto, 'id', old.id));
+    return old;
   end if;
   return new;
 end $$;
 drop trigger if exists gastos_a_turno on public.gastos;
-create trigger gastos_a_turno before insert on public.gastos for each row execute function public.trg_gasto_propina_a_turno();
+create trigger gastos_a_turno before insert or update or delete on public.gastos for each row execute function public.trg_gasto_propina_a_turno();
 drop trigger if exists propinas_a_turno on public.propinas;
-create trigger propinas_a_turno before insert on public.propinas for each row execute function public.trg_gasto_propina_a_turno();
+create trigger propinas_a_turno before insert or update or delete on public.propinas for each row execute function public.trg_gasto_propina_a_turno();
+
+-- (3) Un turno v2 solo se abre/cierra con turno_abrir/turno_cerrar (que activan app.turno_fn); ni UPDATE/DELETE directo ni
+-- cierres_caja escritos a mano contra un turno v2. Defensa en la base además de la puerta /api/datos.
+create or replace function public.trg_turno_solo_por_funcion() returns trigger
+language plpgsql set search_path = public, pg_temp as $$
+declare v2 boolean;
+begin
+  if coalesce(current_setting('app.turno_fn', true), '') = '1' then return coalesce(new, old); end if;
+  if tg_table_name = 'aperturas_caja' then
+    v2 := (tg_op <> 'INSERT' and old.modelo = 'v2') or (tg_op <> 'DELETE' and new.modelo = 'v2');
+  else
+    v2 := new.apertura_id is not null and exists (select 1 from public.aperturas_caja a where a.id = new.apertura_id and a.modelo = 'v2');
+  end if;
+  if v2 then raise exception 'TURNO_SOLO_POR_FUNCION' using errcode = 'P0412'; end if;
+  return coalesce(new, old);
+end $$;
+drop trigger if exists aperturas_v2_guard on public.aperturas_caja;
+create trigger aperturas_v2_guard before insert or update or delete on public.aperturas_caja for each row execute function public.trg_turno_solo_por_funcion();
+drop trigger if exists cierres_caja_v2_guard on public.cierres_caja;
+create trigger cierres_caja_v2_guard before insert or update on public.cierres_caja for each row execute function public.trg_turno_solo_por_funcion();
 
 -- ───────── 5. Funciones de turno ─────────
 create or replace function public.turno_abrir(p_empresa uuid, p_fondo integer, p_cajero text)
@@ -194,6 +242,7 @@ returns jsonb language plpgsql set search_path = public, pg_temp as $$
 declare v_id uuid; v_exist uuid;
 begin
   if p_fondo is null or p_fondo < 0 then return jsonb_build_object('ok', false, 'codigo', 'fondo_invalido'); end if;
+  perform set_config('app.turno_fn', '1', true);
   perform pg_advisory_xact_lock(hashtextextended('turno_abrir:' || p_empresa::text, 0));
   select id into v_exist from public.aperturas_caja where empresa_id = p_empresa and estado = 'abierta' and modelo = 'v2';
   if v_exist is not null then return jsonb_build_object('ok', false, 'codigo', 'ya_abierto', 'turno_id', v_exist); end if;
@@ -214,6 +263,10 @@ declare t public.aperturas_caja; v jsonb; fin timestamptz;
 begin
   select * into t from public.aperturas_caja where id = p_turno and modelo = 'v2';
   if not found then return null; end if;
+  if t.estado = 'cerrada' then
+    select resumen into v from public.cierres_turno where turno_id = p_turno;
+    if v is not null then return v; end if;   -- un turno cerrado siempre muestra lo que se confirmó
+  end if;
   fin := coalesce(t.cerrada_at, clock_timestamp());
   select coalesce(sum(monto) filter (where medio='efectivo'),0), coalesce(sum(monto) filter (where medio='debito'),0),
          coalesce(sum(monto) filter (where medio='credito'),0), coalesce(sum(monto) filter (where medio='transferencia'),0),
@@ -268,7 +321,7 @@ begin
   if c.medio <> 'por_conciliar' then return jsonb_build_object('ok', false, 'codigo', 'ya_conciliado'); end if;
   select * into t from public.aperturas_caja where id = c.turno_id for share;
   if t.id is null or t.estado <> 'abierta' then return jsonb_build_object('ok', false, 'codigo', 'turno_cerrado'); end if;
-  if exists (select 1 from public.cobros_turno where venta_id = c.venta_id and medio = p_medio and id <> c.id) then
+  if exists (select 1 from public.cobros_turno where venta_id = c.venta_id and medio = p_medio and id <> c.id and anulado_at is null) then
     return jsonb_build_object('ok', false, 'codigo', 'medio_duplicado_en_venta');
   end if;
   update public.cobros_turno set medio = p_medio, conciliado_por = p_por, conciliado_at = clock_timestamp() where id = c.id;
@@ -277,7 +330,7 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
-create or replace function public.turno_cerrar(p_turno uuid, p_contados jsonb, p_notas text, p_clave uuid, p_por text)
+create or replace function public.turno_cerrar(p_turno uuid, p_contados jsonb, p_notas text, p_clave uuid, p_por text, p_esperado_visto jsonb default null)
 returns jsonb language plpgsql set search_path = public, pg_temp as $$
 declare t public.aperturas_caja; r jsonb; ex jsonb; cie uuid; k text; esp int; con int; pend boolean; prev public.cierres_turno;
 begin
@@ -296,7 +349,12 @@ begin
   end if;
   r := public.turno_resumen(p_turno);        -- recalculado aquí, con lo que hay guardado; nada viene del navegador
   ex := r->'esperado';
+  -- Si entre lo que vio la cajera y este momento entró o cambió algo (otro equipo), NO se cierra: se devuelve el resumen nuevo.
+  if p_esperado_visto is not null and exists (select 1 from jsonb_object_keys(ex) as kk(medio_k) where (p_esperado_visto->>medio_k) is distinct from (ex->>medio_k)) then
+    return jsonb_build_object('ok', false, 'codigo', 'resumen_cambio', 'resumen', r);
+  end if;
   pend := (r->'pendientes'->>'cobros_por_conciliar')::int > 0 or (r->'pendientes'->>'ventas_sin_cobrar')::int > 0;
+  perform set_config('app.turno_fn', '1', true);
   update public.aperturas_caja set estado = 'cerrada', cerrada_at = clock_timestamp(), cerrada_por = p_por where id = p_turno
     returning * into t;
   r := jsonb_set(r, '{turno,estado}', '"cerrada"') || jsonb_build_object('turno_cierre_at', t.cerrada_at);
@@ -330,9 +388,9 @@ end $$;
 
 revoke all on function public._partes_cobro(text,integer), public._turno_abierto(uuid), public.turno_abrir(uuid,integer,text),
   public.turno_resumen(uuid), public.movimiento_registrar(uuid,integer,text,text,text), public.cobro_conciliar(uuid,text,text),
-  public.turno_cerrar(uuid,jsonb,text,uuid,text) from public, anon, authenticated;
+  public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb) from public, anon, authenticated;
 grant execute on function public._partes_cobro(text,integer), public._turno_abierto(uuid), public.turno_abrir(uuid,integer,text),
   public.turno_resumen(uuid), public.movimiento_registrar(uuid,integer,text,text,text), public.cobro_conciliar(uuid,text,text),
-  public.turno_cerrar(uuid,jsonb,text,uuid,text) to service_role;
+  public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb) to service_role;
 
 commit;

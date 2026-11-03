@@ -1,6 +1,6 @@
 # Caja y turnos — propuesta e implementación (candidata, sin publicar)
 
-Estado: implementado en la rama `claude/candidata-permisos-point-2026-11-02`. Probado en PostgreSQL local (34 comprobaciones) y con 9 pruebas de servidor (148/148 en total, `tsc` sin errores). **Migración 08 sin aplicar en ningún proyecto**; producción intacta.
+Estado (rev. 2, tras revisión de Codex sobre e848547): implementado en la rama `claude/candidata-permisos-point-2026-11-02`. Probado en PostgreSQL 16 local (52 comprobaciones) y 150/150 pruebas de la suite, `tsc` sin errores. **Migración 08 sin aplicar en ningún proyecto**; producción intacta.
 
 ## Regla de horario (confirmada por el dueño)
 La jornada empieza hacia las 11:00 y termina cuando se confirma «Cerrar turno», entre las 00:00 y la 01:00 del día siguiente. A las 00:00 no se reinicia nada y el miércoles no se abre una nueva jornada. El turno se identifica por la **fecha de apertura** (hora de Chile) y guarda las **horas reales** de apertura y cierre. Ninguna función de 08 usa la fecha del día para agrupar: el turno es una fila que se abre y se cierra explícitamente.
@@ -39,3 +39,10 @@ Efectivo esperado = 1.000 + 149.490 − 121.400 − 10.000 = **$19.090** → dif
 4. Confirmar con una orden Point real los valores de `payment_method.type`.
 5. Antes de producción: cerrar con el flujo actual cualquier turno abierto (los turnos `legacy` no se mezclan con v2), comprobar el default de `ventas.metodo_pago` en producción, y el payload de WhatsApp (los «por confirmar» no tienen campo propio).
 6. Verificar con Codex build de Windows; coordinar antes de cualquier publicación.
+
+## Revisión 2 — bloqueantes de Codex corregidos
+1. **Gasto/propina tardío**: el trigger valida el `apertura_id` explícito (mismo negocio, turno v2 abierto, con bloqueo compartido que se serializa con el cierre). Gastos y propinas de un turno cerrado no se modifican ni se borran; el borrado en turno abierto queda en eventos. El turno cerrado siempre muestra su instantánea (el resumen posterior ya no cambia). `registrarGasto` ya no lee la apertura por separado. Probado con carrera de dos sesiones: cierre + gasto explícito → gasto rechazado.
+2. **Anular y volver a cobrar**: la unicidad es solo entre cobros activos (`venta_id, medio` donde no está anulado). Anular marca el cobro y lo registra (`anulacion_posterior_al_cierre` si el turno ya estaba cerrado, sin cambiar ese cierre); volver a cobrar crea un cobro activo en el turno abierto.
+3. **Caminos antiguos**: `/api/datos` ya no escribe `aperturas_caja` ni `cierres_caja` (solo lectura; abrir y cerrar solo por `/api/turno`). Además, la base rechaza UPDATE/DELETE/INSERT directo sobre turnos v2 y `cierres_caja` contra un turno v2 fuera de las funciones. Borrar gastos de turnos cerrados lo bloquea la base. Pendiente: un turno `legacy` abierto ya no tiene botón para cerrarse; hay que cerrarlo antes de desplegar (o con SQL).
+4. **Pantalla desactualizada**: refresco cada 15 s y al volver a la ventana; si cambia el esperado se cancela la confirmación y se avisa. Al confirmar, la pantalla envía las cifras que vio; si el servidor tiene otras, **no cierra** y devuelve las nuevas (`resumen_cambio`, 409).
+5. **Point pendiente identificable**: cada «por confirmar» muestra comanda, mesa, mesero, hora y referencia de la orden.

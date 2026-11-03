@@ -12,7 +12,9 @@ create temp table ctx(k text primary key, v text);
 select (public.turno_abrir(:A::uuid, 1000, 'Cajera ficticia')->>'turno_id') t1 \gset
 insert into ctx values ('t1', :'t1');
 -- apertura martes 11:00 Chile (UTC-3 en noviembre → 14:00Z)
+set app.turno_fn='1';
 update aperturas_caja set created_at='2026-10-27 14:00:00+00', fecha_apertura='2026-10-27', fecha='2026-10-27' where id=:'t1';
+reset app.turno_fn;
 select pg_temp.venta(:A::uuid,'Point',149490) v_pe \gset
 select pg_temp.venta(:A::uuid,'Point',61500) v_pd \gset
 select pg_temp.venta(:A::uuid,'Point',3000) v_pq \gset
@@ -70,6 +72,7 @@ select pg_temp.chk('cobro no se duplica al repetir estado', (select count(*) fro
 -- anulación
 update ventas set estado_pago='pendiente' where id=:'vm2';
 select pg_temp.chk('cobro anulado sale del resumen', (public.turno_resumen(:'t2')->'cobros'->>'debito')::int=6000);
+insert into ctx values ('t2', :'t2');
 -- ===== 3. Aislamiento entre negocios =====
 select (public.turno_abrir(:B::uuid, 500, 'Cajero B')->>'turno_id') tb \gset
 select pg_temp.venta(:B::uuid,'Efectivo',9999) \gset
@@ -79,8 +82,63 @@ select pg_temp.chk('dos negocios con turno abierto simultáneo', (select count(*
 -- ===== 5. Históricos intactos =====
 select pg_temp.chk('histórico: apertura legacy sigue abierta y sin cambios', (select estado='abierta' and modelo='legacy' and monto_inicial=5000 from aperturas_caja where id='11111111-0000-4000-8000-000000000001'));
 select pg_temp.chk('histórico: venta antigua sin turno ni cobros nuevos', (select turno_id is null from ventas where id='22222222-0000-4000-8000-000000000001') and not exists (select 1 from cobros_turno where venta_id='22222222-0000-4000-8000-000000000001'));
+
+-- ===== 6. Reproducciones de la revisión de Codex =====
+-- 6.1 gasto con apertura_id explícito de un turno YA CERRADO
+do $$ declare t1 uuid := (select v::uuid from ctx where k='t1'); begin
+  begin insert into gastos(categoria,descripcion,monto,empresa_id,apertura_id,afecto_caja) values ('x','tardío',1000,'aaaaaaaa-0000-4000-8000-00000000000a',t1,true);
+    perform pg_temp.chk('gasto tardío en turno cerrado se rechaza', false);
+  exception when sqlstate 'P0411' then perform pg_temp.chk('gasto tardío en turno cerrado se rechaza', true); end;
+  begin insert into propinas(empresa_id,empleado,monto,apertura_id) values ('aaaaaaaa-0000-4000-8000-00000000000a','x',500,t1);
+    perform pg_temp.chk('propina tardía en turno cerrado se rechaza', false);
+  exception when sqlstate 'P0411' then perform pg_temp.chk('propina tardía en turno cerrado se rechaza', true); end;
+  begin update gastos set monto=1 where apertura_id=t1 and monto=121400; perform pg_temp.chk('gasto de turno cerrado no se modifica', false);
+  exception when sqlstate 'P0411' then perform pg_temp.chk('gasto de turno cerrado no se modifica', true); end;
+  begin delete from gastos where apertura_id=t1; perform pg_temp.chk('gasto de turno cerrado no se borra', false);
+  exception when sqlstate 'P0411' then perform pg_temp.chk('gasto de turno cerrado no se borra', true); end;
+  begin insert into gastos(categoria,descripcion,monto,empresa_id,apertura_id) values ('x','otro negocio',1,'bbbbbbbb-0000-4000-8000-00000000000b',(select v::uuid from ctx where k='t1'));
+    perform pg_temp.chk('gasto no entra a turno de otro negocio', false);
+  exception when sqlstate 'P0411' then perform pg_temp.chk('gasto no entra a turno de otro negocio', true); end;
+end $$;
+select pg_temp.chk('resumen posterior de turno cerrado = instantánea (gastos 121.400)', (public.turno_resumen(:'t1')->>'gastos_caja')::int=121400);
+-- gasto sin apertura va al turno abierto (no al cerrado)
+insert into gastos(categoria,descripcion,monto,empresa_id) values ('x','nuevo',700,:A::uuid);
+select pg_temp.chk('gasto sin turno explícito entra al turno abierto', (select apertura_id from gastos where descripcion='nuevo')=:'t2'::uuid);
+delete from gastos where descripcion='nuevo';
+select pg_temp.chk('borrar gasto de turno abierto queda en eventos', exists (select 1 from turno_eventos where evento='gastos_eliminado'));
+-- 6.2 anular y volver a cobrar el mismo medio
+select pg_temp.venta(:A::uuid,'Efectivo',3000) vr \gset
+update ventas set estado_pago='pendiente' where id=:'vr';
+update ventas set estado_pago='pagado', metodo_pago='Efectivo' where id=:'vr';
+select pg_temp.chk('anular y recobrar mismo medio deja 1 cobro activo y 1 anulado', (select count(*) filter (where anulado_at is null) from cobros_turno where venta_id=:'vr')=1 and (select count(*) filter (where anulado_at is not null) from cobros_turno where venta_id=:'vr')=1);
+-- anulación posterior al cierre del turno: el cierre no cambia; se registra; se puede volver a cobrar
+update ventas set estado_pago='pendiente' where id=:'v_pe';
+select pg_temp.chk('anulación tras el cierre queda registrada y el cierre no cambia', exists (select 1 from turno_eventos where evento='anulacion_posterior_al_cierre' and detalle->>'venta_id'=:'v_pe') and (public.turno_resumen(:'t1')->'esperado'->>'efectivo')::int=19090);
+update ventas set estado_pago='pagado', metodo_pago='Efectivo' where id=:'v_pe';
+select pg_temp.chk('recobro tras anulación posterior queda activo en el turno abierto', (select turno_id from cobros_turno where venta_id=:'v_pe' and anulado_at is null)=:'t2'::uuid);
+-- 6.3 caminos antiguos: no se puede saltar el cierre v2
+do $$ declare t2 uuid := (select v::uuid from ctx where k='t2'); declare t1 uuid := (select v::uuid from ctx where k='t1'); begin
+  begin update aperturas_caja set estado='cerrada', cerrada_at=now() where id=t2; perform pg_temp.chk('cerrar turno v2 por UPDATE directo se rechaza', false);
+  exception when sqlstate 'P0412' then perform pg_temp.chk('cerrar turno v2 por UPDATE directo se rechaza', true); end;
+  begin update aperturas_caja set estado='abierta' where id=t1; perform pg_temp.chk('reabrir turno v2 por UPDATE directo se rechaza', false);
+  exception when sqlstate 'P0412' then perform pg_temp.chk('reabrir turno v2 por UPDATE directo se rechaza', true); end;
+  begin insert into aperturas_caja(empresa_id,modelo,estado) values ('aaaaaaaa-0000-4000-8000-00000000000a','v2','abierta'); perform pg_temp.chk('abrir turno v2 por INSERT directo se rechaza', false);
+  exception when sqlstate 'P0412' then perform pg_temp.chk('abrir turno v2 por INSERT directo se rechaza', true); end;
+  begin insert into cierres_caja(empresa_id,apertura_id,ventas_total,efectivo_fisico) values ('aaaaaaaa-0000-4000-8000-00000000000a',t2,1,1); perform pg_temp.chk('cierre manual contra turno v2 se rechaza', false);
+  exception when sqlstate 'P0412' then perform pg_temp.chk('cierre manual contra turno v2 se rechaza', true); end;
+end $$;
+update aperturas_caja set estado='cerrada' where id='11111111-0000-4000-8000-000000000001';
+select pg_temp.chk('turno legacy sigue pudiendo cerrarse con el flujo antiguo', (select estado from aperturas_caja where id='11111111-0000-4000-8000-000000000001')='cerrada');
+-- 6.4 cierre con cifras que la cajera ya no tenía: se rechaza y se devuelve el resumen nuevo
+select public.turno_resumen(:'tb')->'esperado' vistob \gset
+select pg_temp.venta(:B::uuid,'Débito',1234) \gset
+select public.turno_cerrar(:'tb','{"efectivo":10499}'::jsonb,null,gen_random_uuid(),'x',:'vistob'::jsonb) cb \gset
+select pg_temp.chk('cobro de otro equipo antes de confirmar → resumen_cambio, turno sigue abierto', (:'cb'::jsonb->>'codigo')='resumen_cambio' and (select estado from aperturas_caja where id=:'tb')='abierta' and (:'cb'::jsonb->'resumen'->'esperado'->>'debito')::int=1234);
+select public.turno_cerrar(:'tb','{"efectivo":10499,"debito":1234}'::jsonb,null,gen_random_uuid(),'x',(public.turno_resumen(:'tb')->'esperado')) cb2 \gset
+select pg_temp.chk('con el resumen actualizado el cierre procede', (:'cb2'::jsonb->>'ok')::boolean);
+
 -- permisos
-select has_function_privilege('anon','public.turno_cerrar(uuid,jsonb,text,uuid,text)','execute') a, has_function_privilege('authenticated','public.turno_abrir(uuid,integer,text)','execute') b, has_function_privilege('service_role','public.turno_cerrar(uuid,jsonb,text,uuid,text)','execute') c \gset
+select has_function_privilege('anon','public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb)','execute') a, has_function_privilege('authenticated','public.turno_abrir(uuid,integer,text)','execute') b, has_function_privilege('service_role','public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb)','execute') c \gset
 select pg_temp.chk('anon/authenticated sin acceso a funciones; service_role sí', not :'a'::boolean and not :'b'::boolean and :'c'::boolean);
 select pg_temp.chk('anon sin acceso a tablas nuevas', not has_table_privilege('anon','public.cobros_turno','select') and not has_table_privilege('authenticated','public.cierres_turno','select'));
 select n, case when ok then 'OK ' else 'FALLA' end, det from res order by ok, n;

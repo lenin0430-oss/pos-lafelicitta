@@ -34,12 +34,13 @@ test("P1 (ID exacto): un filtro amplio como neq(id,'no-existe') se rechaza y NO 
 test("P1 (ID exacto): vale para todas las acciones financieras y tablas con dinero/precios (update y delete)", () => {
   const sol = (tabla, ...p) => ({ tabla, pasos: p.map(([m, ...a]) => ({ m, a })) });
   const amplio = ["neq", "id", "x"];
-  const casos = [["ventas", ["update", { estado: "listo" }]], ["ventas", ["update", { metodo_pago: "Débito" }]], ["ventas", ["update", { total: 5000, items: [{ nombre: "H", cantidad: 1, precio_unit: 5000 }] }]], ["ventas", ["delete"]], ["productos", ["update", { precio: 5 }]], ["gastos", ["delete"]], ["propinas", ["delete"]], ["aperturas_caja", ["update", { estado: "cerrada" }]]];
+  const casos = [["ventas", ["update", { estado: "listo" }]], ["ventas", ["update", { metodo_pago: "Débito" }]], ["ventas", ["update", { total: 5000, items: [{ nombre: "H", cantidad: 1, precio_unit: 5000 }] }]], ["ventas", ["delete"]], ["productos", ["update", { precio: 5 }]], ["gastos", ["delete"]], ["propinas", ["delete"]]]; // aperturas_caja ya no se escribe por /api/datos (solo /api/turno)
   for (const [t, cuerpo] of casos) {
     assert.equal(planificar(admin, sol(t, cuerpo, amplio)).ok, false, `${t} con filtro amplio`);
     assert.equal(planificar(admin, sol(t, cuerpo, ["eq", "id", "uno"])).ok, true, `${t} por id`);
     assert.equal(planificar(admin, sol(t, cuerpo, ["eq", "estado", "x"])).ok, false, `${t} por otra columna`);
   }
+  assert.equal(planificar(admin, sol("aperturas_caja", ["update", { estado: "cerrada" }], ["eq", "id", "uno"])).ok, false, "turno: no por /api/datos");
   assert.equal(planificar(admin, sol("ventas", ["update", { estado: "listo" }], ["eq", "id", "a"], ["eq", "id", "b"])).ok, false);
   assert.ok(TABLAS_POR_ID.includes("ventas"));
 });

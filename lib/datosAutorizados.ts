@@ -24,8 +24,9 @@ const todoAdmin = { select: A, insert: A, update: A, delete: A };
 // Derivado de las llamadas reales de la app (caja y cocina = garzón y admin; el resto = solo admin).
 export const REGLAS: Record<string, Regla> = {
   ventas: { clave: "empresa_id", ops: { select: AG, insert: AG, update: AG, delete: A } },
-  aperturas_caja: { clave: "empresa_id", ops: { select: AG, insert: A, update: A } },
-  cierres_caja: { clave: "empresa_id", ops: { select: A, insert: A } },
+  // Abrir/cerrar turno y el cierre NO son genéricos: solo /api/turno (funciones turno_*). Aquí solo lectura.
+  aperturas_caja: { clave: "empresa_id", ops: { select: AG } },
+  cierres_caja: { clave: "empresa_id", ops: { select: A } },
   // Gastos: el alta NO es genérica; la hace el caso de uso /api/gastos (aprobación de admin verificada en el servidor).
   gastos: { clave: "empresa_id", ops: { select: AG, delete: A } },
   propinas: { clave: "empresa_id", ops: { select: AG, insert: AG, delete: A } },

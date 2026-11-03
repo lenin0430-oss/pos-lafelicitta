@@ -38,7 +38,7 @@ test("roles: garzón opera caja y cocina; el resto es solo admin", () => {
   ok(garzon, sol("productos", ["select", "id,nombre,categorias(nombre)"]));
   for (const x of [sol("ventas", ["delete"], ["eq", "id", "v"]), sol("productos", ["update", { precio: 1 }], ["eq", "id", "p"]), sol("productos", ["insert", { nombre: "x" }]),
     sol("cierres_caja", ["select", "*"]), sol("stock_insumos", ["select", "*"]), sol("recetas", ["insert", { a: 1 }]), sol("gastos", ["delete"], ["eq", "id", "g"]), sol("aperturas_caja", ["insert", { monto_inicial: 1 }])]) no(garzon, x, 403);
-  ok(admin, sol("ventas", ["delete"], ["eq", "id", "v"])); ok(admin, sol("cierres_caja", ["insert", { ventas_total: 1 }])); ok(admin, sol("stock_insumos", ["select", "*"]));
+  ok(admin, sol("ventas", ["delete"], ["eq", "id", "v"])); no(admin, sol("cierres_caja", ["insert", { ventas_total: 1 }]), 403); no(admin, sol("aperturas_caja", ["update", { estado: "cerrada" }], ["eq", "id", "a"]), 403); no(admin, sol("aperturas_caja", ["insert", { monto_inicial: 1 }]), 403); ok(admin, sol("aperturas_caja", ["select", "*"])); ok(admin, sol("stock_insumos", ["select", "*"]));
 });
 test("tablas no listadas, funciones y métodos peligrosos se rechazan", () => {
   for (const t of ["usuarios", "mp_cuentas", "pagos_point", "usuarios_pos", "pedidos", "pg_catalog.pg_user", "ventas; drop table x", "../x"]) no(admin, sol(t, ["select", "*"]), null);

@@ -9,9 +9,11 @@ create table if not exists respaldo_turnos.turno_eventos as select * from public
 drop trigger if exists ventas_cobro_a_turno on public.ventas;
 drop trigger if exists gastos_a_turno on public.gastos;
 drop trigger if exists propinas_a_turno on public.propinas;
-drop function if exists public.turno_cerrar(uuid,jsonb,text,uuid,text), public.cobro_conciliar(uuid,text,text),
+drop trigger if exists aperturas_v2_guard on public.aperturas_caja;
+drop trigger if exists cierres_caja_v2_guard on public.cierres_caja;
+drop function if exists public.turno_cerrar(uuid,jsonb,text,uuid,text,jsonb), public.cobro_conciliar(uuid,text,text),
   public.movimiento_registrar(uuid,integer,text,text,text), public.turno_resumen(uuid), public.turno_abrir(uuid,integer,text),
-  public.trg_cobro_a_turno(), public.trg_gasto_propina_a_turno(), public._turno_abierto(uuid), public._partes_cobro(text,integer);
+  public.trg_cobro_a_turno(), public.trg_turno_solo_por_funcion(), public.trg_gasto_propina_a_turno(), public._turno_abierto(uuid), public._partes_cobro(text,integer);
 drop table if exists public.cierres_turno_medios, public.cierres_turno, public.turno_eventos, public.movimientos_caja, public.cobros_turno;
 drop function if exists public.turno_solo_agregar();
 alter table public.ventas drop column if exists turno_id;

@@ -179,3 +179,4 @@ Estado: **propuesta probada en PGlite y en PostgreSQL 16 local; NO aplicada en n
 - Pruebas: PG16 34/34 (`scripts/prueba-caja/`), `tests/turnos.test.mjs` 9/9, total 148/148, `tsc` limpio. Detalle y pendientes: `docs/CAJA_TURNOS_PROPUESTA.md`.
 - Caso real: diferencia provisional −$9.090 (pendiente de comprobar); histórico no se corrige.
 - Archivos de transferencia temporales en `mesapos-unified/_transfer_turnos/` (carpeta del usuario; el dueño puede borrarla).
+- Rev. 2 de caja (tras revisión de Codex): corregidos gasto tardío, anular/recobrar, caminos antiguos de /api/datos, resumen desactualizado, Point identificable. PG16 52/52, suite 150/150, tsc limpio. 08 sigue sin aplicar.

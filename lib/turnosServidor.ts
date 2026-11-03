@@ -25,13 +25,14 @@ const MENSAJES: Record<string, [number, string]> = {
   ya_conciliado: [409, "Este cobro ya estaba confirmado"],
   no_encontrado: [404, "Cobro no encontrado"],
   medio_duplicado_en_venta: [409, "Esa venta ya tiene ese medio"],
+  resumen_cambio: [409, "Entraron cobros o gastos nuevos mientras revisabas. Revisa las cifras actualizadas y confirma de nuevo"],
 };
 function desdeRpc(r: any): RespT {
   if (r?.error) return err(500, "No se pudo completar la operación");
   const d = r?.data ?? {};
   if (d.ok) return { status: 200, body: d };
   const [st, msg] = MENSAJES[d.codigo] ?? [400, "Operación rechazada"];
-  return { status: st, body: { ok: false, error: msg, codigo: d.codigo, turno_id: d.turno_id } };
+  return { status: st, body: { ok: false, error: msg, codigo: d.codigo, turno_id: d.turno_id, resumen: d.resumen } };
 }
 
 export async function turnoAbiertoDe(db: Db, empresaId: string): Promise<string | null> {
@@ -57,8 +58,19 @@ export async function estadoTurno(db: Db, s: SesionT): Promise<RespT> {
   if (r?.error) return err(500, "No se pudo leer el turno");
   let porConciliar: unknown[] = [];
   if (abierto) {
-    const c = await db.from("cobros_turno").select("id,venta_id,monto,proveedor").eq("turno_id", id).eq("medio", "por_conciliar").is("anulado_at", null).order("created_at", { ascending: true }).limit(200);
-    porConciliar = c?.data ?? [];
+    const c = await db.from("cobros_turno").select("id,venta_id,monto,proveedor,created_at").eq("turno_id", id).eq("medio", "por_conciliar").is("anulado_at", null).order("created_at", { ascending: true }).limit(200);
+    const filas: any[] = c?.data ?? [];
+    // Para distinguir un Point de otro: comanda, mesa, hora y referencia de la orden (solo importe no basta).
+    const ids = filas.map((f) => f.venta_id);
+    const v = ids.length ? await db.from("ventas").select("id,numero,mesa,mesero").eq("empresa_id", s.empresa_id).in("id", ids) : { data: [] };
+    const p = ids.length ? await db.from("pagos_point").select("venta_id,mp_order_id,referencia_externa").eq("restaurante_id", s.empresa_id).in("venta_id", ids) : { data: [] };
+    const vm = new Map<string, any>((v?.data ?? []).map((x: any) => [x.id, x]));
+    const pm = new Map<string, any>((p?.data ?? []).map((x: any) => [x.venta_id, x]));
+    porConciliar = filas.map((f) => ({
+      id: f.id, monto: f.monto, proveedor: f.proveedor, hora: f.created_at,
+      comanda: vm.get(f.venta_id)?.numero ?? null, mesa: vm.get(f.venta_id)?.mesa ?? null, mesero: vm.get(f.venta_id)?.mesero ?? null,
+      referencia: String(pm.get(f.venta_id)?.referencia_externa ?? pm.get(f.venta_id)?.mp_order_id ?? "").slice(-8) || null,
+    }));
   }
   return { status: 200, body: { ok: true, abierto, resumen: r.data, por_conciliar: porConciliar } };
 }
@@ -95,8 +107,11 @@ export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
       if (v === null) return err(400, `Monto contado inválido (${m})`);
       contados[m] = v;
     }
+    // Lo que la cajera tenía en pantalla: si cambió en el servidor, la base rechaza el cierre y devuelve las cifras nuevas.
+    const visto: Record<string, number> = {};
+    for (const m of MEDIOS_CONTADOS) { const v = entero(b.esperado_visto?.[m]); if (v === null) return err(400, "Falta el resumen que se está confirmando"); visto[m] = v; }
     const notas = typeof b.notas === "string" ? b.notas.trim().slice(0, 500) : null;
-    return desdeRpc(await db.rpc("turno_cerrar", { p_turno: turno, p_contados: contados, p_notas: notas, p_clave: b.clave, p_por: s.nombre }));
+    return desdeRpc(await db.rpc("turno_cerrar", { p_turno: turno, p_contados: contados, p_notas: notas, p_clave: b.clave, p_por: s.nombre, p_esperado_visto: visto }));
   }
   return err(400, "Acción desconocida");
 }

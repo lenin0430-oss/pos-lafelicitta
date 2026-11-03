@@ -55,7 +55,7 @@ test("GASTOS: control positivo — con PIN de admin válido se emite una aprobac
   const g2 = await registrarGasto(db, garzon, { categoria: "Insumos / Ingredientes", descripcion: "Compra de pollo", monto: 100000, aprobacion: ap.body.aprobacion });
   assert.equal(g2.status, 200);
   const fila = db.T.gastos[0];
-  assert.equal(fila.cajero, "Gaston"); assert.equal(fila.empresa_id, A); assert.equal(fila.monto, 100000); assert.equal(fila.apertura_id, "ap1"); assert.equal(fila.categoria, "insumos");
+  assert.equal(fila.cajero, "Gaston"); assert.equal(fila.empresa_id, A); assert.equal(fila.monto, 100000); assert.equal(fila.apertura_id, undefined); /* el turno lo asigna la base */ assert.equal(fila.categoria, "insumos");
   assert.ok(Date.now() - new Date(fila.created_at).getTime() < 5000);
 });
 test("GASTOS: la aprobación es de un solo uso y solo vale para ESE negocio, empleado, importe y operación", async () => {
@@ -185,9 +185,11 @@ test("PROPINAS y CAJA: autor y fecha del servidor, campos limitados, venta del m
   assert.equal(db.T.propinas[0].cajero, "Gaston");
   assert.equal((await datos(db, garzon, sol("propinas", ["delete"], ["eq", "id", "x"]))).status, 403);
   const cierre = (x) => datos(db, admin, sol("cierres_caja", ["insert", { ventas_total: 100, efectivo_fisico: 50, diferencia: -50, ...x }]));
-  assert.equal((await cierre({})).status, 200); assert.equal((await cierre({ ventas_total: "1; drop" })).status, 400); assert.equal((await cierre({ extra: 1 })).status, 403);
-  assert.equal((await datos(db, admin, sol("aperturas_caja", ["update", { estado: "abierta", monto_inicial: 1e9 }], ["eq", "id", "ap1"]))).status, 403);
-  assert.equal((await datos(db, admin, sol("aperturas_caja", ["update", { estado: "cerrada" }], ["eq", "id", "ap1"]))).status, 200);
+  // El cierre y la apertura de turno ya no son genéricos: solo /api/turno. Ni el admin puede escribirlos por /api/datos.
+  assert.equal((await cierre({})).status, 403); assert.equal((await cierre({ ventas_total: "1; drop" })).status, 403);
+  assert.equal((await datos(db, admin, sol("aperturas_caja", ["update", { estado: "cerrada" }], ["eq", "id", "ap1"]))).status, 403);
+  assert.equal((await datos(db, admin, sol("aperturas_caja", ["insert", { monto_inicial: 1 }]))).status, 403);
+  assert.equal(db.T.aperturas_caja[0].estado, "abierta");
 });
 test("PRODUCTOS (admin): solo campos y rangos válidos; el garzón no cambia precios", async () => {
   const db = base();
