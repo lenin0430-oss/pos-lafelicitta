@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       .update({ estado: orden.status, updated_at: new Date().toISOString() })
       .eq("id", pago.id);
 
-    if (orden.status === "processed") await marcarVentaPagadaPoint(db, pago.venta_id, pago.restaurante_id);
+    if (orden.status === "processed") await marcarVentaPagadaPoint(db, pago.venta_id, pago.restaurante_id, orden);
   } catch (e) {
     console.error("Webhook MP:", e);
   }

@@ -1,0 +1,41 @@
+# Caja y turnos — propuesta e implementación (candidata, sin publicar)
+
+Estado: implementado en la rama `claude/candidata-permisos-point-2026-11-02`. Probado en PostgreSQL local (34 comprobaciones) y con 9 pruebas de servidor (148/148 en total, `tsc` sin errores). **Migración 08 sin aplicar en ningún proyecto**; producción intacta.
+
+## Regla de horario (confirmada por el dueño)
+La jornada empieza hacia las 11:00 y termina cuando se confirma «Cerrar turno», entre las 00:00 y la 01:00 del día siguiente. A las 00:00 no se reinicia nada y el miércoles no se abre una nueva jornada. El turno se identifica por la **fecha de apertura** (hora de Chile) y guarda las **horas reales** de apertura y cierre. Ninguna función de 08 usa la fecha del día para agrupar: el turno es una fila que se abre y se cierra explícitamente.
+
+## Qué fallaba en el cierre actual
+1. Ventas del turno = pagadas desde la hora de apertura, y el "día" se cortaba a medianoche del dispositivo: un turno que cruza medianoche se partía.
+2. «Point» se agrupaba en QR; el esperado en efectivo ignoraba que Point puede ser efectivo/débito/QR → efectivo esperado $0 y sobrante falso de $140.400.
+3. Todo se calculaba en el navegador y se guardaba lo que el navegador enviaba; no había clave de cierre (doble clic = doble cierre) ni protección frente a un cobro simultáneo.
+4. Gastos y propinas se asociaban por hora (`created_at ≥ apertura`), no por turno; el gasto restaba efectivo si `afecto_caja` estaba en true sin que el cajero lo hubiera decidido.
+5. No quedaba esperado/contado/diferencia por medio ni historial de cambios.
+
+## Modelo (supabase/08_turnos_caja.sql, una transacción, con reversión)
+- Turno = `aperturas_caja` ampliada (`modelo='v2'`, `fecha_apertura`, `cerrada_por`); índice único: un turno v2 abierto por negocio.
+- `cobros_turno`: una fila por medio (efectivo, débito, crédito, transferencia, QR, cortesía, **por_conciliar**) y proveedor (manual/point). Un trigger la crea cuando la venta pasa a pagada, así cubre cobro manual, mixto y Point sin cambiar esos flujos. Mixto que no suma deja la diferencia como «por conciliar», nunca como efectivo.
+- Gastos y propinas reciben `apertura_id` del turno abierto al insertarse. Solo los gastos con `afecto_caja=true` restan efectivo. Los retiros (`movimientos_caja`) restan efectivo y exigen motivo.
+- Point: `lib/medioPoint.ts` toma el medio de `payment_method.type` de la orden solo si es valor conocido y hay un único pago; si no, queda **«Point por confirmar»** y la cajera elige el medio mirando el comprobante (`cobro_conciliar`, auditado). **Pendiente confirmar** con una orden real qué valores devuelve la cuenta (la documentación solo muestra `credit_card`).
+- Cierre (`turno_cerrar`): bloquea el turno (`FOR UPDATE`), recalcula todo con lo guardado, exige efectivo contado, acepta contado opcional por medio electrónico (sin comprobar queda marcado), guarda esperado/contado/diferencia por medio en `cierres_turno_medios` y una instantánea en `cierres_turno`. Misma clave → devuelve el mismo cierre; otra clave → «ya cerrado». Un cobro que llegue mientras cierra espera, queda **fuera** del cierre y se registra como «cobro sin turno» (no se pierde ni se oculta). Escribe además una fila en `cierres_caja` para reportes existentes (los «por confirmar» no se cuentan como QR).
+- Historial inmutable (`cierres_turno`, `cierres_turno_medios`, `turno_eventos`: update/delete bloqueados), RLS cerrada, funciones solo para `service_role`.
+- No hace UPDATE sobre filas existentes: no se corrige ningún histórico ni se infiere nada.
+
+## Pantalla (app/cierre/page.tsx, solo admin como antes)
+1 Abrir con fondo contado → 2 lo registrado (por medio, gastos de caja, retiros, efectivo que debería haber) + retiros + «Point por confirmar» → 3 contar efectivo (obligatorio) y comprobar electrónicos → 4 confirmar con aviso (sin `window.confirm`). Muestra fecha de apertura, hora real y horas abiertas; avisa si el turno lleva más de 16 h abierto. Historial con diferencias por medio. API única: `/api/turno` (GET estado/historial, POST abrir/retiro/conciliar/cerrar), negocio y autor salen de la sesión firmada.
+
+## Caso real reproducido (datos agregados, sin tocar histórico)
+Fondo $1.000; Point conciliado efectivo $149.490, débito $61.500, QR $3.000; débito manual $3.000; transferencias $16.400; gastos de caja $121.400 (incluyen Jesús $30.000 y Feli $20.000, no se descuentan otra vez); retiro $10.000 (Adriana); contado $10.000.
+Efectivo esperado = 1.000 + 149.490 − 121.400 − 10.000 = **$19.090** → diferencia **−$9.090** (provisional, pendiente de comprobar; **no se atribuye a la cajera**). Débito esperado $64.500; transferencia $16.400; QR $3.000: sin diferencia. El turno real ya cerrado **no se reescribe**.
+
+## Pruebas
+- `scripts/prueba-caja/` (`base.sql` + `turnos.sql`, PostgreSQL 16): 34/34 — caso real; turno del martes que cierra después de medianoche (cobro de madrugada dentro del mismo turno, intento de abrir el miércoles → «ya abierto»); dos turnos seguidos; dos negocios; transferencia, mixto, mixto que no suma, cortesía; retiros; gasto fuera de caja; anulación; reintento y doble cierre; cobro repetido sin duplicar; historial inmutable; históricos intactos; permisos. Además, carrera real con dos sesiones: cierre lento + cobro + segundo cierre + apertura simultáneos → 1 cierre, cobro fuera del cierre y registrado como sin turno.
+- `tests/turnos.test.mjs`: 9 pruebas (validación, pertenencia al negocio, clave de cierre, campos ajenos descartados, medio Point).
+
+## Pendientes / decisiones
+1. Aplicar 08 en `mesapos-pruebas-aislado` (lo ejecuta el usuario en el editor SQL) y repetir el recorrido en navegador con datos ficticios.
+2. Propina en efectivo pagada desde la caja: hoy se registra como retiro (decisión del dueño).
+3. Cobro sin turno abierto: queda sin turno y avisado; ¿se prefiere bloquear el cobro?
+4. Confirmar con una orden Point real los valores de `payment_method.type`.
+5. Antes de producción: cerrar con el flujo actual cualquier turno abierto (los turnos `legacy` no se mezclan con v2), comprobar el default de `ventas.metodo_pago` en producción, y el payload de WhatsApp (los «por confirmar» no tienen campo propio).
+6. Verificar con Codex build de Windows; coordinar antes de cualquier publicación.

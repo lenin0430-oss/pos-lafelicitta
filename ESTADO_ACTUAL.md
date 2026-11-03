@@ -171,3 +171,11 @@ Estado: **propuesta probada en PGlite y en PostgreSQL 16 local; NO aplicada en n
 - Candidata conjunta `claude/candidata-permisos-point-2026-11-02` @ 7e04fcb (permisos + Point + estados separados). Detalle y orden de aplicación/reversión: `docs/CANDIDATA_PERMISOS_POINT.md`.
 - Evidencia local: 139/139 pruebas TS, `tsc --noEmit` limpio, PG16 concurrencia conjunta 28 OK, ensayo Point con orquestación real y proveedor simulado OK (monto viejo: 409, 0 llamadas al proveedor, 0 reservas).
 - No publicado, sin SQL en producción. Pendiente: `next build` en Windows (posible `experimental.cpus=1`), `tests/concurrencia_cobro_pg.sh` y `tests/ensayo_point_pg.mjs` con PostgreSQL por Codex, PG17, prueba en navegador con dos negocios, confirmar que mesapos-app/bot no usan pedidos/pedido_items/mesas/configuracion_empresa con clave pública antes del paso 07, y operaciones pendientes de aprobación en el proyecto de pruebas.
+
+
+## 2026-11-03 — Caja y turnos (candidata, sin publicar)
+- Nueva migración `supabase/08_turnos_caja.sql` (+ REVERSION) **sin aplicar en ningún proyecto**. Turno desde la apertura hasta «Cerrar turno» (00:00–01:00 del día siguiente; sin reinicio a medianoche).
+- Nuevo: `lib/turnosServidor.ts`, `lib/medioPoint.ts`, `app/api/turno/route.ts`; reescrito `app/cierre/page.tsx`; `lib/mp.ts` y rutas Point pasan la orden para extraer el medio.
+- Pruebas: PG16 34/34 (`scripts/prueba-caja/`), `tests/turnos.test.mjs` 9/9, total 148/148, `tsc` limpio. Detalle y pendientes: `docs/CAJA_TURNOS_PROPUESTA.md`.
+- Caso real: diferencia provisional −$9.090 (pendiente de comprobar); histórico no se corrige.
+- Archivos de transferencia temporales en `mesapos-unified/_transfer_turnos/` (carpeta del usuario; el dueño puede borrarla).

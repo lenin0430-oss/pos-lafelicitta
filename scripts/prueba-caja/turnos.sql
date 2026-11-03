@@ -1,0 +1,86 @@
+\set ON_ERROR_STOP on
+\set A '''aaaaaaaa-0000-4000-8000-00000000000a'''
+\set B '''bbbbbbbb-0000-4000-8000-00000000000b'''
+create temp table res(n text, ok boolean, det text);
+create function pg_temp.chk(n text, cond boolean, det text default '') returns void language sql as $$ insert into res values (n, coalesce(cond,false), det) $$;
+create function pg_temp.venta(emp uuid, metodo text, tot int, pagar boolean default true) returns uuid language plpgsql as $$
+declare v uuid := gen_random_uuid(); begin
+ insert into ventas(id,metodo_pago,total,empresa_id,estado_pago) values (v, case when pagar then metodo else '' end, tot, emp, 'pendiente');
+ if pagar then update ventas set estado_pago='pagado', metodo_pago=metodo, pagado_at=now() where id=v; end if; return v; end $$;
+create temp table ctx(k text primary key, v text);
+-- ===== 1. Turno real reproducido (Point conciliado), cruza medianoche =====
+select (public.turno_abrir(:A::uuid, 1000, 'Cajera ficticia')->>'turno_id') t1 \gset
+insert into ctx values ('t1', :'t1');
+-- apertura martes 11:00 Chile (UTC-3 en noviembre → 14:00Z)
+update aperturas_caja set created_at='2026-10-27 14:00:00+00', fecha_apertura='2026-10-27', fecha='2026-10-27' where id=:'t1';
+select pg_temp.venta(:A::uuid,'Point',149490) v_pe \gset
+select pg_temp.venta(:A::uuid,'Point',61500) v_pd \gset
+select pg_temp.venta(:A::uuid,'Point',3000) v_pq \gset
+select pg_temp.venta(:A::uuid,'Débito',3000) \gset
+select pg_temp.venta(:A::uuid,'Transferencia',16400) \gset
+select pg_temp.chk('Point sin medio informado queda por_conciliar (no QR)', (select sum(monto) from cobros_turno where turno_id=:'t1' and medio='por_conciliar')=213990);
+select pg_temp.chk('Point no suma a efectivo ni qr antes de conciliar', (select coalesce(sum(monto),0) from cobros_turno where turno_id=:'t1' and medio in ('efectivo','qr'))=0);
+-- cobros de madrugada (miércoles 00:20 Chile = 03:20Z) y gastos/retiro
+update cobros_turno set created_at='2026-10-28 03:20+00' where venta_id=:'v_pq';
+insert into gastos(categoria,descripcion,monto,empresa_id,afecto_caja) values ('Proveedor','Gastos caja',121400,:A::uuid,true);
+insert into gastos(categoria,descripcion,monto,empresa_id,afecto_caja) values ('Banco','Pagado desde cuenta',50000,:A::uuid,false);
+select public.movimiento_registrar(:'t1', 10000, 'Entrega al dueño', 'Adriana', 'Cajera ficticia') mv \gset
+select pg_temp.chk('retiro registrado', (:'mv'::jsonb->>'ok')::boolean);
+select pg_temp.chk('gasto no-caja no resta', (public.turno_resumen(:'t1')->>'gastos_otros_medios')::int=50000 and (public.turno_resumen(:'t1')->>'gastos_caja')::int=121400);
+select pg_temp.chk('cierra con pendientes: aviso por conciliar', (public.turno_resumen(:'t1')->'pendientes'->>'cobros_por_conciliar')::int=3);
+select public.cobro_conciliar(c.id,'efectivo','Cajera ficticia') from cobros_turno c where venta_id=:'v_pe';
+select public.cobro_conciliar(c.id,'debito','Cajera ficticia') from cobros_turno c where venta_id=:'v_pd';
+select public.cobro_conciliar(c.id,'qr','Cajera ficticia') from cobros_turno c where venta_id=:'v_pq';
+select pg_temp.chk('conciliar por segunda vez falla', (select (public.cobro_conciliar(id,'qr','x')->>'codigo')='ya_conciliado' from cobros_turno where venta_id=:'v_pe'));
+select public.turno_resumen(:'t1') r1 \gset
+select pg_temp.chk('efectivo esperado turno real = 19.090', (:'r1'::jsonb->'esperado'->>'efectivo')::int=19090);
+select pg_temp.chk('débito esperado = 64.500', (:'r1'::jsonb->'esperado'->>'debito')::int=64500);
+select pg_temp.chk('transferencia 16.400 y qr 3.000', (:'r1'::jsonb->'esperado'->>'transferencia')::int=16400 and (:'r1'::jsonb->'esperado'->>'qr')::int=3000);
+select pg_temp.chk('sin nuevo turno a medianoche: abrir de nuevo → ya_abierto', (public.turno_abrir(:A::uuid,1000,'x')->>'codigo')='ya_abierto');
+select pg_temp.chk('cierre sin efectivo contado se rechaza', (public.turno_cerrar(:'t1','{}'::jsonb,null,gen_random_uuid(),'x')->>'codigo')='falta_efectivo_contado');
+select gen_random_uuid() clave \gset
+select public.turno_cerrar(:'t1','{"efectivo":10000,"debito":64500,"transferencia":16400,"qr":3000}'::jsonb,'cierre real reproducido',:'clave'::uuid,'Cajera ficticia') c1 \gset
+select pg_temp.chk('cierre ok', (:'c1'::jsonb->>'ok')::boolean);
+select pg_temp.chk('diferencia efectivo = -9.090', (select diferencia from cierres_turno_medios m join cierres_turno c on c.id=m.cierre_id where c.turno_id=:'t1' and medio='efectivo')=-9090);
+select pg_temp.chk('electrónicos sin diferencia', (select bool_and(diferencia=0) from cierres_turno_medios m join cierres_turno c on c.id=m.cierre_id where c.turno_id=:'t1' and medio in ('debito','transferencia','qr')));
+select pg_temp.chk('crédito/por_conciliar en 0 sin diferencia', (select count(*) from cierres_turno_medios m join cierres_turno c on c.id=m.cierre_id where c.turno_id=:'t1' and medio in ('credito','por_conciliar') and esperado=0 and diferencia is null)=2);
+select pg_temp.chk('turno guarda fecha apertura martes y cierre real', (select fecha_apertura='2026-10-27' and cierre_at>apertura_at from cierres_turno where turno_id=:'t1'));
+select pg_temp.chk('legacy cierres_caja recibe fila compatible', (select efectivo_fisico=10000 and diferencia=-9090 and ventas_efectivo=149490 and ventas_qr=3000 from cierres_caja where apertura_id=:'t1'));
+select pg_temp.chk('con_pendientes=false (nada pendiente)', not (select con_pendientes from cierres_turno where turno_id=:'t1'));
+-- reintentos / doble cierre
+select pg_temp.chk('reintento misma clave devuelve el mismo cierre, sin duplicar', (select (public.turno_cerrar(:'t1','{"efectivo":1}'::jsonb,null,:'clave'::uuid,'x')->>'repetido')='true') and (select count(*) from cierres_turno where turno_id=:'t1')=1 and (select count(*) from cierres_caja where apertura_id=:'t1')=1);
+select pg_temp.chk('segundo cierre con otra clave → ya_cerrado', (public.turno_cerrar(:'t1','{"efectivo":1}'::jsonb,null,gen_random_uuid(),'x')->>'codigo')='ya_cerrado');
+select pg_temp.chk('retiro en turno cerrado se rechaza', (public.movimiento_registrar(:'t1',1,'x',null,'x')->>'codigo')='turno_cerrado');
+-- historial inmutable
+do $$ begin begin update cierres_turno set notas='x'; perform pg_temp.chk('cierre inmutable (update)', false); exception when sqlstate 'P0410' then perform pg_temp.chk('cierre inmutable (update)', true); end;
+ begin delete from turno_eventos; perform pg_temp.chk('eventos inmutables (delete)', false); exception when sqlstate 'P0410' then perform pg_temp.chk('eventos inmutables (delete)', true); end; end $$;
+-- ===== 2. Segundo turno el miércoles, mismo negocio =====
+select (public.turno_abrir(:A::uuid, 2000, 'Cajera ficticia')->>'turno_id') t2 \gset
+select pg_temp.venta(:A::uuid,'Efectivo',5000) \gset
+select pg_temp.venta(:A::uuid,'Mixto: Efectivo $4.000 + Débito $6.000',10000) vm \gset
+select pg_temp.venta(:A::uuid,'Mixto: Efectivo $4.000 + Débito $5.000',10000) vm2 \gset
+select pg_temp.venta(:A::uuid,'Cortesia',7000) \gset
+select public.turno_resumen(:'t2') r2 \gset
+select pg_temp.chk('segundo turno independiente del primero', (:'r2'::jsonb->'cobros'->>'efectivo')::int=13000 and (:'r2'::jsonb->'cobros'->>'debito')::int=11000);
+select pg_temp.chk('mixto que no suma deja diferencia por conciliar, no en efectivo', (select monto from cobros_turno where venta_id=:'vm2' and medio='por_conciliar')=1000);
+select pg_temp.chk('cortesía no suma a medios de pago', (:'r2'::jsonb->'cobros'->>'cortesia')::int=7000 and (:'r2'::jsonb->'esperado'->>'efectivo')::int=2000+13000);
+-- doble actualización de la misma venta no duplica cobros
+update ventas set estado_pago='pagado' where id=:'vm';
+select pg_temp.chk('cobro no se duplica al repetir estado', (select count(*) from cobros_turno where venta_id=:'vm')=2);
+-- anulación
+update ventas set estado_pago='pendiente' where id=:'vm2';
+select pg_temp.chk('cobro anulado sale del resumen', (public.turno_resumen(:'t2')->'cobros'->>'debito')::int=6000);
+-- ===== 3. Aislamiento entre negocios =====
+select (public.turno_abrir(:B::uuid, 500, 'Cajero B')->>'turno_id') tb \gset
+select pg_temp.venta(:B::uuid,'Efectivo',9999) \gset
+select pg_temp.chk('negocio B no ve cobros de A', (public.turno_resumen(:'tb')->'cobros'->>'efectivo')::int=9999 and (public.turno_resumen(:'t2')->'cobros'->>'efectivo')::int=9000);
+select pg_temp.chk('dos negocios con turno abierto simultáneo', (select count(*) from aperturas_caja where estado='abierta' and modelo='v2')=2);
+-- ===== 4. Cobro simultáneo con el cierre (carrera) =====
+-- ===== 5. Históricos intactos =====
+select pg_temp.chk('histórico: apertura legacy sigue abierta y sin cambios', (select estado='abierta' and modelo='legacy' and monto_inicial=5000 from aperturas_caja where id='11111111-0000-4000-8000-000000000001'));
+select pg_temp.chk('histórico: venta antigua sin turno ni cobros nuevos', (select turno_id is null from ventas where id='22222222-0000-4000-8000-000000000001') and not exists (select 1 from cobros_turno where venta_id='22222222-0000-4000-8000-000000000001'));
+-- permisos
+select has_function_privilege('anon','public.turno_cerrar(uuid,jsonb,text,uuid,text)','execute') a, has_function_privilege('authenticated','public.turno_abrir(uuid,integer,text)','execute') b, has_function_privilege('service_role','public.turno_cerrar(uuid,jsonb,text,uuid,text)','execute') c \gset
+select pg_temp.chk('anon/authenticated sin acceso a funciones; service_role sí', not :'a'::boolean and not :'b'::boolean and :'c'::boolean);
+select pg_temp.chk('anon sin acceso a tablas nuevas', not has_table_privilege('anon','public.cobros_turno','select') and not has_table_privilege('authenticated','public.cierres_turno','select'));
+select n, case when ok then 'OK ' else 'FALLA' end, det from res order by ok, n;

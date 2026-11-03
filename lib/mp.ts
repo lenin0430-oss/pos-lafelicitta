@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 
 import { resolverMpApi } from "./mpApi";
+import { medioDesdeOrden } from "./medioPoint";
 
 // Siempre la API real, salvo simulador LOCAL de pruebas (ver lib/mpApi.ts; ignorado en producción).
 export const MP_API = resolverMpApi(process.env);
@@ -18,7 +19,10 @@ export function supabaseAdmin() {
 
 // Cierra la venta igual que el POS (app/page.tsx → confirmarCobro): metodo_pago + estado "listo".
 // Idempotente: no toca ventas que ya están cobradas.
-export async function marcarVentaPagadaPoint(db: ReturnType<typeof supabaseAdmin>, ventaId: string, empresaId: string) {
+export async function marcarVentaPagadaPoint(db: ReturnType<typeof supabaseAdmin>, ventaId: string, empresaId: string, orden?: unknown) {
+  // Medio informado por Mercado Pago (si lo hay) ANTES de cobrar, para que el turno lo registre; si no, queda "por conciliar".
+  const medio = medioDesdeOrden(orden);
+  if (medio) await db.from("pagos_point").update({ medio_reportado: medio }).eq("venta_id", ventaId).eq("restaurante_id", empresaId).eq("estado", "processed");
   // Solo toca el estado financiero. NO modifica ventas.estado (preparación/entrega de cocina).
   const { error } = await db
     .from("ventas")

@@ -1,0 +1,112 @@
+// Turnos de caja en el SERVIDOR. Reglas:
+//  * El turno empieza al abrirlo y termina SOLO con cerrarTurno (no hay lógica por fecha ni medianoche).
+//  * Todo se recalcula en la base (funciones turno_*, migración 08) con lo guardado; nada viene del navegador.
+//  * Negocio = sesión firmada: un turno de otro negocio nunca se lee ni se modifica.
+type Db = { from: (t: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any };
+export type SesionT = { rol: "admin" | "garzon"; empresa_id: string; nombre: string };
+export type RespT = { status: number; body: Record<string, unknown> };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MEDIOS_CONTADOS = ["efectivo", "debito", "credito", "transferencia", "qr", "por_conciliar"] as const;
+const MAX_MONTO = 100_000_000;
+const err = (status: number, error: string): RespT => ({ status, body: { ok: false, error } });
+const entero = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= MAX_MONTO ? v : null);
+
+const MENSAJES: Record<string, [number, string]> = {
+  ya_abierto: [409, "Ya hay un turno abierto"],
+  ya_cerrado: [409, "Este turno ya fue cerrado"],
+  turno_cerrado: [409, "El turno ya está cerrado"],
+  turno_no_encontrado: [404, "Turno no encontrado"],
+  falta_efectivo_contado: [400, "Falta contar el efectivo"],
+  fondo_invalido: [400, "Fondo inválido"],
+  monto_invalido: [400, "Monto inválido"],
+  motivo_requerido: [400, "Indica el motivo"],
+  medio_invalido: [400, "Medio inválido"],
+  ya_conciliado: [409, "Este cobro ya estaba confirmado"],
+  no_encontrado: [404, "Cobro no encontrado"],
+  medio_duplicado_en_venta: [409, "Esa venta ya tiene ese medio"],
+};
+function desdeRpc(r: any): RespT {
+  if (r?.error) return err(500, "No se pudo completar la operación");
+  const d = r?.data ?? {};
+  if (d.ok) return { status: 200, body: d };
+  const [st, msg] = MENSAJES[d.codigo] ?? [400, "Operación rechazada"];
+  return { status: st, body: { ok: false, error: msg, codigo: d.codigo, turno_id: d.turno_id } };
+}
+
+export async function turnoAbiertoDe(db: Db, empresaId: string): Promise<string | null> {
+  const r = await db.from("aperturas_caja").select("id").eq("empresa_id", empresaId).eq("estado", "abierta").eq("modelo", "v2").limit(1).maybeSingle();
+  return r?.data?.id ?? null;
+}
+async function turnoPropio(db: Db, empresaId: string, turnoId: unknown): Promise<string | null> {
+  if (typeof turnoId !== "string" || !UUID.test(turnoId)) return null;
+  const r = await db.from("aperturas_caja").select("id").eq("id", turnoId).eq("empresa_id", empresaId).eq("modelo", "v2").maybeSingle();
+  return r?.data?.id ?? null;
+}
+
+// GET: turno abierto (o el último cerrado) con resumen recalculado y cobros por conciliar.
+export async function estadoTurno(db: Db, s: SesionT): Promise<RespT> {
+  let id = await turnoAbiertoDe(db, s.empresa_id);
+  let abierto = true;
+  if (!id) {
+    const u = await db.from("aperturas_caja").select("id").eq("empresa_id", s.empresa_id).eq("modelo", "v2").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    id = u?.data?.id ?? null; abierto = false;
+  }
+  if (!id) return { status: 200, body: { ok: true, turno: null } };
+  const r = await db.rpc("turno_resumen", { p_turno: id });
+  if (r?.error) return err(500, "No se pudo leer el turno");
+  let porConciliar: unknown[] = [];
+  if (abierto) {
+    const c = await db.from("cobros_turno").select("id,venta_id,monto,proveedor").eq("turno_id", id).eq("medio", "por_conciliar").is("anulado_at", null).order("created_at", { ascending: true }).limit(200);
+    porConciliar = c?.data ?? [];
+  }
+  return { status: 200, body: { ok: true, abierto, resumen: r.data, por_conciliar: porConciliar } };
+}
+
+export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
+  const a = b?.accion;
+  if (a === "abrir") {
+    const fondo = entero(b.fondo);
+    if (fondo === null) return err(400, "Fondo inválido");
+    return desdeRpc(await db.rpc("turno_abrir", { p_empresa: s.empresa_id, p_fondo: fondo, p_cajero: s.nombre }));
+  }
+  const turno = await turnoPropio(db, s.empresa_id, b?.turno_id);
+  if (!turno) return err(404, "Turno no encontrado");
+  if (a === "retiro") {
+    const monto = entero(b.monto);
+    const motivo = typeof b.motivo === "string" ? b.motivo.trim().slice(0, 200) : "";
+    const para = typeof b.entregado_a === "string" ? b.entregado_a.trim().slice(0, 80) : null;
+    if (!monto) return err(400, "Monto inválido");
+    return desdeRpc(await db.rpc("movimiento_registrar", { p_turno: turno, p_monto: monto, p_motivo: motivo, p_entregado_a: para, p_por: s.nombre }));
+  }
+  if (a === "conciliar") {
+    if (typeof b.cobro_id !== "string" || !UUID.test(b.cobro_id)) return err(400, "Cobro inválido");
+    // el cobro debe pertenecer a este turno (y por tanto a este negocio)
+    const c = await db.from("cobros_turno").select("id").eq("id", b.cobro_id).eq("turno_id", turno).maybeSingle();
+    if (!c?.data) return err(404, "Cobro no encontrado");
+    return desdeRpc(await db.rpc("cobro_conciliar", { p_cobro: b.cobro_id, p_medio: String(b.medio ?? ""), p_por: s.nombre }));
+  }
+  if (a === "cerrar") {
+    if (typeof b.clave !== "string" || !UUID.test(b.clave)) return err(400, "Falta la clave de cierre");
+    const contados: Record<string, number> = {};
+    for (const m of MEDIOS_CONTADOS) {
+      if (b.contados?.[m] === undefined || b.contados?.[m] === null || b.contados?.[m] === "") continue;
+      const v = entero(b.contados[m]);
+      if (v === null) return err(400, `Monto contado inválido (${m})`);
+      contados[m] = v;
+    }
+    const notas = typeof b.notas === "string" ? b.notas.trim().slice(0, 500) : null;
+    return desdeRpc(await db.rpc("turno_cerrar", { p_turno: turno, p_contados: contados, p_notas: notas, p_clave: b.clave, p_por: s.nombre }));
+  }
+  return err(400, "Acción desconocida");
+}
+
+// Historial auditable: últimos cierres del negocio con esperado/contado/diferencia por medio.
+export async function historialTurnos(db: Db, s: SesionT): Promise<RespT> {
+  const c = await db.from("cierres_turno").select("id,turno_id,fecha_apertura,apertura_at,cierre_at,fondo_contado,cerrado_por,notas,con_pendientes").eq("empresa_id", s.empresa_id).order("cierre_at", { ascending: false }).limit(30);
+  const ids = (c?.data ?? []).map((x: any) => x.id);
+  const m = ids.length ? await db.from("cierres_turno_medios").select("cierre_id,medio,esperado,contado,diferencia").in("cierre_id", ids) : { data: [] };
+  const por: Record<string, unknown[]> = {};
+  for (const x of m?.data ?? []) (por[x.cierre_id] ??= []).push(x);
+  return { status: 200, body: { ok: true, cierres: (c?.data ?? []).map((x: any) => ({ ...x, medios: por[x.id] ?? [] })) } };
+}

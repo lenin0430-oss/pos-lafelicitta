@@ -1,704 +1,201 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import { getEmpresaIdActual, esAdmin, getSesion } from '@/lib/auth'
+// Caja por turnos. Un turno empieza al abrirlo y termina SOLO al confirmar «Cerrar turno» (puede pasar de medianoche).
+// Pasos: 1 abrir con fondo contado → 2 registrar cobros/gastos (otras pantallas) y retiros aquí → 3 contar y comprobar → 4 confirmar.
+// El navegador solo manda lo contado; el servidor recalcula esperado y diferencia con lo guardado.
+import { useCallback, useEffect, useState } from 'react'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
-import { resumirCobros } from '@/lib/cierre'
 
-interface ResumenVentas {
-  total: number
-  efectivo: number
-  debito: number
-  qr: number
-  transferencia: number
-  cantidad: number
+type Medios = { efectivo: number; debito: number; credito: number; transferencia: number; qr: number; por_conciliar: number }
+type Resumen = {
+  turno: { id: string; estado: string; fecha_apertura: string; apertura_at: string; cierre_at: string | null; cajero: string; horas_abiertas: number }
+  fondo: number; cobros: Medios & { cortesia: number }; gastos_caja: number; gastos_otros_medios: number; retiros: number
+  propinas_registradas: number; esperado: Medios
+  pendientes: { cobros_por_conciliar: number; monto_por_conciliar: number; ventas_sin_cobrar: number }
 }
+type Cobro = { id: string; venta_id: string; monto: number; proveedor: string }
+type Cierre = { id: string; fecha_apertura: string; apertura_at: string; cierre_at: string; con_pendientes: boolean; notas: string | null; medios: { medio: string; esperado: number; contado: number | null; diferencia: number | null }[] }
 
-interface AperturaCaja {
-  id: string
-  monto_inicial: number
-  cajero: string
-  estado: string
-  created_at: string
-  cerrada_at: string | null
-}
+const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
+const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' })
+const dia = (iso: string) => new Date(iso).toLocaleDateString('es-CL', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'America/Santiago' })
+const NOMBRE: Record<string, string> = { efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', transferencia: 'Transferencia', qr: 'QR', por_conciliar: 'Point por confirmar' }
+const ELECTRONICOS = ['debito', 'credito', 'transferencia', 'qr'] as const
+const num = (v: string) => (v.trim() === '' ? null : Math.max(0, Math.round(Number(v.replace(/\D/g, '')) || 0)))
 
-interface CierreCaja {
-  id: string
-  fecha: string
-  ventas_total: number
-  ventas_efectivo: number
-  ventas_debito: number
-  ventas_qr: number
-  ventas_transferencia: number
-  efectivo_fisico: number
-  diferencia: number
-  notas: string
-  created_at: string
-  apertura_id: string | null
+async function api(metodo: 'GET' | 'POST', cuerpo?: unknown, q = '') {
+  const r = await fetch('/api/turno' + q, { method: metodo, headers: cuerpo ? { 'Content-Type': 'application/json' } : undefined, body: cuerpo ? JSON.stringify(cuerpo) : undefined })
+  return { status: r.status, ...(await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida' }))) } as any
 }
 
 export default function CierrePage() {
-  const [isAdmin, setIsAdmin] = useState(false)
-  useEffect(() => { setIsAdmin(esAdmin()) }, [])
-
-  const [resumen, setResumen] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
-  const [resumenTurno, setResumenTurno] = useState<ResumenVentas>({ total: 0, efectivo: 0, debito: 0, qr: 0, transferencia: 0, cantidad: 0 })
-  const [gastosAfectoCajaDisplay, setGastosAfectoCajaDisplay] = useState(0)
-  const [efectivoFisico, setEfectivoFisico] = useState('')
-  const [debitoFisico, setDebitoFisico] = useState('')
-  const [qrFisico, setQrFisico] = useState('')
-  const [transferFisico, setTransferFisico] = useState('')
+  const [res, setRes] = useState<Resumen | null>(null)
+  const [abierto, setAbierto] = useState(false)
+  const [porConc, setPorConc] = useState<Cobro[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null)
+  const [fondo, setFondo] = useState('')
+  const [ret, setRet] = useState({ monto: '', motivo: '', para: '' })
+  const [cont, setCont] = useState<Record<string, string>>({})
   const [notas, setNotas] = useState('')
-  const [guardando, setGuardando] = useState(false)
-  const [cierres, setCierres] = useState<CierreCaja[]>([])
-  const [mensaje, setMensaje] = useState<{ txt: string; tipo: 'ok' | 'err' } | null>(null)
-  const [tab, setTab] = useState<'nuevo' | 'historial'>('nuevo')
-  const [montoApertura, setMontoApertura] = useState('')
-  const [aperturaActiva, setAperturaActiva] = useState<AperturaCaja | null>(null)
-  const [todasAperturas, setTodasAperturas] = useState<AperturaCaja[]>([])
-  const [guardandoApertura, setGuardandoApertura] = useState(false)
-  const [cerrando, setCerrando] = useState(false)
+  const [confirmando, setConfirmando] = useState(false)
+  const [clave, setClave] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const [cerrado, setCerrado] = useState<any>(null)
+  const [hist, setHist] = useState<Cierre[]>([])
 
-  useEffect(() => { cargarDatos() }, [])
+  const cargar = useCallback(async () => {
+    const r = await api('GET')
+    if (r.ok) { setRes(r.resumen ?? null); setAbierto(Boolean(r.abierto)); setPorConc(r.por_conciliar ?? []) }
+    else setMsg({ t: r.error ?? 'No se pudo leer el turno', ok: false })
+    const h = await api('GET', undefined, '?historial=1')
+    if (h.ok) setHist(h.cierres)
+    setCargando(false)
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => { setClave(crypto.randomUUID()) }, [res?.turno.id]) // misma clave en cada reintento del mismo cierre
 
-  async function cargarDatos() {
-    await Promise.all([
-      cargarAperturaActiva(),
-      cargarVentasHoy(),
-      cargarCierres()
-    ])
+  async function accion(cuerpo: Record<string, unknown>, okMsg: string) {
+    setOcupado(true); setMsg(null)
+    const r = await api('POST', cuerpo)
+    setOcupado(false)
+    if (r.ok) { setMsg({ t: okMsg, ok: true }); await cargar() } else setMsg({ t: r.error ?? 'No se pudo completar', ok: false })
+    return r
   }
 
-  async function cargarAperturaActiva() {
-    const empresaId = await getEmpresaIdActual()
-    if (!empresaId) return
+  const efEsp = res?.esperado.efectivo ?? 0
+  const efCont = num(cont.efectivo ?? '')
+  const diff = efCont === null ? null : efCont - efEsp
+  const faltaMedio = res ? ELECTRONICOS.filter(m => res.esperado[m] > 0 && num(cont[m] ?? '') === null) : []
 
-    const { data: todas } = await supabase
-      .from('aperturas_caja')
-      .select('*')
-      .eq('empresa_id', empresaId)
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    if (todas) setTodasAperturas(todas)
-
-    // La activa es la primera con estado 'abierta'
-    const activa = todas ? (todas.find(a => a.estado === 'abierta') || null) : null
-    setAperturaActiva(activa)
-
-    if (activa) {
-      await cargarVentasTurno(activa.id, activa.created_at)
-      await cargarGastosTurnoDisplay(activa.created_at)
-    }
+  async function cerrar() {
+    if (!res || efCont === null) return
+    const contados: Record<string, number> = { efectivo: efCont }
+    for (const m of ELECTRONICOS) { const v = num(cont[m] ?? ''); if (v !== null) contados[m] = v }
+    setOcupado(true)
+    const r = await api('POST', { accion: 'cerrar', turno_id: res.turno.id, contados, notas, clave })
+    setOcupado(false)
+    if (!r.ok) { setMsg({ t: r.error ?? 'No se pudo cerrar', ok: false }); setConfirmando(false); return }
+    setCerrado(r); setConfirmando(false); setCont({}); setNotas(''); await cargar()
+    try { // aviso al dueño (mismo canal de antes); los "por confirmar" NO se cuentan como QR
+      const x = r.resumen
+      await fetch('/api/cierre-whatsapp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        cajero: x.turno.cajero, fecha: new Date(x.turno.apertura_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' }),
+        hora_apertura: hora(x.turno.apertura_at), hora_cierre: hora(x.turno.cierre_at),
+        ventas_total: Object.values(x.cobros as Record<string, number>).reduce((a, b) => a + b, 0) - x.cobros.cortesia,
+        ventas_efectivo: x.cobros.efectivo, ventas_debito: x.cobros.debito + x.cobros.credito, ventas_qr: x.cobros.qr, ventas_transferencia: x.cobros.transferencia,
+        efectivo_fisico: contados.efectivo, efectivo_esperado: x.esperado.efectivo, diferencia: contados.efectivo - x.esperado.efectivo,
+        fondo_inicial: x.fondo, gastos_caja: x.gastos_caja, notas }) })
+    } catch { /* el cierre ya quedó guardado */ }
   }
 
-  async function cargarGastosTurnoDisplay(desde: string) {
-    const empresaId = await getEmpresaIdActual()
-    if (!empresaId) return
-    try {
-      const { data } = await supabase
-        .from('gastos')
-        .select('monto, afecto_caja')
-        .eq('empresa_id', empresaId)
-        .gte('created_at', desde)
-      if (data) {
-        const total = data
-          .filter(g => g.afecto_caja === true)
-          .reduce((s, g) => s + Number(g.monto), 0)
-        setGastosAfectoCajaDisplay(total)
-      }
-    } catch { /* sin gastos */ }
-  }
-
-  async function cargarVentasTurno(aperturaId: string, desde: string) {
-    const empresaId = await getEmpresaIdActual()
-    if (!empresaId) return
-
-    const { data } = await supabase
-      .from('ventas')
-      .select('*')
-      .eq('empresa_id', empresaId)
-      .eq('estado_pago', 'pagado')
-      .or(`pagado_at.gte.${desde},and(pagado_at.is.null,created_at.gte.${desde})`)
-      .order('created_at', { ascending: true })
-
-    if (!data) return
-
-    // Suma los COBROS recibidos desde el inicio del período (fecha de cobro); preparado/entregado no influye (lib/cierre.ts)
-    setResumenTurno(resumirCobros(data, desde))
-  }
-
-  async function cargarVentasHoy() {
-    const empresaId = await getEmpresaIdActual()
-    if (!empresaId) return
-
-    const hoy = new Date()
-    const desdeLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0)
-    const desde = desdeLocal.toISOString()
-
-    const { data } = await supabase
-      .from('ventas')
-      .select('*')
-      .eq('empresa_id', empresaId)
-      .eq('estado_pago', 'pagado')
-      .or(`pagado_at.gte.${desde},and(pagado_at.is.null,created_at.gte.${desde})`)
-
-    if (!data) return
-
-    // Suma los COBROS recibidos desde el inicio del período (fecha de cobro); preparado/entregado no influye (lib/cierre.ts)
-    setResumen(resumirCobros(data, desde))
-  }
-
-  async function cargarCierres() {
-    const empresaId = await getEmpresaIdActual()
-    if (!empresaId) return
-
-    const { data } = await supabase
-      .from('cierres_caja')
-      .select('*')
-      .eq('empresa_id', empresaId)
-      .order('created_at', { ascending: false })
-      .limit(30)
-    if (data) setCierres(data)
-  }
-
-  async function registrarApertura() {
-    const empresaId = await getEmpresaIdActual()
-    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
-
-    // NUNCA cerrar aperturas automáticamente — solo el usuario puede cerrar un turno
-    // Si ya hay una apertura abierta, no permitir abrir otra
-    const { data: abiertas } = await supabase
-      .from('aperturas_caja')
-      .select('id')
-      .eq('empresa_id', empresaId)
-      .eq('estado', 'abierta')
-      .limit(1)
-
-    if (abiertas && abiertas.length > 0) {
-      mostrarMensaje('Ya hay un turno abierto. Ciérralo primero.', 'err')
-      return
-    }
-
-    const monto = parseInt(montoApertura) || 0
-    setGuardandoApertura(true)
-
-    let cajero = 'Admin'
-    try {
-      const sesion = getSesion()
-      cajero = sesion?.nombre || 'Admin'
-    } catch { /* sin sesión */ }
-
-    // turno número = total de aperturas + 1
-    const { count } = await supabase
-      .from('aperturas_caja')
-      .select('id', { count: 'exact', head: true })
-      .eq('empresa_id', empresaId)
-    const turnoNum = (count || 0) + 1
-
-    const { error } = await supabase.from('aperturas_caja').insert({
-      empresa_id: empresaId,
-      monto_inicial: monto,
-      cajero,
-      estado: 'abierta',
-      fecha: new Date().toISOString().split('T')[0],
-      created_at: new Date().toISOString()
-    })
-
-    if (error) {
-      mostrarMensaje('Error al abrir caja: ' + error.message, 'err')
-    } else {
-      mostrarMensaje(`✅ Turno abierto — caja lista para vender`, 'ok')
-      setMontoApertura('')
-      await cargarDatos()
-    }
-    setGuardandoApertura(false)
-  }
-
-  async function cerrarTurnoActual() {
-    if (!aperturaActiva) return
-    if (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) {
-      mostrarMensaje('Ingresa al menos un monto físico', 'err')
-      return
-    }
-
-    const confirmar = window.confirm(
-      `¿Confirmas el cierre del turno?\n\nEsta acción marcará la caja como cerrada.\nSolo hazlo cuando el turno haya terminado.`
-    )
-    if (!confirmar) return
-
-    const empresaId = await getEmpresaIdActual()
-    if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
-
-    const fisico = parseInt(efectivoFisico) || 0
-    const debitoF = parseInt(debitoFisico) || 0
-    const qrF = parseInt(qrFisico) || 0
-    const transferF = parseInt(transferFisico) || 0
-    const totalFisico = fisico + debitoF + qrF + transferF
-    setCerrando(true)
-
-    try {
-      // Obtener gastos del turno
-      let gastosAfectoCaja = 0
-      let gastosTurno: {categoria: string, monto: number}[] = []
-      let totalGastosTurno = 0
-      let totalGastosDia = 0
-      try {
-        const { data: gastosData } = await supabase
-          .from('gastos')
-          .select('categoria, monto, afecto_caja')
-          .eq('empresa_id', empresaId)
-          .gte('created_at', aperturaActiva.created_at)
-        if (gastosData) {
-          gastosTurno = gastosData.map(g => ({ categoria: g.categoria, monto: Number(g.monto) }))
-          totalGastosTurno = gastosData.reduce((s, g) => s + Number(g.monto), 0)
-          gastosAfectoCaja = gastosData
-            .filter(g => g.afecto_caja === true)
-            .reduce((s, g) => s + Number(g.monto), 0)
-        }
-        const hoy = new Date()
-        const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
-        const { data: gastosDiaData } = await supabase
-          .from('gastos').select('monto').eq('empresa_id', empresaId).gte('created_at', inicioDia)
-        if (gastosDiaData) {
-          totalGastosDia = gastosDiaData.reduce((s, g) => s + Number(g.monto), 0)
-        }
-      } catch (eg) { console.warn('Error gastos pre-cierre:', eg) }
-
-      // Fórmula correcta:
-      // efectivo_esperado = fondo_inicial + ventas_efectivo - gastos_afecto_caja
-      // diferencia = efectivo_fisico - efectivo_esperado
-      const fondoInicial = aperturaActiva.monto_inicial || 0
-      const efectivoEsperado = fondoInicial + resumenTurno.efectivo - gastosAfectoCaja
-      const diferencia = fisico - efectivoEsperado
-
-      // 1. Registrar cierre
-      const { error: errCierre } = await supabase.from('cierres_caja').insert({
-        empresa_id: empresaId,
-        fecha: new Date().toISOString().split('T')[0],
-        ventas_total: resumenTurno.total,
-        ventas_efectivo: resumenTurno.efectivo,
-        ventas_debito: resumenTurno.debito,
-        ventas_qr: resumenTurno.qr,
-        ventas_transferencia: resumenTurno.transferencia,
-        efectivo_fisico: fisico,
-        diferencia,
-        notas,
-        apertura_id: aperturaActiva.id,
-        created_at: new Date().toISOString()
-      })
-      if (errCierre) throw errCierre
-
-      // 2. Marcar apertura como cerrada
-      const { error: errAp } = await supabase
-        .from('aperturas_caja')
-        .update({ estado: 'cerrada', cerrada_at: new Date().toISOString() })
-        .eq('empresa_id', empresaId)
-        .eq('id', aperturaActiva.id)
-      if (errAp) throw errAp
-
-      // Obtener propinas del turno
-      let totalPropinasTurno = 0
-      let propinasPorEmpleado: {empleado: string, monto: number}[] = []
-      try {
-        const { data: propinasData } = await supabase
-          .from('propinas')
-          .select('empleado, monto')
-          .eq('empresa_id', empresaId)
-          .gte('created_at', aperturaActiva.created_at)
-        if (propinasData) {
-          totalPropinasTurno = propinasData.reduce((s, p) => s + Number(p.monto), 0)
-          const mapa: Record<string, number> = {}
-          propinasData.forEach(p => { mapa[p.empleado] = (mapa[p.empleado] || 0) + Number(p.monto) })
-          propinasPorEmpleado = Object.entries(mapa).map(([empleado, monto]) => ({ empleado, monto }))
-        }
-      } catch (ep) { console.warn('Error propinas:', ep) }
-
-      // Calcular número de turno para el reporte
-      const turnoActualNumReport = todasAperturas.findIndex(a => a.id === aperturaActiva.id)
-      const turnoNum = turnoActualNumReport >= 0
-        ? (todasAperturas.length - turnoActualNumReport)
-        : todasAperturas.filter(a => a.estado === 'cerrada').length + 1
-
-      // Notificar al dueño por WhatsApp
-      try {
-        await fetch('/api/cierre-whatsapp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            turno: turnoNum,
-            cajero: aperturaActiva.cajero,
-            fecha: new Date().toLocaleDateString('es-CL'),
-            hora_apertura: new Date(aperturaActiva.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
-            hora_cierre: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
-            ventas_total: resumenTurno.total,
-            ventas_efectivo: resumenTurno.efectivo,
-            ventas_debito: resumenTurno.debito,
-            ventas_qr: resumenTurno.qr,
-            ventas_transferencia: resumenTurno.transferencia,
-            efectivo_fisico: fisico,
-            debito_fisico: debitoF,
-            qr_fisico: qrF,
-            transfer_fisico: transferF,
-            total_fisico: totalFisico,
-            diferencia,
-            cantidad_ventas: resumenTurno.cantidad,
-            total_dia: resumen.total,
-            gastos_turno: gastosTurno,
-            total_gastos_turno: totalGastosTurno,
-            total_gastos_dia: totalGastosDia,
-            total_propinas_turno: totalPropinasTurno,
-            propinas_por_empleado: propinasPorEmpleado,
-            turno_num: turnoNum,
-            total_turnos_hoy: todasAperturas.length,
-            notas
-          })
-        })
-      } catch (e) { console.warn('WhatsApp cierre:', (e as Error).message) }
-
-      // Alerta especial si diferencia mayor a $3.000
-      if (Math.abs(diferencia) > 3000) {
-        try {
-          await fetch('/api/cierre-whatsapp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              alerta_diferencia: true,
-              cajero: aperturaActiva.cajero,
-              fecha: new Date().toLocaleDateString('es-CL'),
-              diferencia,
-              efectivo_fisico: fisico,
-              efectivo_esperado: efectivoEsperado,
-              fondo_inicial: fondoInicial,
-              gastos_caja: gastosAfectoCaja,
-              ventas_efectivo: resumenTurno.efectivo,
-              turno: turnoNum
-            })
-          })
-        } catch (e) { console.warn('Alerta diferencia:', (e as Error).message) }
-      }
-
-      mostrarMensaje('✅ Turno cerrado — resumen enviado a WhatsApp', 'ok')
-      setEfectivoFisico('')
-      setDebitoFisico('')
-      setQrFisico('')
-      setTransferFisico('')
-      setNotas('')
-      await cargarDatos()
-      await cargarCierres()
-      setTimeout(() => window.print(), 400)
-
-    } catch (e: unknown) {
-      mostrarMensaje('Error: ' + (e as Error).message, 'err')
-    }
-    setCerrando(false)
-  }
-
-  function mostrarMensaje(txt: string, tipo: 'ok' | 'err') {
-    setMensaje({ txt, tipo })
-    setTimeout(() => setMensaje(null), 4000)
-  }
-
-  const fisico = parseInt(efectivoFisico) || 0
-  const debitoF = parseInt(debitoFisico) || 0
-  const qrF = parseInt(qrFisico) || 0
-  const transferF = parseInt(transferFisico) || 0
-  const totalFisico = fisico + debitoF + qrF + transferF
-
-  // Diferencia para display en tiempo real (incluye gastos ya cargados)
-  const fondoInicialDisplay = aperturaActiva?.monto_inicial || 0
-  const efectivoEsperadoDisplay = fondoInicialDisplay + resumenTurno.efectivo - gastosAfectoCajaDisplay
-  const diferencia = fisico - efectivoEsperadoDisplay
-
-  const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
-  const fechaHoy = new Date().toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  const horaActual = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
-
-  const idxActiva = aperturaActiva ? todasAperturas.findIndex(a => a.id === aperturaActiva.id) : -1
-  const turnoActualNum = idxActiva >= 0
-    ? (todasAperturas.length - idxActiva)
-    : (todasAperturas.filter(a => a.estado === 'cerrada').length + 1)
-
-  const inp = {
-    width: '100%',
-    background: 'var(--surface2)',
-    border: '1px solid var(--border)',
-    borderRadius: 8,
-    color: 'var(--text)',
-    padding: '10px 12px',
-    fontFamily: 'var(--font)',
-    fontSize: 13,
-    outline: 'none',
-    boxSizing: 'border-box' as const
-  }
+  const card: React.CSSProperties = { background: 'var(--card, #fff)', border: '1px solid var(--border, #ddd)', borderRadius: 12, padding: 16, marginBottom: 14 }
+  const inp: React.CSSProperties = { padding: 10, fontSize: 18, borderRadius: 8, border: '1px solid var(--border, #bbb)', width: '100%', boxSizing: 'border-box' }
+  const btn = (principal = true): React.CSSProperties => ({ padding: '12px 18px', fontSize: 16, fontWeight: 700, borderRadius: 10, border: principal ? 'none' : '1px solid var(--border, #bbb)', background: principal ? 'var(--gold, #c8962a)' : 'transparent', color: principal ? '#000' : 'inherit', cursor: ocupado ? 'wait' : 'pointer' })
 
   return (
     <AuthGuard rolRequerido="admin">
       <>
-        {/* PRINT CIERRE */}
-        <div id="cierre-print" style={{ display: 'none' }}>
-          <div className="t-logo">LA FELICITTA</div>
-          <div className="t-sub">@lafelicittacl</div>
-          <hr className="t-divider" />
-          <div className="t-meta">
-            <span><strong>CIERRE DE TURNO {turnoActualNum}</strong></span>
-            <span>{fechaHoy}</span>
-            <span>Hora: {horaActual}</span>
-          </div>
-          <hr className="t-divider" />
-          <div className="t-meta">
-            <span>Comandas del turno: {resumenTurno.cantidad}</span>
-            <span>Efectivo: {fmt(resumenTurno.efectivo)}</span>
-            <span>Débito: {fmt(resumenTurno.debito)}</span>
-            <span>QR MercadoPago: {fmt(resumenTurno.qr)}</span>
-            <span>Transferencia: {fmt(resumenTurno.transferencia)}</span>
-          </div>
-          <hr className="t-divider" />
-          <div className="t-meta">
-            <span><strong>TOTAL TURNO: {fmt(resumenTurno.total)}</strong></span>
-            <span>Fondo inicial: {fmt(fondoInicialDisplay)}</span>
-            <span>Gastos de caja: {fmt(gastosAfectoCajaDisplay)}</span>
-            <span>Efectivo esperado: {fmt(efectivoEsperadoDisplay)}</span>
-            <span>Efectivo físico: {fmt(fisico)}</span>
-            <span><strong>DIFERENCIA: {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}</strong></span>
-          </div>
-          {todasAperturas.length > 0 && (
-            <>
-              <hr className="t-divider" />
-              <div className="t-meta">
-                <span><strong>TOTAL ACUMULADO DÍA: {fmt(resumen.total)}</strong></span>
-                <span>Turnos completados hoy: {todasAperturas.filter(a => a.estado === 'cerrada').length + 1}</span>
-              </div>
-            </>
+        <Nav active="/cierre" />
+        <main style={{ maxWidth: 760, margin: '0 auto', padding: 16 }}>
+          <h1 style={{ fontSize: 24, marginBottom: 12 }}>Caja y turno</h1>
+          {msg && <div role="status" style={{ ...card, borderColor: msg.ok ? 'var(--green, #2a9d5c)' : 'var(--red, #d33)' }}>{msg.t}</div>}
+          {cargando && <p>Cargando…</p>}
+
+          {!cargando && !abierto && (
+            <section style={card} aria-label="Abrir turno">
+              <h2 style={{ fontSize: 18 }}>1 · Abrir turno</h2>
+              <p style={{ opacity: .8 }}>Cuenta el efectivo que hay en la caja ahora. El turno seguirá abierto, aunque pase de medianoche, hasta que lo cierres.</p>
+              <input style={inp} inputMode="numeric" placeholder="Fondo contado (ej. 20000)" value={fondo} onChange={e => setFondo(e.target.value)} aria-label="Fondo contado" />
+              <div style={{ marginTop: 12 }}><button style={btn()} disabled={ocupado || num(fondo) === null} onClick={() => accion({ accion: 'abrir', fondo: num(fondo) }, 'Turno abierto').then(r => r.ok && setFondo(''))}>Abrir turno</button></div>
+            </section>
           )}
-          {notas && <><hr className="t-divider" /><div className="t-meta"><span>Notas: {notas}</span></div></>}
-          <hr className="t-divider" />
-          <div className="t-footer">Firma: _______________<br />¡Gracias por tu trabajo!</div>
-        </div>
 
-        <div className="no-print" style={{ minHeight: '100vh', background: 'var(--bg)', fontFamily: 'var(--font)', paddingBottom: 80 }}>
-          <Nav active="/cierre" />
+          {!cargando && abierto && res && (<>
+            <section style={card} aria-label="Turno abierto">
+              <div style={{ fontSize: 13, opacity: .75 }}>TURNO ABIERTO</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>Turno del {dia(res.turno.apertura_at)}</div>
+              <div>Abierto a las {hora(res.turno.apertura_at)} · lleva {res.turno.horas_abiertas.toFixed(1)} h · fondo {fmt(res.fondo)}</div>
+              <div style={{ fontSize: 13, opacity: .75, marginTop: 4 }}>Todo lo que se cobre, gaste o retire queda en este turno hasta «Cerrar turno». A las 00:00 no cambia nada.</div>
+              {res.turno.horas_abiertas > 16 && <div style={{ color: 'var(--red, #d33)', marginTop: 6 }}>Este turno lleva más de 16 horas abierto: revisa si olvidaste cerrarlo.</div>}
+            </section>
 
-          <div style={{ padding: 16, maxWidth: 600, margin: '0 auto' }}>
-            {mensaje && (
-              <div style={{ padding: '10px 16px', borderRadius: 8, marginBottom: 12, background: mensaje.tipo === 'ok' ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}`, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>
-                {mensaje.txt}
+            <section style={card} aria-label="Resumen del turno">
+              <h2 style={{ fontSize: 18 }}>2 · Lo registrado</h2>
+              {(['efectivo', 'debito', 'credito', 'transferencia', 'qr', 'por_conciliar'] as const).map(m => (
+                <div key={m} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span>{NOMBRE[m]}</span><b>{fmt(res.cobros[m])}</b></div>))}
+              <hr />
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gastos que salieron de la caja</span><b>−{fmt(res.gastos_caja)}</b></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Retiros</span><b>−{fmt(res.retiros)}</b></div>
+              {res.gastos_otros_medios > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', opacity: .7 }}><span>Gastos pagados fuera de la caja (no restan)</span><b>{fmt(res.gastos_otros_medios)}</b></div>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, marginTop: 6 }}><span>Efectivo que debería haber</span><b>{fmt(efEsp)}</b></div>
+              {res.pendientes.ventas_sin_cobrar > 0 && <p style={{ color: 'var(--gold, #c8962a)' }}>Hay {res.pendientes.ventas_sin_cobrar} venta(s) sin cobrar en este turno.</p>}
+            </section>
+
+            {porConc.length > 0 && (
+              <section style={card} aria-label="Cobros Point por confirmar">
+                <h2 style={{ fontSize: 18 }}>Cobros Point por confirmar</h2>
+                <p style={{ opacity: .8 }}>Point no informó con qué pagó el cliente. Mira el comprobante y elige el medio; no se asume.</p>
+                {porConc.map(c => (
+                  <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '6px 0' }}>
+                    <b style={{ minWidth: 80 }}>{fmt(c.monto)}</b>
+                    {(['efectivo', 'debito', 'credito', 'qr'] as const).map(m => <button key={m} style={btn(false)} disabled={ocupado} onClick={() => accion({ accion: 'conciliar', turno_id: res.turno.id, cobro_id: c.id, medio: m }, 'Cobro confirmado')}>{NOMBRE[m]}</button>)}
+                  </div>))}
+              </section>
+            )}
+
+            <section style={card} aria-label="Registrar retiro">
+              <h2 style={{ fontSize: 18 }}>Retiro de efectivo</h2>
+              <p style={{ opacity: .8 }}>Efectivo que sale de la caja y no es un gasto (por ejemplo, entrega al dueño). Los gastos se registran en «Gastos».</p>
+              <div style={{ display: 'grid', gap: 8 }}>
+                <input style={inp} inputMode="numeric" placeholder="Monto" value={ret.monto} onChange={e => setRet({ ...ret, monto: e.target.value })} aria-label="Monto del retiro" />
+                <input style={inp} placeholder="Motivo" value={ret.motivo} onChange={e => setRet({ ...ret, motivo: e.target.value })} aria-label="Motivo del retiro" />
+                <input style={inp} placeholder="Entregado a (opcional)" value={ret.para} onChange={e => setRet({ ...ret, para: e.target.value })} aria-label="Entregado a" />
+                <div><button style={btn(false)} disabled={ocupado || !num(ret.monto) || !ret.motivo.trim()} onClick={() => accion({ accion: 'retiro', turno_id: res.turno.id, monto: num(ret.monto), motivo: ret.motivo, entregado_a: ret.para }, 'Retiro registrado').then(r => r.ok && setRet({ monto: '', motivo: '', para: '' }))}>Registrar retiro</button></div>
               </div>
-            )}
+            </section>
 
-            {/* RESUMEN DÍA — solo admin */}
-            {isAdmin && todasAperturas.length > 0 && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 16px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const }}>Acumulado del día</div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--gold)' }}>{fmt(resumen.total)}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{resumen.cantidad} comandas</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                    {todasAperturas.filter(a => a.estado === 'cerrada').length} turno(s) cerrado(s)
-                    {aperturaActiva ? ' · 1 activo' : ''}
-                  </div>
-                </div>
-              </div>
-            )}
+            <section style={card} aria-label="Cerrar turno">
+              <h2 style={{ fontSize: 18 }}>3 · Contar y comprobar</h2>
+              <label>Efectivo contado (obligatorio)
+                <input style={inp} inputMode="numeric" value={cont.efectivo ?? ''} onChange={e => setCont({ ...cont, efectivo: e.target.value })} aria-label="Efectivo contado" /></label>
+              {diff !== null && <p style={{ fontSize: 18, color: diff === 0 ? 'var(--green, #2a9d5c)' : 'var(--red, #d33)' }}>Esperado {fmt(efEsp)} · {diff === 0 ? 'cuadra' : diff > 0 ? `sobran ${fmt(diff)}` : `faltan ${fmt(-diff)}`}</p>}
+              {ELECTRONICOS.filter(m => res.esperado[m] > 0).map(m => (
+                <label key={m} style={{ display: 'block', marginTop: 8 }}>{NOMBRE[m]} comprobado (esperado {fmt(res.esperado[m])})
+                  <input style={inp} inputMode="numeric" value={cont[m] ?? ''} onChange={e => setCont({ ...cont, [m]: e.target.value })} aria-label={`${NOMBRE[m]} comprobado`} /></label>))}
+              {res.esperado.por_conciliar > 0 && <p style={{ color: 'var(--gold, #c8962a)' }}>Quedan {fmt(res.esperado.por_conciliar)} de Point por confirmar. Puedes cerrar, pero el cierre quedará marcado «con pendientes».</p>}
+              <textarea style={{ ...inp, marginTop: 8, fontSize: 15 }} placeholder="Notas (opcional)" value={notas} onChange={e => setNotas(e.target.value)} aria-label="Notas" />
+              <h2 style={{ fontSize: 18, marginTop: 12 }}>4 · Confirmar</h2>
+              {!confirmando
+                ? <button style={btn()} disabled={ocupado || efCont === null} onClick={() => setConfirmando(true)}>Cerrar turno</button>
+                : <div role="alertdialog" aria-label="Confirmar cierre">
+                    <p><b>¿Cerrar el turno ahora ({hora(new Date().toISOString())})?</b> Después no se podrá modificar.{faltaMedio.length > 0 && ` Sin comprobar: ${faltaMedio.map(m => NOMBRE[m]).join(', ')}.`}</p>
+                    <button style={btn()} disabled={ocupado} onClick={cerrar}>Sí, cerrar turno</button>{' '}
+                    <button style={btn(false)} disabled={ocupado} onClick={() => setConfirmando(false)}>Volver</button></div>}
+            </section>
+          </>)}
 
-            {/* ESTADO CAJA ACTUAL */}
-            <div style={{ background: aperturaActiva ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${aperturaActiva ? 'var(--green)' : 'var(--red)'}`, borderRadius: 14, padding: 16, marginBottom: 16 }}>
-              {aperturaActiva ? (
-                <>
-                  <div style={{ fontSize: 11, color: 'var(--green)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10, fontWeight: 600 }}>
-                    ✅ Turno {turnoActualNum} en curso
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: 'var(--green)' }}>{fmt(aperturaActiva.monto_inicial)}</div>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                        Apertura: {new Date(aperturaActiva.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
-                        {' · '}{resumenTurno.cantidad} ventas · {fmt(resumenTurno.total)}
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>Abierta ✓</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 11, color: 'var(--red)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10, fontWeight: 600 }}>
-                    🔴 Sin turno activo
-                    {todasAperturas.length > 0 ? ` — ${todasAperturas.filter(a => a.estado === 'cerrada').length} turno(s) completado(s)` : ''}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
-                        Efectivo inicial (fondo de caja)
-                      </label>
-                      <input
-                        type="number"
-                        value={montoApertura}
-                        onChange={e => setMontoApertura(e.target.value)}
-                        placeholder="Ej: 30000"
-                        style={{ ...inp, fontFamily: 'var(--mono)', fontSize: 18 }}
-                      />
-                    </div>
-                    <button
-                      onClick={registrarApertura}
-                      disabled={guardandoApertura}
-                      style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'var(--green)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}
-                    >
-                      {guardandoApertura ? '...' : '🔓 Abrir Turno'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+          {cerrado?.ok && (
+            <section style={{ ...card, borderColor: 'var(--green, #2a9d5c)' }} aria-label="Turno cerrado">
+              <h2 style={{ fontSize: 18 }}>Turno cerrado{cerrado.repetido ? ' (ya estaba cerrado)' : ''}</h2>
+              <div>Abierto {hora(cerrado.resumen.turno.apertura_at)} · cerrado {hora(cerrado.resumen.turno.cierre_at)}{cerrado.con_pendientes ? ' · con pendientes' : ''}</div>
+              <button style={{ ...btn(false), marginTop: 8 }} onClick={() => window.print()}>Imprimir</button>
+            </section>
+          )}
 
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: 'var(--surface)', borderRadius: 10, padding: 4, border: '1px solid var(--border)' }}>
-              {(isAdmin ? [['nuevo', '🔒 Cerrar Turno'], ['historial', '📋 Historial']] : [['nuevo', '🔒 Cerrar Turno']]).map(([val, label]) => (
-                <button key={val} onClick={() => setTab(val as 'nuevo' | 'historial')}
-                  style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: tab === val ? 'var(--gold)' : 'transparent', color: tab === val ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {tab === 'nuevo' && (
-              <>
-                {!aperturaActiva ? (
-                  <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)', fontSize: 14 }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>🔴</div>
-                    No hay un turno activo.<br />Abre un turno arriba para poder cerrar.
-                  </div>
-                ) : (
-                  <>
-                    {/* Info turno actual */}
-                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 4 }}>Turno {turnoActualNum}</div>
-                      <div style={{ fontSize: 15, fontWeight: 600 }}>{fechaHoy}</div>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                        Desde: {new Date(aperturaActiva.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · {resumenTurno.cantidad} comandas
-                      </div>
-                    </div>
-
-                    {/* Ventas del turno — solo admin */}
-                    {isAdmin && (
-                      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ventas del turno</div>
-                        {[
-                          { label: '💵 Efectivo', valor: resumenTurno.efectivo, color: 'var(--green)' },
-                          { label: '💳 Débito', valor: resumenTurno.debito, color: 'var(--blue)' },
-                          { label: '📱 QR MercadoPago', valor: resumenTurno.qr, color: '#6D28D9' },
-                          { label: '🏦 Transferencia', valor: resumenTurno.transferencia, color: 'var(--amber)' },
-                        ].map(item => (
-                          <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
-                            <span style={{ fontSize: 14, color: item.color }}>{item.label}</span>
-                            <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600, color: item.valor > 0 ? 'var(--text)' : 'var(--muted)' }}>{fmt(item.valor)}</span>
-                          </div>
-                        ))}
-                        {gastosAfectoCajaDisplay > 0 && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
-                            <span style={{ fontSize: 14, color: 'var(--red)' }}>🧾 Gastos de caja</span>
-                            <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 600, color: 'var(--red)' }}>-{fmt(gastosAfectoCajaDisplay)}</span>
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', alignItems: 'center' }}>
-                          <span style={{ fontSize: 15, fontWeight: 700 }}>TOTAL TURNO</span>
-                          <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: 'var(--gold)' }}>{fmt(resumenTurno.total)}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Arqueo */}
-                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 10 }}>Ingresa los totales del turno</div>
-                      {[
-                        { label: '💵 Efectivo físico', value: efectivoFisico, set: setEfectivoFisico },
-                        { label: '💳 Débito (datáfono)', value: debitoFisico, set: setDebitoFisico },
-                        { label: '📱 Mercado Pago / QR', value: qrFisico, set: setQrFisico },
-                        { label: '🏦 Transferencia', value: transferFisico, set: setTransferFisico },
-                      ].map(({ label, value, set }) => (
-                        <div key={label} style={{ marginBottom: 10 }}>
-                          <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>{label}</label>
-                          <input type="number" value={value} onChange={e => set(e.target.value)} placeholder="0" style={{ ...inp, fontFamily: 'var(--mono)', fontSize: 18 }} />
-                        </div>
-                      ))}
-                      {isAdmin && totalFisico > 0 && (
-                        <div style={{ background: diferencia === 0 ? 'var(--green-bg)' : diferencia > 0 ? 'var(--blue-bg)' : 'var(--red-bg)', border: `1px solid ${diferencia === 0 ? 'var(--green)' : diferencia > 0 ? 'var(--blue)' : 'var(--red)'}`, borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                              {diferencia === 0 ? '✅ Cuadra perfecto' : diferencia > 0 ? '📈 Sobrante' : '📉 Faltante'}
-                            </span>
-                            <span style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: diferencia === 0 ? 'var(--green)' : diferencia > 0 ? 'var(--blue)' : 'var(--red)' }}>
-                              {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
-                            Esperado: {fmt(efectivoEsperadoDisplay)} (fondo {fmt(fondoInicialDisplay)} + ventas {fmt(resumenTurno.efectivo)} - gastos {fmt(gastosAfectoCajaDisplay)})
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{ marginBottom: 16 }}>
-                      <label style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 6 }}>Notas (opcional)</label>
-                      <input value={notas} onChange={e => setNotas(e.target.value)} placeholder="Observaciones del turno..." style={inp} />
-                    </div>
-
-                    <button
-                      onClick={cerrarTurnoActual}
-                      disabled={cerrando || (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico)}
-                      style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'var(--surface2)' : 'var(--gold)', color: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'var(--muted)' : 'var(--on-accent)', fontSize: 16, fontWeight: 700, cursor: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: (!efectivoFisico && !debitoFisico && !qrFisico && !transferFisico) ? 0.5 : 1 }}>
-                      {cerrando ? 'Cerrando...' : `🔒 Cerrar Turno ${turnoActualNum} e Imprimir`}
-                    </button>
-                  </>
-                )}
-              </>
-            )}
-
-            {tab === 'historial' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {cierres.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)', fontSize: 13 }}>No hay cierres registrados</div>
-                ) : cierres.map((c) => (
-                  <div key={c.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>
-                          {new Date(c.fecha + 'T12:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}
-                          <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6 }}>Turno</span>
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{new Date(c.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--gold)' }}>{fmt(c.ventas_total)}</div>
-                        <div style={{ fontSize: 11, color: c.diferencia === 0 ? 'var(--green)' : c.diferencia > 0 ? 'var(--blue)' : 'var(--red)', fontFamily: 'var(--mono)' }}>
-                          {c.diferencia >= 0 ? '+' : ''}{fmt(c.diferencia)}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-                      <span>💵 Efectivo: {fmt(c.ventas_efectivo)}</span>
-                      <span>💳 Débito: {fmt(c.ventas_debito)}</span>
-                      <span>📱 QR: {fmt(c.ventas_qr)}</span>
-                      <span>🏦 Transfer: {fmt(c.ventas_transferencia)}</span>
-                    </div>
-                    {c.notas && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8, fontStyle: 'italic' }}>📝 {c.notas}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <style>{`
-          @media print {
-            body * { visibility: hidden; }
-            #cierre-print, #cierre-print * { visibility: visible; }
-            #cierre-print { position: fixed; top: 0; left: 0; width: 100%; background: white; }
-          }
-        `}</style>
+          {hist.length > 0 && (
+            <section style={card} aria-label="Historial de cierres">
+              <h2 style={{ fontSize: 18 }}>Cierres anteriores</h2>
+              {hist.map(c => (
+                <details key={c.id} style={{ padding: '6px 0' }}>
+                  <summary>Turno del {dia(c.apertura_at)} · {hora(c.apertura_at)}–{hora(c.cierre_at)}{c.con_pendientes ? ' · con pendientes' : ''}</summary>
+                  {c.medios.filter(m => m.esperado !== 0 || m.contado !== null).map(m => (
+                    <div key={m.medio} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span>{NOMBRE[m.medio] ?? m.medio}</span>
+                      <span>esperado {fmt(m.esperado)} · contado {m.contado === null ? 'sin comprobar' : fmt(m.contado)}{m.diferencia !== null && m.diferencia !== 0 ? ` · dif. ${m.diferencia > 0 ? '+' : '−'}${fmt(Math.abs(m.diferencia))}` : ''}</span></div>))}
+                </details>))}
+            </section>
+          )}
+        </main>
       </>
     </AuthGuard>
   )
