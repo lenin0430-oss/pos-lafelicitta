@@ -1,9 +1,12 @@
 -- MesaPOS · SEMILLA FICTICIA de dos negocios para la prueba e2e. NO APLICADA.
 -- SOLO el proyecto de pruebas mesapos-pruebas-aislado (ref wcoaulvlicfimdfmwhid). NUNCA producción.
+-- UNA transacción: si algo falla no queda nada a medias. Las líneas de venta usan precio_unit (como el POS y las reglas de ventas).
 -- Idempotente (uuid fijos + on conflict do nothing). No toca filas existentes. Requiere 03 y 04 (04b/07b/07c/07a/07 según la etapa).
 -- Marcador: nombres 'E2E …', emails '@example.test', mesas 'E2E-…'. Limpieza: ver semilla_dos_negocios_LIMPIEZA.sql.
 -- PIN de PRUEBA (ficticios, solo de este proyecto): A admin 7101 · A garzón 7102 · B admin 7201 · B garzón 7202. Todos distintos
 -- porque el login del garzón busca solo por PIN. Con PIN_MODO=legacy se leen de usuarios.pin.
+
+begin;
 
 insert into empresas (id, nombre, slug, ciudad, plan, estado, activo) values
  ('e2e00000-0000-4000-8000-00000000000a','E2E Negocio A','e2e-negocio-a','Iquique','prueba','activo',true),
@@ -42,13 +45,13 @@ on conflict (id) do nothing;
 -- Ventas de ejemplo (numero 9001+ para no chocar con las existentes). Cocina y pago separados.
 insert into ventas (id, numero, mesa, mesero, personas, metodo_pago, total, items, estado, estado_pago, pagado_at, empresa_id, tipo_servicio) values
  ('e2e50000-0000-4000-8000-0000000000a1',9001,'E2E-A1','E2E Garzon A',2,null,5500,
-   '[{"nombre":"E2E Plato común","precio":4000,"cantidad":1},{"nombre":"E2E Bebida A","precio":1500,"cantidad":1}]','pendiente','pendiente',null,'e2e00000-0000-4000-8000-00000000000a','mesa'),
+   '[{"nombre":"E2E Plato común","precio_unit":4000,"cantidad":1},{"nombre":"E2E Bebida A","precio_unit":1500,"cantidad":1}]','pendiente','pendiente',null,'e2e00000-0000-4000-8000-00000000000a','mesa'),
  ('e2e50000-0000-4000-8000-0000000000a2',9002,'E2E-A2','E2E Garzon A',1,'Efectivo',4000,
-   '[{"nombre":"E2E Plato común","precio":4000,"cantidad":1}]','listo','pagado',now(),'e2e00000-0000-4000-8000-00000000000a','mesa'),
+   '[{"nombre":"E2E Plato común","precio_unit":4000,"cantidad":1}]','listo','pagado',now(),'e2e00000-0000-4000-8000-00000000000a','mesa'),
  ('e2e50000-0000-4000-8000-0000000000a3',9003,'E2E-A1','E2E Garzon A',1,'Cortesia',1500,
-   '[{"nombre":"E2E Bebida A","precio":1500,"cantidad":1}]','listo','cortesia',now(),'e2e00000-0000-4000-8000-00000000000a','mesa'),
+   '[{"nombre":"E2E Bebida A","precio_unit":1500,"cantidad":1}]','listo','cortesia',now(),'e2e00000-0000-4000-8000-00000000000a','mesa'),
  ('e2e50000-0000-4000-8000-0000000000b1',9101,'E2E-B1','E2E Garzon B',2,null,7000,
-   '[{"nombre":"E2E Plato común","precio":5000,"cantidad":1},{"nombre":"E2E Bebida B","precio":2000,"cantidad":1}]','pendiente','pendiente',null,'e2e00000-0000-4000-8000-00000000000b','mesa')
+   '[{"nombre":"E2E Plato común","precio_unit":5000,"cantidad":1},{"nombre":"E2E Bebida B","precio_unit":2000,"cantidad":1}]','pendiente','pendiente',null,'e2e00000-0000-4000-8000-00000000000b','mesa')
 on conflict (id) do nothing;
 
 -- Aperturas de caja abiertas (para gastos y cierre). Fechas del día actual.
@@ -56,5 +59,15 @@ insert into aperturas_caja (id, fecha, monto_inicial, cajero, estado, empresa_id
  ('e2e60000-0000-4000-8000-0000000000a1',current_date,20000,'E2E Admin A','abierta','e2e00000-0000-4000-8000-00000000000a'),
  ('e2e60000-0000-4000-8000-0000000000b1',current_date,15000,'E2E Admin B','abierta','e2e00000-0000-4000-8000-00000000000b')
 on conflict (id) do nothing;
+
+-- Comprobación dentro de la transacción: total = suma de líneas en las 4 ventas y cero líneas con precio_unit nulo; si no, se aborta todo.
+do $$ declare malas int; begin
+  select count(*) into malas from ventas v where v.id::text like 'e2e50000-%'
+    and (v.total <> (select coalesce(sum((l->>'cantidad')::int * (l->>'precio_unit')::int),0) from jsonb_array_elements(v.items) l)
+      or exists (select 1 from jsonb_array_elements(v.items) l where l->>'precio_unit' is null));
+  if malas > 0 then raise exception 'Semilla inconsistente: % ventas con total distinto de la suma de líneas', malas; end if;
+end $$;
+
+commit;
 
 -- Cuenta Mercado Pago FICTICIA por negocio: generar con scripts/prueba-navegador/sql_mp_cuenta_ficticia.mjs (clave de prueba) para ambos uuid.
