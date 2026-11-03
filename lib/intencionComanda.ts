@@ -2,12 +2,17 @@
 // respuesta se perdió se RECUPERE (misma venta, mismo folio) en vez de crear otra. El folio lo asigna solo la base.
 //  · Una intención por PESTAÑA (id de pestaña en sessionStorage): dos pestañas con los mismos productos NO comparten clave.
 //  · La clave vive SIEMPRE en memoria; el almacenamiento del navegador es un respaldo para recargas (si falla, no cambia nada).
+//  · Pestaña DUPLICADA (el navegador copia sessionStorage y con él el id): cada pestaña viva reclama su id con un «arrendamiento»
+//    en localStorage (con latido; se libera al cerrar o recargar). Si otra instancia viva ya lo tiene, esta toma un id NUEVO y no hereda
+//    la intención de la original. Una recarga legítima libera el arrendamiento al salir y recupera lo suyo.
 //  · «Comanda nueva» es una acción explícita (cerrar): comandas con productos idénticos, pero distintas, usan claves distintas.
 export type Almacen = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 export type Intencion = { clave: string; empresa_id: string; huella: string; ts: number };
 const LLAVE = "lf_intencion_comanda:";
 const LLAVE_TAB = "lf_tab_id";
 const VIGENCIA_MS = 24 * 3600 * 1000;
+const LLAVE_LEASE = "lf_tab_lease:";
+const LEASE_MS = 130_000;   // mayor que el latido más espaciado de una pestaña en segundo plano (el navegador lo frena a ~1/min)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ItemH = { producto: { nombre: string; precio: number }; cantidad: number; nota?: string };
@@ -22,12 +27,31 @@ export function crearGestorIntenciones(opc: { local?: Almacen | null; sesion?: A
   const ahora = opc.ahora ?? Date.now;
   let tabMem: string | null = null;
   let memoria: Intencion | null = null;
+  const instancia = opc.nuevoUuid();      // identifica ESTA carga de página
+  let duplicada = false;
+  const fijarTab = (id: string) => { tabMem = id; seguro(() => opc.sesion?.setItem(LLAVE_TAB, id), undefined); };
+  // Reclama el id de pestaña; si otra instancia viva lo tiene (sessionStorage copiado), toma uno nuevo.
+  const reclamar = (): void => {
+    for (let n = 0; n < 3 && tabMem; n++) {
+      const k = LLAVE_LEASE + tabMem;
+      const l = seguro(() => JSON.parse(opc.local?.getItem(k) ?? "null") as { i?: string; ts?: number } | null, null);
+      if (l && l.i && l.i !== instancia && ahora() - (l.ts ?? 0) < LEASE_MS) {
+        duplicada = true; fijarTab(opc.nuevoUuid());
+        if (memoria) seguro(() => opc.local?.setItem(LLAVE + (tabMem as string), JSON.stringify(memoria)), undefined);   // lo que ya iba en vuelo sigue siendo de ESTA instancia
+        continue;
+      }
+      seguro(() => opc.local?.setItem(k, JSON.stringify({ i: instancia, ts: ahora() })), undefined);
+      return;
+    }
+  };
   const tabId = (): string => {
-    if (tabMem) return tabMem;
-    const g = seguro(() => opc.sesion?.getItem(LLAVE_TAB) ?? null, null);
-    tabMem = g && UUID.test(g) ? g : opc.nuevoUuid();
-    if (tabMem !== g) seguro(() => opc.sesion?.setItem(LLAVE_TAB, tabMem as string), undefined);
-    return tabMem;
+    if (!tabMem) {
+      const g = seguro(() => opc.sesion?.getItem(LLAVE_TAB) ?? null, null);
+      tabMem = g && UUID.test(g) ? g : opc.nuevoUuid();
+      if (tabMem !== g) seguro(() => opc.sesion?.setItem(LLAVE_TAB, tabMem as string), undefined);
+    }
+    reclamar();
+    return tabMem as string;
   };
   const llave = () => LLAVE + tabId();
   const vigente = (x: Intencion | null | undefined, empresaId: string): x is Intencion => !!x && x.empresa_id === empresaId && typeof x.huella === "string" && UUID.test(x.clave) && ahora() - (x.ts ?? 0) < VIGENCIA_MS;
@@ -39,6 +63,12 @@ export function crearGestorIntenciones(opc: { local?: Almacen | null; sesion?: A
   };
   return {
     tabId, leer,
+    get duplicada() { return duplicada; },
+    latido(): void { tabId(); },                                         // renovar el arrendamiento (la página lo llama cada ~20 s y al volver a verse)
+    liberar(): void {                                                    // pagehide: cerrar o recargar libera el id para la recarga legítima
+      if (!tabMem) return; const k = LLAVE_LEASE + tabMem;
+      seguro(() => { const l = JSON.parse(opc.local?.getItem(k) ?? "null"); if (l && l.i === instancia) opc.local?.removeItem(k); }, undefined);
+    },
     claveParaEnvio(empresaId: string, huella: string): string {
       const p = leer(empresaId);
       if (p && p.huella === huella) return p.clave;                       // reintento de la misma comanda

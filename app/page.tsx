@@ -81,6 +81,17 @@ export default function CajaPage() {
     return () => { clearInterval(tick); clearInterval(poll) }
   }, [])
 
+  // Identidad de pestaña: latido mientras la página vive y liberación al salir (permite detectar una pestaña duplicada y recuperar tras recargar).
+  useEffect(() => {
+    gestorComanda.latido()
+    const t = setInterval(() => gestorComanda.latido(), 20000)
+    const ver = () => { if (document.visibilityState === 'visible') gestorComanda.latido() }
+    const salir = () => gestorComanda.liberar()
+    document.addEventListener('visibilitychange', ver)
+    window.addEventListener('pagehide', salir)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', ver); window.removeEventListener('pagehide', salir) }
+  }, [])
+
   async function inicializarCaja() {
     verificarApertura()
 

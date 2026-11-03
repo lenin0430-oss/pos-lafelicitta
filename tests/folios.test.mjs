@@ -7,7 +7,8 @@ let u = 0; const uuid = () => `00000000-0000-4000-8000-${String(++u).padStart(12
 const almacenFalso = () => { const m = new Map(); return { m, getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
 const roto = { getItem() { throw new Error("sin almacenamiento"); }, setItem() { throw new Error("cuota"); }, removeItem() { throw new Error("x"); } };
 // Una "pestaña" = un gestor (memoria propia) + su sessionStorage; el localStorage es compartido entre pestañas del mismo navegador.
-const pestana = (local, sesion = almacenFalso()) => crearGestorIntenciones({ local, sesion, nuevoUuid: uuid });
+let reloj = 1_000_000; const pestana = (local, sesion = almacenFalso()) => crearGestorIntenciones({ local, sesion, nuevoUuid: uuid, ahora: () => reloj });
+const copiar = (ses) => { const c = almacenFalso(); for (const [k, v] of ses.m) c.m.set(k, v); return c; };   // el navegador copia sessionStorage al duplicar la pestaña
 const H = () => huellaComanda("Mesa 1", items);
 const items = [{ producto: { nombre: "Hamburguesa", precio: 5000 }, cantidad: 2, nota: "" }];
 // Base falsa: restricción única (empresa, clave) y folio asignado por la "base" (el número del navegador se ignora).
@@ -40,6 +41,7 @@ test("respuesta perdida → recarga → reintento: UNA venta y el MISMO folio", 
   assert.ok(r1.error); assert.equal(db.filas.length, 1);                                  // guardada, sin respuesta
   const folio = db.filas[0].numero;
   // recarga: el estado en memoria se pierde, el almacenamiento del navegador no
+  g.liberar();                                                                            // pagehide de la página anterior
   const g2 = pestana(local, ses);                                                         // misma pestaña (mismo sessionStorage), memoria nueva
   const rec = await recuperarPendiente(db, g2, EMP);
   assert.deepEqual(rec && rec.numero, folio);                                             // se recupera la comanda guardada
@@ -110,10 +112,12 @@ test("dos pestañas: la recarga de cada una recupera SOLO su comanda; cerrar una
   const ca = A.claveParaEnvio(EMP, H()), cb = B.claveParaEnvio(EMP, H());
   await guardarComandaIdempotente(db, EMP, ca, fila({ mesa: "A" })); await guardarComandaIdempotente(db, EMP, cb, fila({ mesa: "B" }));
   assert.equal(db.filas.length, 2);
+  A.liberar(); B.liberar();                                                               // pagehide
   const A2 = pestana(local, sa), B2 = pestana(local, sb);                                 // ambas recargan
   assert.equal((await recuperarPendiente(db, A2, EMP)).id, db.filas.find((f) => f.mesa === "A").id);
   assert.equal((await recuperarPendiente(db, B2, EMP)).id, db.filas.find((f) => f.mesa === "B").id);
   A2.cerrar();
+  A2.liberar(); B2.liberar();
   assert.equal(await recuperarPendiente(db, pestana(local, sa), EMP), null);
   assert.ok(await recuperarPendiente(db, pestana(local, sb), EMP));                       // la de B sigue intacta
 });
@@ -124,4 +128,54 @@ test("la intención es por negocio y caduca; un id de pestaña inválido se rege
   const c = g.claveParaEnvio(EMP, "h"); assert.match(ses.getItem("lf_tab_id"), /^[0-9a-f-]{36}$/);
   assert.equal(g.leer("bbbbbbbb-0000-4000-8000-00000000000b"), null);
   t += 25 * 3600 * 1000; assert.equal(g.leer(EMP), null); assert.notEqual(g.claveParaEnvio(EMP, "h"), c);
+});
+
+test("pestaña DUPLICADA (sessionStorage copiado): dos pedidos independientes no comparten intención ni clave", async () => {
+  const db = baseFalsa(); const local = almacenFalso(), sa = almacenFalso();
+  const A = pestana(local, sa); const ca = A.claveParaEnvio(EMP, H());                    // A tiene su comanda en curso
+  const B = pestana(local, copiar(sa));                                                    // pestaña duplicada: mismo id copiado
+  assert.notEqual(B.tabId(), A.tabId()); assert.equal(B.duplicada, true); assert.equal(A.duplicada, false);
+  assert.equal(await recuperarPendiente(db, B, EMP), null);                                // B no hereda la intención de A
+  const cb = B.claveParaEnvio(EMP, H());                                                   // mismos productos, pedido independiente
+  assert.notEqual(cb, ca);
+  await guardarComandaIdempotente(db, EMP, ca, fila()); await guardarComandaIdempotente(db, EMP, cb, fila());
+  assert.equal(db.filas.length, 2); assert.notEqual(db.filas[0].numero, db.filas[1].numero);
+  const idA = A.tabId(); A.latido(); assert.equal(A.tabId(), idA); assert.notEqual(B.tabId(), idA);   // A conserva su identidad
+  assert.equal(A.claveParaEnvio(EMP, H()), ca);
+});
+
+test("duplicada con respuesta perdida en A: A recupera lo suyo y B no lo adopta", async () => {
+  const db = baseFalsa({ perderRespuestaEnInsert: 1 }); const local = almacenFalso(), sa = almacenFalso();
+  const A = pestana(local, sa); const ca = A.claveParaEnvio(EMP, H());
+  await guardarComandaIdempotente(db, EMP, ca, fila());                                    // guardada, respuesta perdida
+  const B = pestana(local, copiar(sa));
+  assert.equal(await recuperarPendiente(db, B, EMP), null);
+  assert.equal((await recuperarPendiente(db, A, EMP)).numero, db.filas[0].numero);
+});
+
+test("recarga LEGÍTIMA (la pestaña libera su id al salir) recupera su intención; sin liberar pero con latido caducado también", async () => {
+  const db = baseFalsa({ perderRespuestaEnInsert: 1 }); const local = almacenFalso(), sa = almacenFalso();
+  const A = pestana(local, sa); const ca = A.claveParaEnvio(EMP, H()); const idA = A.tabId();
+  await guardarComandaIdempotente(db, EMP, ca, fila());
+  A.liberar();                                                                             // pagehide
+  const A2 = pestana(local, sa);
+  assert.equal(A2.tabId(), idA); assert.equal(A2.duplicada, false);
+  assert.equal((await recuperarPendiente(db, A2, EMP)).numero, db.filas[0].numero);
+  // la página murió sin pagehide: tras caducar el arrendamiento, la recarga sigue recuperando
+  reloj += 200_000;
+  const A3 = pestana(local, sa);
+  assert.equal(A3.duplicada, false); assert.equal(A3.claveParaEnvio(EMP, H()), ca);
+});
+
+test("el latido mantiene viva la identidad aunque la pestaña original lleve horas en segundo plano", () => {
+  const local = almacenFalso(), sa = almacenFalso();
+  const A = pestana(local, sa); A.claveParaEnvio(EMP, H());
+  reloj += 100_000; A.latido(); reloj += 100_000;                                          // latidos espaciados (< 130 s entre sí)
+  const B = pestana(local, copiar(sa)); B.tabId(); assert.equal(B.duplicada, true);
+});
+
+test("duplicada con almacenamiento roto: no hay intención compartida, la clave sigue en memoria", () => {
+  const A = crearGestorIntenciones({ local: roto, sesion: roto, nuevoUuid: uuid }), B = crearGestorIntenciones({ local: roto, sesion: roto, nuevoUuid: uuid });
+  const ca = A.claveParaEnvio(EMP, H()), cb = B.claveParaEnvio(EMP, H());
+  assert.notEqual(ca, cb); assert.equal(A.claveParaEnvio(EMP, H()), ca);
 });
