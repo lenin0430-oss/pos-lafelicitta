@@ -44,13 +44,13 @@ on conflict (id) do nothing;
 
 -- Ventas de ejemplo (numero 9001+ para no chocar con las existentes). Cocina y pago separados.
 insert into ventas (id, numero, mesa, mesero, personas, metodo_pago, total, items, estado, estado_pago, pagado_at, empresa_id, tipo_servicio) values
- ('e2e50000-0000-4000-8000-0000000000a1',9001,'E2E-A1','E2E Garzon A',2,null,5500,
+ ('e2e50000-0000-4000-8000-0000000000a1',9001,'E2E-A1','E2E Garzon A',2,'',5500,
    '[{"nombre":"E2E Plato común","precio_unit":4000,"cantidad":1},{"nombre":"E2E Bebida A","precio_unit":1500,"cantidad":1}]','pendiente','pendiente',null,'e2e00000-0000-4000-8000-00000000000a','mesa'),
  ('e2e50000-0000-4000-8000-0000000000a2',9002,'E2E-A2','E2E Garzon A',1,'Efectivo',4000,
    '[{"nombre":"E2E Plato común","precio_unit":4000,"cantidad":1}]','listo','pagado',now(),'e2e00000-0000-4000-8000-00000000000a','mesa'),
  ('e2e50000-0000-4000-8000-0000000000a3',9003,'E2E-A1','E2E Garzon A',1,'Cortesia',1500,
    '[{"nombre":"E2E Bebida A","precio_unit":1500,"cantidad":1}]','listo','cortesia',now(),'e2e00000-0000-4000-8000-00000000000a','mesa'),
- ('e2e50000-0000-4000-8000-0000000000b1',9101,'E2E-B1','E2E Garzon B',2,null,7000,
+ ('e2e50000-0000-4000-8000-0000000000b1',9101,'E2E-B1','E2E Garzon B',2,'',7000,
    '[{"nombre":"E2E Plato común","precio_unit":5000,"cantidad":1},{"nombre":"E2E Bebida B","precio_unit":2000,"cantidad":1}]','pendiente','pendiente',null,'e2e00000-0000-4000-8000-00000000000b','mesa')
 on conflict (id) do nothing;
 
