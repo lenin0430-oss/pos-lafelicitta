@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
+import { esProvisional } from '@/lib/turnosVista'
 
 type Medios = { efectivo: number; debito: number; credito: number; transferencia: number; qr: number; por_conciliar: number }
 type Resumen = {
@@ -13,9 +14,10 @@ type Resumen = {
   propinas_registradas: number; esperado: Medios
   pendientes: { cobros_por_conciliar: number; monto_por_conciliar: number; ventas_sin_cobrar: number }
 }
+const provisional = esProvisional
 const abierto_ = (r: any) => Boolean(r?.abierto && r?.resumen)
 type Cobro = { id: string; medio?: string; monto: number; proveedor: string; hora: string; comanda: number | null; mesa: string | null; mesero: string | null; referencia: string | null }
-type Cierre = { id: string; fecha_apertura: string; apertura_at: string; cierre_at: string; con_pendientes: boolean; notas: string | null; medios: { medio: string; esperado: number; contado: number | null; diferencia: number | null }[] }
+type Cierre = { id: string; resumen: Resumen | null; fecha_apertura: string; apertura_at: string; cierre_at: string; con_pendientes: boolean; notas: string | null; medios: { medio: string; esperado: number; contado: number | null; diferencia: number | null }[] }
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' })
@@ -44,7 +46,9 @@ export default function CierrePage() {
   const [clave, setClave] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const [cerrado, setCerrado] = useState<any>(null)
-  const [cerradoContados, setCerradoContados] = useState<Record<string, number>>({})
+  // Ticket a imprimir: SIEMPRE las cifras guardadas del cierre (instantánea), nunca un recálculo.
+  const [ticket, setTicket] = useState<{ resumen: Resumen; contados: Record<string, number>; conPendientes: boolean; reimpresion: boolean; auto: boolean } | null>(null)
+  const [aviso, setAviso] = useState<{ ok: boolean; msg?: string } | null>(null)
   const [hist, setHist] = useState<Cierre[]>([])
 
   const visto = useRef<string>('')   // resumen que la cajera tiene en pantalla (para detectar cambios de otro equipo)
@@ -93,18 +97,31 @@ export default function CierrePage() {
       if (r.codigo === 'resumen_cambio' && r.resumen) { setRes(r.resumen); visto.current = JSON.stringify(r.resumen.esperado) }
       setMsg({ t: r.error ?? 'No se pudo cerrar', ok: false }); setConfirmando(false); return
     }
-    setCerrado(r); setCerradoContados(contados); setConfirmando(false); setCont({}); setNotas(''); await cargar()
-    try { // aviso al dueño (mismo canal de antes); los "por confirmar" NO se cuentan como QR
-      const x = r.resumen
-      await fetch('/api/cierre-whatsapp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    setCerrado(r); setTicket({ resumen: r.resumen, contados, conPendientes: Boolean(r.con_pendientes), reimpresion: false, auto: false }); setAviso(null); setConfirmando(false); setCont({}); setNotas(''); await cargar()
+    // Aviso al dueño: va DESPUÉS de guardar el cierre; si falla, el cierre sigue guardado y se dice claramente que NO se envió.
+    // Con Point por confirmar no se envía (la diferencia es provisional y el mensaje actual la presentaría como definitiva).
+    const x = r.resumen
+    if (provisional(x)) { setAviso({ ok: false, msg: 'no se envió: hay Point por confirmar y la diferencia es provisional' }); return }
+    try {
+      const w = await fetch('/api/cierre-whatsapp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         cajero: x.turno.cajero, fecha: new Date(x.turno.apertura_at).toLocaleDateString('es-CL', { timeZone: 'America/Santiago' }),
-        hora_apertura: hora(x.turno.apertura_at), hora_cierre: hora(x.turno.cierre_at),
+        hora_apertura: hora(x.turno.apertura_at), hora_cierre: hora(x.turno.cierre_at as string),
         ventas_total: Object.values(x.cobros as Record<string, number>).reduce((a, b) => a + b, 0) - x.cobros.cortesia,
         ventas_efectivo: x.cobros.efectivo, ventas_debito: x.cobros.debito + x.cobros.credito, ventas_qr: x.cobros.qr, ventas_transferencia: x.cobros.transferencia,
         efectivo_fisico: contados.efectivo, efectivo_esperado: x.esperado.efectivo, diferencia: contados.efectivo - x.esperado.efectivo,
-        fondo_inicial: x.fondo, gastos_caja: x.gastos_caja, notas }) })
-    } catch { /* el cierre ya quedó guardado */ }
+        fondo_inicial: x.fondo, gastos_caja: x.gastos_caja }) })
+      const j = await w.json().catch(() => null)
+      setAviso(w.ok && j?.ok !== false ? { ok: true } : { ok: false, msg: j?.error ?? `error ${w.status}` })
+    } catch { setAviso({ ok: false, msg: 'sin conexión' }) }
   }
+
+  function reimprimir(c: Cierre) {
+    if (!c.resumen) return
+    const contados: Record<string, number> = {}
+    for (const m of c.medios) if (m.contado !== null) contados[m.medio] = m.contado
+    setTicket({ resumen: c.resumen, contados, conPendientes: c.con_pendientes, reimpresion: true, auto: true })
+  }
+  useEffect(() => { if (ticket?.auto) { setTicket({ ...ticket, auto: false }); setTimeout(() => window.print(), 150) } }, [ticket])
 
   const card: React.CSSProperties = { background: 'var(--card, #fff)', border: '1px solid var(--border, #ddd)', borderRadius: 12, padding: 16, marginBottom: 14 }
   const inp: React.CSSProperties = { padding: 10, fontSize: 18, borderRadius: 8, border: '1px solid var(--border, #bbb)', width: '100%', boxSizing: 'border-box' }
@@ -115,15 +132,16 @@ export default function CierrePage() {
       <>
         {/* Ticket 58 mm: solo se ve al imprimir (globals.css) */}
         <div id="cierre-print" style={{ display: 'none' }}>
-          {cerrado?.ok && (() => {
-            const x = cerrado.resumen
+          {ticket && (() => {
+            const x = ticket.resumen; const cont = ticket.contados; const prov = provisional(x)
             return (<>
               <div className="t-logo">CIERRE DE TURNO</div>
+              {ticket.reimpresion && <div className="t-sub">REIMPRESIÓN · cifras del cierre original</div>}
               <hr className="t-divider" />
               <div className="t-meta">
                 <span>Turno del {dia(x.turno.apertura_at)}</span>
                 <span>Abierto: {hora(x.turno.apertura_at)}</span>
-                <span>Cerrado: {hora(x.turno.cierre_at)}</span>
+                <span>Cerrado: {hora(x.turno.cierre_at as string)}</span>
                 <span>Cajero: {x.turno.cajero}</span>
               </div>
               <hr className="t-divider" />
@@ -135,9 +153,10 @@ export default function CierrePage() {
               </div>
               <hr className="t-divider" />
               <div className="t-meta">
-                {(Object.keys(x.esperado) as (keyof Medios)[]).filter(m => x.esperado[m] !== 0 || cerradoContados[m] !== undefined).map(m => (
-                  <span key={m}>{NOMBRE[m]}: esperado {fmt(x.esperado[m])} / contado {cerradoContados[m] === undefined ? 'sin comprobar' : fmt(cerradoContados[m])}{cerradoContados[m] !== undefined && cerradoContados[m] !== x.esperado[m] ? ` / dif. ${cerradoContados[m] - x.esperado[m] > 0 ? '+' : '-'}${fmt(Math.abs(cerradoContados[m] - x.esperado[m]))}` : ''}</span>))}
-                {cerrado.con_pendientes && <span><strong>CON PENDIENTES</strong></span>}
+                {(Object.keys(x.esperado) as (keyof Medios)[]).filter(m => x.esperado[m] !== 0 || cont[m] !== undefined).map(m => (
+                  <span key={m}>{NOMBRE[m]}: esperado {fmt(x.esperado[m])} / contado {cont[m] === undefined ? 'sin comprobar' : fmt(cont[m])}{cont[m] !== undefined && cont[m] !== x.esperado[m] ? ` / dif.${m === 'efectivo' && prov ? ' PROVISIONAL' : ''} ${cont[m] - x.esperado[m] > 0 ? '+' : '-'}${fmt(Math.abs(cont[m] - x.esperado[m]))}` : ''}</span>))}
+                {prov && <span><strong>DIFERENCIA PROVISIONAL: hay Point por confirmar</strong></span>}
+                {ticket.conPendientes && <span><strong>CON PENDIENTES</strong></span>}
               </div>
               <hr className="t-divider" />
               <div className="t-footer">Firma: _______________</div>
@@ -222,7 +241,9 @@ export default function CierrePage() {
               <h2 style={{ fontSize: 18 }}>3 · Contar y comprobar</h2>
               <label>Efectivo contado (obligatorio)
                 <input style={inp} inputMode="numeric" value={cont.efectivo ?? ''} onChange={e => setCont({ ...cont, efectivo: e.target.value })} aria-label="Efectivo contado" /></label>
-              {diff !== null && <p style={{ fontSize: 18, color: diff === 0 ? 'var(--green, #2a9d5c)' : 'var(--red, #d33)' }}>Esperado {fmt(efEsp)} · {diff === 0 ? 'cuadra' : diff > 0 ? `sobran ${fmt(diff)}` : `faltan ${fmt(-diff)}`}</p>}
+              {diff !== null && (provisional(res)
+                ? <p style={{ fontSize: 16, color: 'var(--gold, #c8962a)' }}><b>Diferencia PROVISIONAL: {diff > 0 ? '+' : diff < 0 ? '−' : ''}{fmt(Math.abs(diff))}</b> (esperado {fmt(efEsp)}). Hay {fmt(res.esperado.por_conciliar)} de Point por confirmar; si alguno fue efectivo, el esperado cambia. Confírmalos antes de cerrar para tener la diferencia definitiva.</p>
+                : <p style={{ fontSize: 18, color: diff === 0 ? 'var(--green, #2a9d5c)' : 'var(--red, #d33)' }}>Esperado {fmt(efEsp)} · {diff === 0 ? 'cuadra' : diff > 0 ? `sobran ${fmt(diff)}` : `faltan ${fmt(-diff)}`}</p>)}
               {ELECTRONICOS.filter(m => res.esperado[m] > 0).map(m => (
                 <label key={m} style={{ display: 'block', marginTop: 8 }}>{NOMBRE[m]} {m === 'transferencia' ? 'comprobada' : 'comprobado'} (esperado {fmt(res.esperado[m])})
                   <input style={inp} inputMode="numeric" value={cont[m] ?? ''} onChange={e => setCont({ ...cont, [m]: e.target.value })} aria-label={`${NOMBRE[m]} ${m === 'transferencia' ? 'comprobada' : 'comprobado'}`} /></label>))}
@@ -242,6 +263,8 @@ export default function CierrePage() {
             <section style={{ ...card, borderColor: 'var(--green, #2a9d5c)' }} aria-label="Turno cerrado">
               <h2 style={{ fontSize: 18 }}>Turno cerrado{cerrado.repetido ? ' (ya estaba cerrado)' : ''}</h2>
               <div>Abierto {hora(cerrado.resumen.turno.apertura_at)} · cerrado {hora(cerrado.resumen.turno.cierre_at)}{cerrado.con_pendientes ? ' · con pendientes' : ''}</div>
+              {provisional(cerrado.resumen) && <div style={{ color: 'var(--gold, #c8962a)' }}>Diferencia de efectivo PROVISIONAL: hay Point por confirmar.</div>}
+              {aviso && <div style={{ color: aviso.ok ? 'var(--green, #2a9d5c)' : 'var(--red, #d33)' }}>{aviso.ok ? 'Aviso al dueño: enviado.' : `Aviso al dueño: NO enviado (${aviso.msg}). El cierre sí quedó guardado; avísale tú.`}</div>}
               <button style={{ ...btn(false), marginTop: 8 }} onClick={() => window.print()}>Imprimir</button>
             </section>
           )}
@@ -254,7 +277,8 @@ export default function CierrePage() {
                   <summary>Turno del {dia(c.apertura_at)} · {hora(c.apertura_at)}–{hora(c.cierre_at)}{c.con_pendientes ? ' · con pendientes' : ''}</summary>
                   {c.medios.filter(m => m.esperado !== 0 || m.contado !== null).map(m => (
                     <div key={m.medio} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span>{NOMBRE[m.medio] ?? m.medio}</span>
-                      <span>esperado {fmt(m.esperado)} · contado {m.contado === null ? 'sin comprobar' : fmt(m.contado)}{m.diferencia !== null && m.diferencia !== 0 ? ` · dif. ${m.diferencia > 0 ? '+' : '−'}${fmt(Math.abs(m.diferencia))}` : ''}</span></div>))}
+                      <span>esperado {fmt(m.esperado)} · contado {m.contado === null ? 'sin comprobar' : fmt(m.contado)}{m.diferencia !== null && m.diferencia !== 0 ? ` · dif.${m.medio === 'efectivo' && provisional(c.resumen) ? ' PROVISIONAL' : ''} ${m.diferencia > 0 ? '+' : '−'}${fmt(Math.abs(m.diferencia))}` : ''}</span></div>))}
+                  {c.resumen && <button style={{ ...btn(false), marginTop: 6, padding: '8px 12px', fontSize: 14 }} onClick={() => reimprimir(c)}>Reimprimir cierre</button>}
                 </details>))}
             </section>
           )}

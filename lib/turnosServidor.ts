@@ -128,7 +128,7 @@ export async function accionTurno(db: Db, s: SesionT, b: any): Promise<RespT> {
 
 // Historial auditable: últimos cierres del negocio con esperado/contado/diferencia por medio.
 export async function historialTurnos(db: Db, s: SesionT): Promise<RespT> {
-  const c = await db.from("cierres_turno").select("id,turno_id,fecha_apertura,apertura_at,cierre_at,fondo_contado,cerrado_por,notas,con_pendientes").eq("empresa_id", s.empresa_id).order("cierre_at", { ascending: false }).limit(30);
+  const c = await db.from("cierres_turno").select("id,turno_id,fecha_apertura,apertura_at,cierre_at,fondo_contado,cerrado_por,notas,con_pendientes,resumen").eq("empresa_id", s.empresa_id).order("cierre_at", { ascending: false }).limit(30);
   const ids = (c?.data ?? []).map((x: any) => x.id);
   const m = ids.length ? await db.from("cierres_turno_medios").select("cierre_id,medio,esperado,contado,diferencia").in("cierre_id", ids) : { data: [] };
   const por: Record<string, unknown[]> = {};

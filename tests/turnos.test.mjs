@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { medioDesdeOrden } from "../lib/medioPoint.ts";
-import { accionTurno, estadoTurno } from "../lib/turnosServidor.ts";
+import { accionTurno, estadoTurno, historialTurnos } from "../lib/turnosServidor.ts";
+import { esProvisional, textoDiferenciaEfectivo } from "../lib/turnosVista.ts";
 
 const EMP = "aaaaaaaa-0000-4000-8000-00000000000a", OTRA = "bbbbbbbb-0000-4000-8000-00000000000b";
 const T1 = "11111111-1111-4111-8111-111111111111", CL = "22222222-2222-4222-8222-222222222222";
@@ -148,4 +149,31 @@ test("error de base no filtra detalle", async () => {
 test("estado sin turno devuelve turno null", async () => {
   const db = { from: () => ({ select() { return this; }, eq() { return this; }, order() { return this; }, limit() { return this; }, maybeSingle: async () => ({ data: null }) }), rpc: async () => ({}) };
   assert.deepEqual((await estadoTurno(db, ses)).body, { ok: true, turno: null });
+});
+
+test("diferencia PROVISIONAL mientras haya Point por confirmar; definitiva si no", () => {
+  const con = { pendientes: { cobros_por_conciliar: 2 }, esperado: { por_conciliar: 11000 } };
+  const sin = { pendientes: { cobros_por_conciliar: 0 }, esperado: { por_conciliar: 0 } };
+  assert.equal(esProvisional(con), true); assert.equal(esProvisional(sin), false); assert.equal(esProvisional(null), false);
+  assert.equal(esProvisional({ pendientes: { cobros_por_conciliar: 0 }, esperado: { por_conciliar: 500 } }), true);
+  assert.match(textoDiferenciaEfectivo(-9090, true), /PROVISIONAL: −\$9\.090/);
+  assert.doesNotMatch(textoDiferenciaEfectivo(-9090, true), /[Ff]alta/);
+  assert.match(textoDiferenciaEfectivo(-9090, false), /Faltan \$9\.090/);
+  assert.equal(textoDiferenciaEfectivo(0, false), "Cuadra");
+  assert.match(textoDiferenciaEfectivo(500, true), /PROVISIONAL: \+\$500/);
+});
+
+test("historial entrega la instantánea guardada (resumen) y los contados originales para reimprimir", async () => {
+  const guardado = { turno: { id: T1 }, fondo: 1000, esperado: { efectivo: 19090 } };
+  const tablas = {
+    cierres_turno: [{ id: "k1", empresa_id: EMP, cierre_at: "2026-11-03T03:40:00Z", resumen: guardado, con_pendientes: false }],
+    cierres_turno_medios: [{ cierre_id: "k1", medio: "efectivo", esperado: 19090, contado: 10000, diferencia: -9090 }],
+  };
+  const from = (t) => { const f = []; let inn = null; const q = { select: () => q, eq: (c, v) => (f.push([c, v]), q), order: () => q, limit: () => q, in: (c, vs) => (inn = [c, vs], q),
+    then: (ok) => ok({ data: (tablas[t] ?? []).filter((r) => f.every(([c, v]) => r[c] === v) && (!inn || inn[1].includes(r[inn[0]]))) }) }; return q; };
+  const r = await historialTurnos({ from, rpc: async () => ({}) }, ses);
+  assert.deepEqual(r.body.cierres[0].resumen, guardado);                       // se reimprime con lo guardado
+  assert.deepEqual(r.body.cierres[0].medios[0], tablas.cierres_turno_medios[0]);
+  const otra = await historialTurnos({ from, rpc: async () => ({}) }, { ...ses, empresa_id: OTRA });
+  assert.deepEqual(otra.body.cierres, []);                                      // otro negocio no ve este cierre
 });
