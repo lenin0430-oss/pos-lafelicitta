@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Nav from '@/components/Nav'
 import AuthGuard from '@/components/AuthGuard'
+import { separarCliente } from '@/lib/clienteAbono'
 
 type Abono = { monto: number; medio: string; at: string }
 type PorCobrar = { venta_id: string; numero: number | null; mesa: string | null; total: number; creada: string; abonado: number; saldo: number; cliente: string | null; abonos: Abono[] }
@@ -77,6 +78,7 @@ export default function PorCobrarPage() {
             </div>
             {ventas.map(v => {
               const m = medio[v.venta_id] || ''
+              const c = separarCliente(v.cliente)
               const ocupado = trabajando === v.venta_id
               const monto = parseInt(abonoMonto[v.venta_id] || '0') || 0
               const abonoOk = !!m && monto > 0 && monto < v.saldo
@@ -84,8 +86,9 @@ export default function PorCobrarPage() {
                 <div key={v.venta_id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, marginBottom: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 700 }}>#{String(v.numero ?? 0).padStart(3, '0')} · {v.mesa || 'Sin nombre'}</div>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{v.cliente ? v.cliente + ' · ' : ''}{new Date(v.creada).toLocaleDateString('es-CL')}</div>
+                      <div style={{ fontSize: 17, fontWeight: 700 }}>{c.nombre || ('#' + String(v.numero ?? 0).padStart(3, '0') + ' · ' + (v.mesa || 'Sin nombre'))}</div>
+                      {c.telefono && <div style={{ fontSize: 13, marginTop: 2 }}>📞 {c.telefono}</div>}
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{c.nombre ? '#' + String(v.numero ?? 0).padStart(3, '0') + ' · ' + (v.mesa || 'Sin nombre') + ' · ' : ''}{new Date(v.creada).toLocaleDateString('es-CL')}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 11, color: 'var(--muted)' }}>Saldo</div>

@@ -6,6 +6,7 @@ import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Product
 import { getEmpresaIdActual, getSesion } from '@/lib/auth'
 import { huellaComanda, crearGestorIntenciones, recuperarPendiente, resolverHuerfanas, guardarComandaIdempotente, type Canal } from '@/lib/intencionComanda'
 import AuthGuard from '@/components/AuthGuard'
+import { componerCliente } from '@/lib/clienteAbono'
 import SesionBar from '@/components/SesionBar'
 import BotonCobrarPoint from '@/components/BotonCobrarPoint'
 import { useEmpresaNombre } from '@/lib/useEmpresaNombre'
@@ -62,6 +63,7 @@ export default function CajaPage() {
   const [abonoMonto, setAbonoMonto] = useState('')
   const [abonoMedio, setAbonoMedio] = useState('')
   const [abonoCliente, setAbonoCliente] = useState('')
+  const [abonoTelefono, setAbonoTelefono] = useState('')
   const [abonando, setAbonando] = useState(false)
   const [propinaMonto, setPropinaMonto] = useState('')
   const [propinaEmpleado, setPropinaEmpleado] = useState('')
@@ -466,7 +468,7 @@ export default function CajaPage() {
     setAbonando(true)
     try {
       const r = await fetch('/api/abonos', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'abonar', venta_id: ventaId, monto, medio: abonoMedio, cliente: abonoCliente.trim() || undefined }) })
+        body: JSON.stringify({ accion: 'abonar', venta_id: ventaId, monto, medio: abonoMedio, cliente: componerCliente(abonoCliente, abonoTelefono) || undefined }) })
       const j = await r.json().catch(() => null)
       if (!r.ok || !j?.ok) {
         if (j?.codigo === 'sin_turno') setTurnoAbierto(false)
@@ -476,7 +478,7 @@ export default function CajaPage() {
       }
       setCobrada(true)
       setModalCobro(false)
-      setAbonoMonto(''); setAbonoMedio(''); setAbonoCliente('')
+      setAbonoMonto(''); setAbonoMedio(''); setAbonoCliente(''); setAbonoTelefono('')
       mostrarMensaje(`Abono de ${fmt(monto)} registrado. Quedan ${fmt(j.saldo)} por cobrar en «Por cobrar» ✓`, 'ok')
     } catch {
       mostrarMensaje('Sin conexión con el servidor', 'err')
@@ -868,7 +870,8 @@ export default function CajaPage() {
                     <button key={id} onClick={() => setAbonoMedio(id)} style={{ padding: '6px 12px', borderRadius: 20, border: '1px solid ' + (abonoMedio === id ? 'var(--gold)' : 'var(--border)'), background: abonoMedio === id ? 'var(--gold)' : 'var(--surface2)', color: abonoMedio === id ? 'var(--on-accent)' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{label}</button>
                   ))}
                 </div>
-                <input value={abonoCliente} onChange={e => setAbonoCliente(e.target.value)} maxLength={80} placeholder="Cliente (nombre o teléfono)" style={inp} />
+                <input value={abonoCliente} onChange={e => setAbonoCliente(e.target.value)} maxLength={50} placeholder="Nombre del cliente" style={inp} />
+                <input value={abonoTelefono} onChange={e => setAbonoTelefono(e.target.value)} maxLength={20} inputMode="tel" placeholder="Teléfono (opcional)" style={{ ...inp, marginTop: 8 }} />
                 {(parseInt(abonoMonto || '0') || 0) > 0 && (parseInt(abonoMonto || '0') || 0) < total && (
                   <div style={{ marginTop: 8, fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--gold)' }}>Saldo por cobrar: {fmt(total - (parseInt(abonoMonto || '0') || 0))}</div>
                 )}

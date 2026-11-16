@@ -78,3 +78,23 @@ test("estados: una venta abonada no se cobra por el camino normal ni cuenta como
   assert.equal(ventaPuedeCobrarse({ estado_pago: "abonada" }), false);
   assert.equal(estaPagada({ estado_pago: "abonada" }), false);
 });
+
+import { componerCliente, separarCliente } from "../lib/clienteAbono.ts";
+import { etiquetaMetodo } from "../lib/reportes.ts";
+
+test("cliente: nombre y teléfono se componen y se separan sin perder nada", () => {
+  assert.equal(componerCliente("  Luna ", "0412-555 1234"), "Luna · 0412-555 1234");
+  assert.equal(componerCliente("Luna", ""), "Luna");
+  assert.equal(componerCliente("", "912345678"), "912345678");
+  assert.equal(componerCliente("Ana · x", "abc9123456"), "Ana x · 9123456");
+  assert.deepEqual(separarCliente("Luna · 912345678"), { nombre: "Luna", telefono: "912345678" });
+  assert.deepEqual(separarCliente("luna"), { nombre: "luna", telefono: "" });
+  assert.deepEqual(separarCliente("912345678"), { nombre: "", telefono: "912345678" });
+  assert.deepEqual(separarCliente(null), { nombre: "", telefono: "" });
+  assert.ok(componerCliente("x".repeat(200), "1".repeat(100)).length <= 80);
+});
+
+test("reportes: una venta abonada se etiqueta «Abonada», no «Sin identificar»", () => {
+  assert.equal(etiquetaMetodo({ id: "1", total: 1, created_at: "x", estado_pago: "abonada", metodo_pago: "" }), "Abonada (saldo por cobrar)");
+  assert.equal(etiquetaMetodo({ id: "1", total: 1, created_at: "x", estado_pago: "sin_identificar", metodo_pago: "" }), "Sin identificar");
+});

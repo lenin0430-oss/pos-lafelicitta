@@ -36,6 +36,7 @@ export function cobrosDelPeriodo<T extends VentaRep>(ventas: T[], desde: string 
 
 export function etiquetaMetodo(v: VentaRep): string {
   const m = (v.metodo_pago ?? "").trim();
+  if (v.estado_pago === "abonada") return "Abonada (saldo por cobrar)";
   if (v.estado_pago === "sin_identificar" || (!m && v.estado_pago !== "pendiente")) return "Sin identificar";
   return m || "—";
 }
