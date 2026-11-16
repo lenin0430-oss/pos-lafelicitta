@@ -6,6 +6,7 @@ const LINKS_ADMIN = [
   { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
   { href: '/por-cobrar', label: '🧾 Por cobrar' },
+  { href: '/consumos', label: '🍽️ Consumos' },
   { href: '/productos', label: '🏷️ Productos' },
   { href: '/gastos', label: '💸 Gastos' },
   { href: '/propinas', label: '💰 Propinas' },
@@ -20,6 +21,7 @@ const LINKS_GARZON = [
   { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
   { href: '/por-cobrar', label: '🧾 Por cobrar' },
+  { href: '/consumos', label: '🍽️ Consumos' },
   { href: '/gastos', label: '💸 Gastos' },
   { href: '/cierre', label: '🔒 Turno y arqueo' },
 ]

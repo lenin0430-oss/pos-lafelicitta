@@ -33,6 +33,7 @@ export async function verificarContexto(db: Db, empresaId: string, plan: Extract
     const cuerpo = (plan.pasos[0].a[0] ?? {}) as Record<string, unknown>;
     if (chequeos.includes("venta_no_point") && filas.some((f) => String(f.metodo_pago ?? "").toLowerCase() === "point")) return fallo(409, "La venta fue cobrada con Point y no se puede modificar");
     if (chequeos.includes("venta_cobrada") && filas.some((f) => (f.estado_pago ?? "pendiente") === "pendiente")) return fallo(409, "La venta aún no está cobrada: no hay medio de pago que corregir");
+    if (chequeos.includes("venta_cobrada") && filas.some((f) => f.estado_pago === "consumo_personal")) return fallo(409, "Es un consumo personal de un trabajador: no tiene medio de pago que corregir");
     if (chequeos.includes("venta_sin_identificar") && filas.some((f) => f.estado_pago !== "sin_identificar")) return fallo(409, "Solo una venta «sin identificar» puede pasar a cobrada al asignarle un medio de pago");
     if (chequeos.includes("venta_sin_cobro")) {
       if (filas.some((f) => f.metodo_pago)) return fallo(409, "La venta ya tiene medio de pago");

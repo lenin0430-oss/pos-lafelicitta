@@ -57,6 +57,8 @@ export default function CierrePage() {
   const [rol, setRol] = useState<'admin' | 'garzon'>('garzon')
   const [arqueo, setArqueo] = useState<Arqueo | null>(null)
   const [motivoDevolucion, setMotivoDevolucion] = useState('')
+  // Consumos de trabajadores sin descontar (migración 12): no mueven la caja, pero hay que descontarlos del pago de hoy.
+  const [consumos, setConsumos] = useState<{ cantidad: number; total: number; trabajadores: { trabajador: string; total: number; cantidad: number }[] }>({ cantidad: 0, total: 0, trabajadores: [] })
 
   const visto = useRef<string>('')   // resumen que la cajera tiene en pantalla (para detectar cambios de otro equipo)
   const cargar = useCallback(async () => {
@@ -72,6 +74,11 @@ export default function CierrePage() {
       const h = await api('GET', undefined, '?historial=1')
       if (h.ok) setHist(h.cierres)
     } else setHist([])
+    try {   // si la lectura falla no bloquea el cierre: solo no se muestra el aviso
+      const c = await fetch('/api/consumo-personal', { credentials: 'same-origin', cache: 'no-store' })
+      const cj = await c.json().catch(() => null)
+      if (c.ok && cj?.ok) setConsumos({ cantidad: cj.cantidad ?? 0, total: cj.total ?? 0, trabajadores: cj.trabajadores ?? [] })
+    } catch { /* sin aviso */ }
     setCargando(false)
   }, [])
   useEffect(() => {
@@ -110,6 +117,7 @@ export default function CierrePage() {
   async function cerrar() {
     if (!res || rol !== 'admin' || arqueo?.estado !== 'pendiente') return
     const contados = arqueo.contado
+    if (consumos.cantidad > 0 && !confirm(`Hay ${fmt(consumos.total)} en consumos de trabajadores SIN descontar (${consumos.trabajadores.map(t => t.trabajador).join(', ')}).\n¿Cerrar el turno igual? Quedarán pendientes para el próximo día.`)) return
     setOcupado(true)
     const r = await api('POST', { accion: 'cerrar', turno_id: res.turno.id, arqueo_id: arqueo.id })
     setOcupado(false)
@@ -236,6 +244,16 @@ export default function CierrePage() {
                         <a href={RUTA_BLOQUEO[x.ir].href} style={{ fontWeight: 700 }}>{RUTA_BLOQUEO[x.ir].texto}</a>
                       </div>))}
                   </div>))}
+              </section>
+            )}
+
+            {consumos.cantidad > 0 && (
+              <section style={{ ...card, borderColor: 'var(--red, #d33)' }} aria-label="Consumos de trabajadores por descontar">
+                <h2 style={{ fontSize: 18 }}>🔴 Descontar a trabajadores ({fmt(consumos.total)})</h2>
+                <p style={{ opacity: .8 }}>No afectan la caja, pero se descuentan de su pago de hoy. No lo dejes para mañana sin querer.</p>
+                {consumos.trabajadores.map(t => (
+                  <div key={t.trabajador} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span>{t.trabajador} · {t.cantidad} {t.cantidad === 1 ? 'consumo' : 'consumos'}</span><b>{fmt(t.total)}</b></div>))}
+                <a href="/consumos" style={{ display: 'inline-block', marginTop: 8, fontWeight: 700 }}>Descontar y entregar comprobante →</a>
               </section>
             )}
 

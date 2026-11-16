@@ -6,7 +6,8 @@
 export const ESTADOS_PREPARACION = ["pendiente", "en_proceso", "listo", "entregado"] as const;
 // pendiente = por cobrar · abonada = pagó una parte (abonos) y queda saldo por cobrar · pagado = cobro recibido · cortesia = sin cobro por decisión del negocio
 // sin_identificar = histórico anterior a la migración: tenía estado de cocina "listo" pero ningún método de pago registrado
-export const ESTADOS_PAGO = ["pendiente", "abonada", "pagado", "cortesia", "sin_identificar"] as const;
+// consumo_personal = consumo de un trabajador que se descuenta de su pago: no es un cobro y no mueve la caja (migración 12)
+export const ESTADOS_PAGO = ["pendiente", "abonada", "pagado", "cortesia", "sin_identificar", "consumo_personal"] as const;
 
 export type VentaEstados = {
   estado?: string | null;
@@ -32,4 +33,9 @@ export function estadoPagoParaMetodo(metodo?: string | null): "pagado" | "cortes
 // Venta con abonos y saldo por cobrar (migración 11). No se cobra ni se edita por el camino normal: se usa «Cobrar saldo».
 export function estaAbonada(v: VentaEstados): boolean {
   return v.estado_pago === "abonada";
+}
+
+// Consumo de un trabajador que se descuenta de su pago (migración 12). No se cobra ni se edita por el camino normal.
+export function esConsumoPersonal(v: VentaEstados): boolean {
+  return v.estado_pago === "consumo_personal";
 }

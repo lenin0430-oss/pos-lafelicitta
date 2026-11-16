@@ -8,6 +8,7 @@ import { huellaComanda, crearGestorIntenciones, recuperarPendiente, resolverHuer
 import AuthGuard from '@/components/AuthGuard'
 import { componerCliente } from '@/lib/clienteAbono'
 import SesionBar from '@/components/SesionBar'
+import AvisoConsumos, { EVENTO_CONSUMOS } from '@/components/AvisoConsumos'
 import BotonCobrarPoint from '@/components/BotonCobrarPoint'
 import { useEmpresaNombre } from '@/lib/useEmpresaNombre'
 import { useEmpresaLogo } from '@/lib/useEmpresaLogo'
@@ -65,6 +66,9 @@ export default function CajaPage() {
   const [abonoCliente, setAbonoCliente] = useState('')
   const [abonoTelefono, setAbonoTelefono] = useState('')
   const [abonando, setAbonando] = useState(false)
+  const [consumoTrabajador, setConsumoTrabajador] = useState('')
+  const [registrandoConsumo, setRegistrandoConsumo] = useState(false)
+  const [nombresTrabajadores, setNombresTrabajadores] = useState<string[]>([])
   const [propinaMonto, setPropinaMonto] = useState('')
   const [propinaEmpleado, setPropinaEmpleado] = useState('')
 
@@ -290,7 +294,7 @@ export default function CajaPage() {
 
       setItems(itemsEditados)
       setEnviada(true)
-      setCobrada(data.estado_pago === 'pagado' || data.estado_pago === 'cortesia' || data.estado_pago === 'abonada')
+      setCobrada(data.estado_pago === 'pagado' || data.estado_pago === 'cortesia' || data.estado_pago === 'abonada' || data.estado_pago === 'consumo_personal')
       setTabMovil('comanda')
       mostrarMensaje('Comanda abierta para editar ✓', 'ok')
     } catch (e: unknown) {
@@ -416,6 +420,44 @@ export default function CajaPage() {
     if (cobrada) return
     if (turnoAbierto === false) { mostrarMensaje('No hay turno abierto: ábrelo en «Cierre» para cobrar', 'err'); return }
     setModalCobro(true)
+    cargarNombresTrabajadores()
+  }
+
+  // Nombres de trabajadores ya usados, para sugerirlos al registrar un consumo personal.
+  async function cargarNombresTrabajadores() {
+    try {
+      const r = await fetch('/api/consumo-personal', { credentials: 'same-origin', cache: 'no-store' })
+      const j = await r.json().catch(() => null)
+      if (r.ok && j?.ok && Array.isArray(j.nombres)) setNombresTrabajadores(j.nombres)
+    } catch { /* sin sugerencias */ }
+  }
+
+  // Consumo de un trabajador: NO es un cobro. La venta queda registrada a su nombre y se le descuenta de su pago;
+  // no suma a efectivo, débito ni transferencia, así que no cambia la caja (/api/consumo-personal → registrar_consumo_personal, migración 12).
+  async function registrarConsumoPersonal() {
+    const nombre = consumoTrabajador.trim()
+    if (!ventaId) return
+    if (!nombre) { mostrarMensaje('Escribe el nombre del trabajador', 'err'); return }
+    if (!confirm(`¿Registrar ${fmt(total)} como consumo de ${nombre}?\nSe le descuenta de su pago y NO entra a la caja.`)) return
+    setRegistrandoConsumo(true)
+    try {
+      const r = await fetch('/api/consumo-personal', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'registrar', venta_id: ventaId, trabajador: nombre }) })
+      const j = await r.json().catch(() => null)
+      if (!r.ok || !j?.ok) {
+        mostrarMensaje(j?.error || 'No se pudo registrar el consumo', 'err')
+        setRegistrandoConsumo(false)
+        return
+      }
+      setCobrada(true)
+      setModalCobro(false)
+      setConsumoTrabajador('')
+      window.dispatchEvent(new Event(EVENTO_CONSUMOS))
+      mostrarMensaje(`Consumo de ${j.trabajador} registrado (${fmt(total)}). Se descuenta de su pago ✓`, 'ok')
+    } catch {
+      mostrarMensaje('Sin conexión con el servidor', 'err')
+    }
+    setRegistrandoConsumo(false)
   }
 
   // PASO 2 confirmado: actualiza en Supabase con pago y estado listo
@@ -743,14 +785,15 @@ export default function CajaPage() {
   </div>
 </div>
         <nav className="pos-header-nav" aria-label="Navegación principal">
-          {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/propinas', '💰'], ['/reportes', '📊']].map(([href, icon]) => (
-            <a key={href} href={href} aria-label={({'/':'Caja','/cocina':'Cocina','/gastos':'Gastos','/propinas':'Propinas','/reportes':'Reportes'} as Record<string,string>)[href]} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? 'var(--on-accent)' : 'var(--on-navy-muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
+          {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/propinas', '💰'], ['/consumos', '🍽️'], ['/reportes', '📊']].map(([href, icon]) => (
+            <a key={href} href={href} aria-label={({'/':'Caja','/cocina':'Cocina','/gastos':'Gastos','/propinas':'Propinas','/consumos':'Consumos de trabajadores','/reportes':'Reportes'} as Record<string,string>)[href]} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? 'var(--on-accent)' : 'var(--on-navy-muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
           ))}
           {esAdmin && <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: '#86EFAC', fontSize: 18, textDecoration: 'none' }}>🔓</a>}
           {esAdmin && <a href="/configuracion/mercadopago" title="Mercado Pago" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>💳</a>}
         </nav>
         <div className="pos-header-status">
           {mensaje && <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
+          <AvisoConsumos />
           <span className="pos-header-clock">{hora}</span>
           <SesionBar />
         </div>
@@ -878,6 +921,18 @@ export default function CajaPage() {
                 <button onClick={registrarAbono} disabled={abonando}
                   style={{ width: '100%', marginTop: 10, padding: 11, borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 13, fontWeight: 700, cursor: abonando ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: abonando ? 0.6 : 1 }}>
                   {abonando ? 'Registrando...' : 'Registrar abono'}
+                </button>
+              </div>
+            </details>
+            <details style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
+              <summary style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold)', cursor: 'pointer' }}>Consumo de trabajador (se descuenta de su pago)</summary>
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>No es un cobro: no entra a la caja. Queda anotado a nombre del trabajador para descontárselo al pagarle.</div>
+                <input list="lista-trabajadores" value={consumoTrabajador} onChange={e => setConsumoTrabajador(e.target.value)} maxLength={60} placeholder="Nombre del trabajador" style={inp} />
+                <datalist id="lista-trabajadores">{nombresTrabajadores.map(n => <option key={n} value={n} />)}</datalist>
+                <button onClick={registrarConsumoPersonal} disabled={registrandoConsumo || !consumoTrabajador.trim()}
+                  style={{ width: '100%', marginTop: 10, padding: 11, borderRadius: 10, border: 'none', background: consumoTrabajador.trim() ? 'var(--gold)' : 'var(--surface2)', color: consumoTrabajador.trim() ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 700, cursor: registrandoConsumo || !consumoTrabajador.trim() ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: registrandoConsumo ? 0.6 : 1 }}>
+                  {registrandoConsumo ? 'Registrando...' : `Anotar ${fmt(total)} a este trabajador`}
                 </button>
               </div>
             </details>

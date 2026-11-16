@@ -260,9 +260,10 @@ export default function ReportesPage() {
                 {card('Saldo pendiente', fmt(resumen.pendiente.total), `${resumen.pendiente.cantidad} comandas sin cobrar`)}
                 {card('Ticket promedio', fmt(ticketPromedio))}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
                 {card('Sin identificar', fmt(resumen.sinIdentificar.total), `${resumen.sinIdentificar.cantidad} ventas históricas sin método`)}
                 {card('Cortesías', fmt(resumen.cortesias.total), `${resumen.cortesias.cantidad} sin cobro`)}
+                {card('Consumo personal', fmt(resumen.consumoPersonal.total), `${resumen.consumoPersonal.cantidad} de trabajadores (no es cobro)`)}
                 {card('N° comandas', String(ventas.length), 'órdenes registradas')}
                 {card('Productos vendidos', String(Object.values(conteoProductos).reduce((s, p) => s + p.cantidad, 0)))}
               </div>
@@ -399,7 +400,7 @@ export default function ReportesPage() {
                           <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{new Date(v.created_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                           <td style={{ padding: '9px 12px' }}>
                             <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: (v.estado_pago === 'pagado' || v.estado_pago === 'cortesia') ? 'var(--green-bg)' : 'var(--gold-bg)', color: v.estado_pago === 'pagado' ? 'var(--green)' : 'var(--gold)', border: `1px solid ${v.estado === 'listo' ? 'var(--green)' : 'var(--gold)'}` }}>
-                              {v.estado} · {v.estado_pago === 'pagado' ? 'pagado' : v.estado_pago === 'cortesia' ? 'cortesía' : v.estado_pago === 'sin_identificar' ? 'sin identificar' : v.estado_pago === 'abonada' ? 'abonada (saldo por cobrar)' : 'sin pagar'}
+                              {v.estado} · {v.estado_pago === 'pagado' ? 'pagado' : v.estado_pago === 'cortesia' ? 'cortesía' : v.estado_pago === 'sin_identificar' ? 'sin identificar' : v.estado_pago === 'abonada' ? 'abonada (saldo por cobrar)' : v.estado_pago === 'consumo_personal' ? 'consumo personal' : 'sin pagar'}
                             </span>
                           </td>
                           {esAdmin && (

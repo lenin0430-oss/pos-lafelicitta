@@ -37,6 +37,7 @@ export function cobrosDelPeriodo<T extends VentaRep>(ventas: T[], desde: string 
 export function etiquetaMetodo(v: VentaRep): string {
   const m = (v.metodo_pago ?? "").trim();
   if (v.estado_pago === "abonada") return "Abonada (saldo por cobrar)";
+  if (v.estado_pago === "consumo_personal") return "Consumo personal (se descuenta del pago)";
   if (v.estado_pago === "sin_identificar" || (!m && v.estado_pago !== "pendiente")) return "Sin identificar";
   return m || "—";
 }
@@ -49,6 +50,7 @@ export type ResumenPeriodo = {
   pendiente: { cantidad: number; total: number };
   cortesias: { cantidad: number; total: number };
   sinIdentificar: { cantidad: number; total: number };
+  consumoPersonal: { cantidad: number; total: number };   // no es cobro: se descuenta del pago del trabajador
 };
 
 // ventasCreadas: ventas con created_at en el período. posiblesCobros: ventas con cobro en el período
@@ -71,5 +73,6 @@ export function resumenPeriodo(
     pendiente: resumen(porEstado("pendiente")),
     cortesias: resumen(porEstado("cortesia")),
     sinIdentificar: resumen(porEstado("sin_identificar")),
+    consumoPersonal: resumen(porEstado("consumo_personal")),
   };
 }
