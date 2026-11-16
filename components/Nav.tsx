@@ -5,6 +5,7 @@ import { getSesion } from '@/lib/auth'
 const LINKS_ADMIN = [
   { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
+  { href: '/por-cobrar', label: '🧾 Por cobrar' },
   { href: '/productos', label: '🏷️ Productos' },
   { href: '/gastos', label: '💸 Gastos' },
   { href: '/propinas', label: '💰 Propinas' },
@@ -18,6 +19,7 @@ const LINKS_ADMIN = [
 const LINKS_GARZON = [
   { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
+  { href: '/por-cobrar', label: '🧾 Por cobrar' },
   { href: '/gastos', label: '💸 Gastos' },
   { href: '/cierre', label: '🔒 Turno y arqueo' },
 ]

@@ -399,7 +399,7 @@ export default function ReportesPage() {
                           <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{new Date(v.created_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                           <td style={{ padding: '9px 12px' }}>
                             <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: (v.estado_pago === 'pagado' || v.estado_pago === 'cortesia') ? 'var(--green-bg)' : 'var(--gold-bg)', color: v.estado_pago === 'pagado' ? 'var(--green)' : 'var(--gold)', border: `1px solid ${v.estado === 'listo' ? 'var(--green)' : 'var(--gold)'}` }}>
-                              {v.estado} · {v.estado_pago === 'pagado' ? 'pagado' : v.estado_pago === 'cortesia' ? 'cortesía' : v.estado_pago === 'sin_identificar' ? 'sin identificar' : 'sin pagar'}
+                              {v.estado} · {v.estado_pago === 'pagado' ? 'pagado' : v.estado_pago === 'cortesia' ? 'cortesía' : v.estado_pago === 'sin_identificar' ? 'sin identificar' : v.estado_pago === 'abonada' ? 'abonada (saldo por cobrar)' : 'sin pagar'}
                             </span>
                           </td>
                           {esAdmin && (

@@ -59,6 +59,10 @@ export default function CajaPage() {
   const [metodoPago, setMetodoPago] = useState('')
   const [pagosMixtos, setPagosMixtos] = useState({ Efectivo: '', Débito: '', Transferencia: '', Crédito: '' })
   const [cobrando, setCobrando] = useState(false)
+  const [abonoMonto, setAbonoMonto] = useState('')
+  const [abonoMedio, setAbonoMedio] = useState('')
+  const [abonoCliente, setAbonoCliente] = useState('')
+  const [abonando, setAbonando] = useState(false)
   const [propinaMonto, setPropinaMonto] = useState('')
   const [propinaEmpleado, setPropinaEmpleado] = useState('')
 
@@ -284,7 +288,7 @@ export default function CajaPage() {
 
       setItems(itemsEditados)
       setEnviada(true)
-      setCobrada(data.estado_pago === 'pagado' || data.estado_pago === 'cortesia')
+      setCobrada(data.estado_pago === 'pagado' || data.estado_pago === 'cortesia' || data.estado_pago === 'abonada')
       setTabMovil('comanda')
       mostrarMensaje('Comanda abierta para editar ✓', 'ok')
     } catch (e: unknown) {
@@ -451,6 +455,33 @@ export default function CajaPage() {
       mostrarMensaje('Error al cobrar: ' + (e as Error).message, 'err')
     }
     setCobrando(false)
+  }
+
+  // Abono: el cliente paga una parte ahora; el saldo queda por cobrar en «Por cobrar» (/api/abonos → registrar_abono, migración 11).
+  async function registrarAbono() {
+    const monto = parseInt(abonoMonto || '0') || 0
+    if (!ventaId) return
+    if (!abonoMedio) { mostrarMensaje('Elige con qué paga el abono', 'err'); return }
+    if (monto <= 0 || monto >= total) { mostrarMensaje(`El abono debe ser mayor a $0 y menor al total (${fmt(total)})`, 'err'); return }
+    setAbonando(true)
+    try {
+      const r = await fetch('/api/abonos', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'abonar', venta_id: ventaId, monto, medio: abonoMedio, cliente: abonoCliente.trim() || undefined }) })
+      const j = await r.json().catch(() => null)
+      if (!r.ok || !j?.ok) {
+        if (j?.codigo === 'sin_turno') setTurnoAbierto(false)
+        mostrarMensaje(j?.error || 'No se pudo registrar el abono', 'err')
+        setAbonando(false)
+        return
+      }
+      setCobrada(true)
+      setModalCobro(false)
+      setAbonoMonto(''); setAbonoMedio(''); setAbonoCliente('')
+      mostrarMensaje(`Abono de ${fmt(monto)} registrado. Quedan ${fmt(j.saldo)} por cobrar en «Por cobrar» ✓`, 'ok')
+    } catch {
+      mostrarMensaje('Sin conexión con el servidor', 'err')
+    }
+    setAbonando(false)
   }
 
   function nuevaComanda() {
@@ -828,6 +859,25 @@ export default function CajaPage() {
                 />
               </div>
             )}
+            <details style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
+              <summary style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold)', cursor: 'pointer' }}>Pagar solo una parte (abono)</summary>
+              <div style={{ marginTop: 10 }}>
+                <input inputMode="numeric" value={abonoMonto} onChange={e => setAbonoMonto(e.target.value.replace(/[^0-9]/g, ''))} placeholder="Monto del abono" style={inp} />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0' }}>
+                  {([['efectivo', 'Efectivo'], ['debito', 'Débito'], ['transferencia', 'Transferencia'], ['credito', 'Crédito']] as const).map(([id, label]) => (
+                    <button key={id} onClick={() => setAbonoMedio(id)} style={{ padding: '6px 12px', borderRadius: 20, border: '1px solid ' + (abonoMedio === id ? 'var(--gold)' : 'var(--border)'), background: abonoMedio === id ? 'var(--gold)' : 'var(--surface2)', color: abonoMedio === id ? 'var(--on-accent)' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{label}</button>
+                  ))}
+                </div>
+                <input value={abonoCliente} onChange={e => setAbonoCliente(e.target.value)} maxLength={80} placeholder="Cliente (nombre o teléfono)" style={inp} />
+                {(parseInt(abonoMonto || '0') || 0) > 0 && (parseInt(abonoMonto || '0') || 0) < total && (
+                  <div style={{ marginTop: 8, fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--gold)' }}>Saldo por cobrar: {fmt(total - (parseInt(abonoMonto || '0') || 0))}</div>
+                )}
+                <button onClick={registrarAbono} disabled={abonando}
+                  style={{ width: '100%', marginTop: 10, padding: 11, borderRadius: 10, border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontSize: 13, fontWeight: 700, cursor: abonando ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', opacity: abonando ? 0.6 : 1 }}>
+                  {abonando ? 'Registrando...' : 'Registrar abono'}
+                </button>
+              </div>
+            </details>
             <div style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
               <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 8 }}>
                 Propina para {getSesion()?.nombre || 'cajera'} (opcional)
