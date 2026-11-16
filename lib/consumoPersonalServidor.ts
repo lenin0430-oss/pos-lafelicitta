@@ -47,7 +47,7 @@ export async function accionConsumo(db: Db, s: SesionA, b: any): Promise<RespA> 
   if (b.accion === "descontar") {
     if (s.rol !== "admin") return err(403, "Solo el administrador marca consumos como descontados");
     if (!Array.isArray(b.ids) || b.ids.length === 0 || b.ids.length > MAX_IDS || !b.ids.every((x: unknown) => typeof x === "string" && UUID.test(x))) return err(400, "Consumos inválidos");
-    return desdeRpc(await db.rpc("descontar_consumos_personal", { p_empresa: s.empresa_id, p_ids: [...new Set<string>(b.ids)], p_por: s.nombre }));
+    return desdeRpc(await db.rpc("descontar_consumos_personal", { p_empresa: s.empresa_id, p_ids: Array.from(new Set<string>(b.ids)), p_por: s.nombre }));
   }
   return err(400, "Acción no válida");
 }
@@ -67,7 +67,7 @@ export async function listarConsumos(db: Db, s: SesionA): Promise<RespA> {
   const n = await db.from("consumos_personal").select("trabajador").eq("empresa_id", s.empresa_id).is("anulado_at", null).order("created_at", { ascending: false }).limit(300);
   const vistos = new Map<string, string>();
   for (const x of n?.data ?? []) if (x?.trabajador && !vistos.has(claveTrabajador(x.trabajador))) vistos.set(claveTrabajador(x.trabajador), x.trabajador);
-  const nombres = [...vistos.values()].sort((a, b) => a.localeCompare(b, "es"));
+  const nombres = Array.from(vistos.values()).sort((a, b) => a.localeCompare(b, "es"));
   if (filas.length === 0) return { status: 200, body: { ok: true, trabajadores: [], total: 0, cantidad: 0, nombres } };
 
   const v = await db.from("ventas").select("id,numero,mesa,items").eq("empresa_id", s.empresa_id).in("id", filas.map((x) => x.venta_id));
@@ -84,6 +84,6 @@ export async function listarConsumos(db: Db, s: SesionA): Promise<RespA> {
     g.consumos.push({ id: f.id, venta_id: f.venta_id, numero: venta?.numero ?? null, mesa: venta?.mesa ?? null, monto: f.monto || 0, fecha: f.created_at, items });
     grupos.set(k, g);
   }
-  const trabajadores = [...grupos.values()].sort((a, b) => a.trabajador.localeCompare(b.trabajador, "es"));
+  const trabajadores = Array.from(grupos.values()).sort((a, b) => a.trabajador.localeCompare(b.trabajador, "es"));
   return { status: 200, body: { ok: true, trabajadores, total: trabajadores.reduce((t, g) => t + g.total, 0), cantidad: filas.length, nombres } };
 }
