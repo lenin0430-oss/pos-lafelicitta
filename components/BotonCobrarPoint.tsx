@@ -5,6 +5,8 @@ type Props = {
   ventaId: string;
   monto: number;
   onPagado?: () => void;
+  // Cada vez que cambia (y es > 0) inicia el cobro en el Point, como si se tocara el botón (Débito/Crédito en caja).
+  disparo?: number;
 };
 
 const TEXTO: Record<string, string> = {
@@ -17,13 +19,18 @@ const TEXTO: Record<string, string> = {
 };
 const FINALES = ["processed", "canceled", "expired", "failed"];
 
-export default function BotonCobrarPoint({ ventaId, monto, onPagado }: Props) {
+export default function BotonCobrarPoint({ ventaId, monto, onPagado, disparo }: Props) {
   const [estado, setEstado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sinTurno, setSinTurno] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
+
+  useEffect(() => {
+    if (disparo && disparo > 0 && !(estado !== null && !FINALES.includes(estado))) cobrar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disparo]);
 
   async function cobrar() {
     setError(null); setSinTurno(false);

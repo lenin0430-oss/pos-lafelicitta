@@ -58,6 +58,7 @@ export default function CajaPage() {
 
   // MODAL COBRO
   const [modalCobro, setModalCobro] = useState(false)
+  const [disparoPoint, setDisparoPoint] = useState(0)
   const [metodoPago, setMetodoPago] = useState('')
   const [pagosMixtos, setPagosMixtos] = useState({ Efectivo: '', Débito: '', Transferencia: '', Crédito: '' })
   const [cobrando, setCobrando] = useState(false)
@@ -894,11 +895,11 @@ export default function CajaPage() {
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 10, color: metodoPago ? 'var(--muted)' : 'var(--gold)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 8, fontWeight: metodoPago ? 400 : 700 }}>
-                Toca la forma de pago para cobrar
+                Toca la forma de pago (Débito y Crédito se cobran en el Point)
               </label>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {[...metodosPago, 'Mixto'].map(m => (
-                  <button key={m} disabled={cobrando} onClick={() => { seleccionarMetodoPago(m); if (m !== 'Mixto') confirmarCobro(m) }} style={{ padding: '14px 18px', flex: '1 1 40%', borderRadius: 12, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? 'var(--on-accent)' : 'var(--text)', fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
+                  <button key={m} disabled={cobrando} onClick={() => { seleccionarMetodoPago(m); if (/^(d[eé]bito|cr[eé]dito)$/i.test(m.trim())) setDisparoPoint(n => n + 1); else if (m !== 'Mixto') confirmarCobro(m) }} style={{ padding: '14px 18px', flex: '1 1 40%', borderRadius: 12, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? 'var(--on-accent)' : 'var(--text)', fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
                 ))}
               </div>
             </div>
@@ -922,6 +923,7 @@ export default function CajaPage() {
                 <BotonCobrarPoint
                   ventaId={ventaId}
                   monto={total}
+                  disparo={disparoPoint}
                   onPagado={async () => {
                     const empresaId = await getEmpresaIdActual()
                     if (empresaId && propinaMonto && parseInt(propinaMonto) > 0 && propinaEmpleado) {
