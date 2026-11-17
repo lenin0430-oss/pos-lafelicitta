@@ -1,5 +1,5 @@
 'use client'
-import { estadoPagoParaMetodo } from '@/lib/estados'
+import { estadoPagoParaMetodo, esCortesia } from '@/lib/estados'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MENU, MESAS, METODOS_PAGO, CATEGORIAS, cargarDatosEmpresa, type Producto } from '@/lib/menu'
@@ -335,12 +335,12 @@ export default function CajaPage() {
   }
 
   // PASO 1: Enviar a cocina — guarda sin pago, imprime comanda
-  async function enviarACocina() {
-    if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return }
+  async function enviarACocina(): Promise<boolean> {
+    if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return false }
     const printWindow = typeof window !== 'undefined' ? window.open('about:blank', 'lf_print', 'width=360,height=220') : null
 
     const empresaId = await getEmpresaIdActual()
-    if (!empresaId) { if (printWindow && !printWindow.closed) printWindow.close(); mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
+    if (!empresaId) { if (printWindow && !printWindow.closed) printWindow.close(); mostrarMensaje('No hay empresa activa en la sesión', 'err'); return false }
 
     if (enviada && ventaId) {
       setGuardando(true)
@@ -369,9 +369,11 @@ export default function CajaPage() {
       } catch (e: unknown) {
         if (printWindow && !printWindow.closed) printWindow.close()
         mostrarMensaje('Error al actualizar: ' + (e as Error).message, 'err')
+        setGuardando(false)
+        return false
       }
       setGuardando(false)
-      return
+      return true
     }
 
     // Antes de crear una comanda NUEVA: ¿quedó un pedido anterior sin confirmar? Se comprueba en el servidor; si no se puede confirmar, no se envía.
@@ -379,12 +381,12 @@ export default function CajaPage() {
       if (await revisarPendientesInciertos(empresaId, false)) {
         if (printWindow && !printWindow.closed) printWindow.close()
         mostrarMensaje('Hay un pedido enviado sin confirmar. Compruébalo o descártalo (aviso rojo) antes de enviar otro', 'err')
-        return
+        return false
       }
     } catch (e: unknown) {
       if (printWindow && !printWindow.closed) printWindow.close()
       mostrarMensaje('No se pudo comprobar el pedido anterior: ' + (e as Error).message, 'err')
-      return
+      return false
     }
     setGuardando(true)
     try {
@@ -407,18 +409,26 @@ export default function CajaPage() {
       gestorComanda.cerrar()
       mostrarMensaje(`Comanda #${data.numero} enviada a cocina ✓`, 'ok')
       imprimirComandaRaw(data.numero, printWindow)
+      setGuardando(false)
+      return true
     } catch (e: unknown) {
       if (printWindow && !printWindow.closed) printWindow.close()
       mostrarMensaje('Error: ' + (e as Error).message, 'err')
     }
     setGuardando(false)
+    return false
   }
 
   // PASO 2: Abrir modal de cobro
-  function abrirCobro() {
-    if (!enviada) { mostrarMensaje('Primero envía la comanda a cocina', 'err'); return }
-    if (cobrada) return
+  // VENTA RÁPIDA: «Cobrar» envía la comanda a cocina si aún no se envió y abre las formas de pago (sin paso previo).
+  async function abrirCobro() {
+    if (cobrada || guardando) return
+    if (items.length === 0) { mostrarMensaje('Agrega productos primero', 'err'); return }
     if (turnoAbierto === false) { mostrarMensaje('No hay turno abierto: ábrelo en «Cierre» para cobrar', 'err'); return }
+    if (!enviada) {
+      const ok = await enviarACocina()
+      if (!ok) return
+    }
     setModalCobro(true)
     cargarNombresTrabajadores()
   }
@@ -461,24 +471,28 @@ export default function CajaPage() {
   }
 
   // PASO 2 confirmado: actualiza en Supabase con pago y estado listo
-  async function confirmarCobro() {
-    if (!pagoValido) {
+  // Tocar una forma de pago (Efectivo, Débito, etc.) cobra al instante; «Mixto» sigue usando «Confirmar cobro».
+  async function confirmarCobro(metodoDirecto?: string) {
+    const metodoFinal = metodoDirecto ?? detalleMetodoPago
+    if (!metodoDirecto && !pagoValido) {
       mostrarMensaje(esPagoMixto ? `Falta ${fmt(Math.max(restanteMixto, 0))}` : 'Selecciona método de pago', 'err')
       return
     }
+    if (metodoDirecto && esCortesia(metodoDirecto) && !confirm(`¿Registrar ${fmt(total)} como cortesía (sin cobro)?`)) return
     const empresaId = await getEmpresaIdActual()
     if (!empresaId) { mostrarMensaje('No hay empresa activa en la sesión', 'err'); return }
 
     setCobrando(true)
     try {
       const { error } = await supabase.from('ventas')
-        .update({ metodo_pago: detalleMetodoPago, estado_pago: estadoPagoParaMetodo(detalleMetodoPago), pagado_at: new Date().toISOString() })
+        .update({ metodo_pago: metodoFinal, estado_pago: estadoPagoParaMetodo(metodoFinal), pagado_at: new Date().toISOString() })
         .eq('empresa_id', empresaId)
         .eq('id', ventaId)
       if (error) throw error
       setCobrada(true)
       setModalCobro(false)
-      mostrarMensaje('¡Cobro registrado! Mesa lista ✓', 'ok')
+      mostrarMensaje(`¡Cobro registrado (${metodoFinal})! ✓`, 'ok')
+      programarNuevaVenta()
       // Guardar propina si se ingreso
       if (propinaMonto && parseInt(propinaMonto) > 0 && propinaEmpleado) {
         try {
@@ -486,7 +500,7 @@ export default function CajaPage() {
             empresa_id: empresaId,
             empleado: propinaEmpleado,
             monto: parseInt(propinaMonto),
-            metodo_pago: metodoPago || 'Efectivo',
+            metodo_pago: metodoDirecto || metodoPago || 'Efectivo',
             cajero: getSesion()?.nombre || 'Caja',
             venta_id: ventaId,
             notas: 'Cobro comanda #' + String(numeroComanda ?? 0).padStart(3,'0'),
@@ -528,8 +542,17 @@ export default function CajaPage() {
     setAbonando(false)
   }
 
+  // Tras cobrar, la caja queda lista para el siguiente cliente sin tocar «Nueva».
+  function programarNuevaVenta() {
+    setTimeout(() => limpiarComanda(), 1500)
+  }
+
   function nuevaComanda() {
-    if (items.length > 0 && !confirm('¿Limpiar comanda actual?')) return
+    if (items.length > 0 && !cobrada && !confirm('¿Limpiar comanda actual?')) return
+    limpiarComanda()
+  }
+
+  function limpiarComanda() {
     setItems([])
     setBusqueda('')
     setMetodoPago('')
@@ -681,7 +704,7 @@ export default function CajaPage() {
 
       {enviada && !cobrada && !esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'var(--gold-bg)', border: '1px solid var(--gold)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', textAlign: 'center' }}>🍳 En cocina — puedes editar y presionar Actualizar cocina</div>}
       {enviada && !cobrada && esAdmin && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>🔄 Edita la comanda y actualiza cocina</div>}
-      {cobrada && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>✅ Cobrada — haz clic en "Nueva" para la siguiente</div>}
+      {cobrada && <div style={{ margin: '0 14px 8px', padding: '8px 12px', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 8, fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>✅ Cobrada — preparando la siguiente venta…</div>}
 
       <div className="no-print" style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', marginBottom: 4, fontSize: 13, color: 'var(--muted)' }}>
@@ -694,12 +717,12 @@ export default function CajaPage() {
           {/* PASO 1: Enviar a cocina */}
           <button onClick={enviarACocina} disabled={guardando || items.length === 0 || cobrada}
             style={{ flex: 1, minHeight: 58, padding: '14px 12px', borderRadius: 14, border: items.length === 0 || cobrada ? '1px solid var(--border-strong)' : '1px solid var(--gold)', background: items.length === 0 || cobrada ? 'var(--surface2)' : 'var(--gold)', color: items.length === 0 || cobrada ? 'var(--muted)' : 'var(--on-accent)', fontSize: 17, fontWeight: 900, cursor: items.length === 0 || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', letterSpacing: .2 }}>
-            {guardando ? '...' : enviada ? '🔄 Actualizar cocina' : '🖨 Enviar a cocina'}
+            {guardando ? '...' : enviada ? '🔄 Actualizar cocina' : '🖨 Cocina (cobrar después)'}
           </button>
           {/* PASO 2: Cobrar */}
-          <button onClick={abrirCobro} disabled={!enviada || cobrada}
-            style={{ flex: 1, minHeight: 58, padding: '14px 12px', borderRadius: 14, border: !enviada ? '1px solid var(--border-strong)' : '1px solid var(--green)', background: !enviada ? 'var(--surface2)' : 'var(--green)', color: !enviada ? 'var(--muted)' : 'var(--on-accent)', fontSize: 17, fontWeight: 900, cursor: !enviada || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', letterSpacing: .2 }}>
-            {cobrada ? '✓ Cobrada' : '💳 Cobrar'}
+          <button onClick={abrirCobro} disabled={items.length === 0 || cobrada || guardando}
+            style={{ flex: 1.4, minHeight: 58, padding: '14px 12px', borderRadius: 14, border: items.length === 0 ? '1px solid var(--border-strong)' : '1px solid var(--green)', background: items.length === 0 ? 'var(--surface2)' : 'var(--green)', color: items.length === 0 ? 'var(--muted)' : 'var(--on-accent)', fontSize: 17, fontWeight: 900, cursor: items.length === 0 || cobrada ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', letterSpacing: .2 }}>
+            {cobrada ? '✓ Cobrada' : `💳 Cobrar ${fmt(total)}`}
           </button>
         </div>
       </div>
@@ -786,10 +809,10 @@ export default function CajaPage() {
 </div>
         <nav className="pos-header-nav" aria-label="Navegación principal">
           {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/propinas', '💰'], ['/consumos', '🍽️'], ['/reportes', '📊']].map(([href, icon]) => (
-            <a key={href} href={href} aria-label={({'/':'Caja','/cocina':'Cocina','/gastos':'Gastos','/propinas':'Propinas','/consumos':'Consumos de trabajadores','/reportes':'Reportes'} as Record<string,string>)[href]} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? 'var(--on-accent)' : 'var(--on-navy-muted)', fontSize: 18, textDecoration: 'none' }}>{icon}</a>
+            <a key={href} href={href} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? 'var(--on-accent)' : 'var(--on-navy-muted)', fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>{icon} {({'/':'Caja','/cocina':'Cocina','/gastos':'Gastos','/propinas':'Propinas','/consumos':'Consumos','/reportes':'Reportes'} as Record<string,string>)[href]}</a>
           ))}
-          {esAdmin && <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: '#86EFAC', fontSize: 18, textDecoration: 'none' }}>🔓</a>}
-          {esAdmin && <a href="/configuracion/mercadopago" title="Mercado Pago" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--muted)', fontSize: 18, textDecoration: 'none' }}>💳</a>}
+          {esAdmin && <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: '#86EFAC', fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>🔓 Cierre</a>}
+          {esAdmin && <a href="/configuracion/mercadopago" title="Mercado Pago" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--muted)', fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>💳 Mercado Pago</a>}
         </nav>
         <div className="pos-header-status">
           {mensaje && <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
@@ -846,7 +869,7 @@ export default function CajaPage() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, fontFamily: 'var(--font)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
-                <div style={{ fontFamily: 'var(--display)', fontSize: 16, letterSpacing: 2, color: 'var(--gold)' }}>COBRO DE MESA</div>
+                <div style={{ fontFamily: 'var(--display)', fontSize: 16, letterSpacing: 2, color: 'var(--gold)' }}>COBRAR</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{mesa} · Comanda #{String(numeroComanda ?? 0).padStart(3,'0')}</div>
               </div>
               <button onClick={() => setModalCobro(false)} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 18, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
@@ -855,13 +878,27 @@ export default function CajaPage() {
               <span style={{ fontSize: 13, color: 'var(--muted)' }}>Total a cobrar</span>
               <span style={{ fontFamily: 'var(--mono)', fontSize: 26, fontWeight: 700, color: 'var(--gold)' }}>{fmt(total)}</span>
             </div>
+            <div style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
+              <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 8 }}>
+                Propina para {getSesion()?.nombre || 'cajera'} (opcional)
+              </label>
+              <input type="number" value={propinaMonto}
+                onChange={e => { setPropinaMonto(e.target.value); setPropinaEmpleado(getSesion()?.nombre || 'Cajera') }}
+                placeholder="Monto propina..."
+                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }} />
+              {propinaMonto && parseInt(propinaMonto) > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--green)' }}>
+                  Propina registrada: ${parseInt(propinaMonto).toLocaleString('es-CL')}
+                </div>
+              )}
+            </div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 10, color: metodoPago ? 'var(--muted)' : 'var(--gold)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 8, fontWeight: metodoPago ? 400 : 700 }}>
-                {metodoPago ? '💳 Método de pago' : '⚠️ Selecciona método de pago'}
+                Toca la forma de pago para cobrar
               </label>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {[...metodosPago, 'Mixto'].map(m => (
-                  <button key={m} onClick={() => seleccionarMetodoPago(m)} style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
+                  <button key={m} disabled={cobrando} onClick={() => { seleccionarMetodoPago(m); if (m !== 'Mixto') confirmarCobro(m) }} style={{ padding: '14px 18px', flex: '1 1 40%', borderRadius: 12, border: '1px solid ' + (m === metodoPago ? 'var(--gold)' : 'var(--border)'), background: m === metodoPago ? 'var(--gold)' : 'var(--surface2)', color: m === metodoPago ? 'var(--on-accent)' : 'var(--text)', fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: 'var(--font)' }}>{m}</button>
                 ))}
               </div>
             </div>
@@ -899,7 +936,8 @@ export default function CajaPage() {
                     }
                     setCobrada(true)
                     setModalCobro(false)
-                    mostrarMensaje('¡Pago con Point aprobado! Mesa lista ✓', 'ok')
+                    mostrarMensaje('¡Pago con Point aprobado! ✓', 'ok')
+                    programarNuevaVenta()
                   }}
                 />
               </div>
@@ -936,24 +974,10 @@ export default function CajaPage() {
                 </button>
               </div>
             </details>
-            <div style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)' }}>
-              <label style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase' as const, display: 'block', marginBottom: 8 }}>
-                Propina para {getSesion()?.nombre || 'cajera'} (opcional)
-              </label>
-              <input type="number" value={propinaMonto}
-                onChange={e => { setPropinaMonto(e.target.value); setPropinaEmpleado(getSesion()?.nombre || 'Cajera') }}
-                placeholder="Monto propina..."
-                style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', width: '100%' }} />
-              {propinaMonto && parseInt(propinaMonto) > 0 && (
-                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--green)' }}>
-                  Propina registrada: ${parseInt(propinaMonto).toLocaleString('es-CL')}
-                </div>
-              )}
-            </div>
-            <button onClick={confirmarCobro} disabled={cobrando || !pagoValido}
+            {esPagoMixto && <button onClick={() => confirmarCobro()} disabled={cobrando || !pagoValido}
               style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: pagoValido ? 'var(--green)' : 'var(--surface2)', color: pagoValido ? 'var(--on-accent)' : 'var(--muted)', fontSize: 15, fontWeight: 700, cursor: pagoValido ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)', opacity: pagoValido ? 1 : 0.5 }}>
               {cobrando ? 'Registrando...' : `✓ Confirmar cobro ${fmt(total)}`}
-            </button>
+            </button>}
           </div>
         </div>
       )}

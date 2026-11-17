@@ -2,6 +2,12 @@
 
 Actualizado: 2026-11-02 (Claude, 3.ª entrega). Codex y Claude no deben editar los mismos archivos a la vez: antes de tocar algo, anotar aquí carpeta y archivos.
 
+## 0. Venta rápida (Claude, 17/11/2026) — rama `claude/venta-rapida-2026-11-17`, sin publicar
+Archivos tocados: `app/page.tsx`, `app/cocina/page.tsx`.
+- Caja: «Cobrar» envía la comanda a cocina si no se había enviado y abre las formas de pago. Tocar Efectivo/Débito/etc. cobra al instante (Mixto sigue con «Confirmar»; Cortesía pide confirmación). Tras cobrar, la caja se limpia sola en 1,5 s. «Cocina (cobrar después)» queda para mesas que pagan al final.
+- Cocina: un solo botón «Entregado» en cada comanda (se quitan En proceso/Listo como pasos obligatorios); filtro por defecto «Todos». Cobrar sigue sin retirar comandas.
+- Menú superior de Caja con texto (Windows 7 no muestra los emojis y las pestañas se veían vacías).
+
 ## 1. Fuente principal y qué está publicado
 - Carpeta: `C:\Users\yusma\mesapos-unified` (repo `lenin0430-oss/pos-lafelicitta`). `main` = `origin/main` = **8142dc7** = producción (Vercel `pos-lafelicitta-ndkb`). Menú publicado = 411052f.
 - Rama de trabajo, **solo local, nada publicado ni empujado**: `claude/preparacion-2026-11-02`. Punto de retorno: tag `punto-retorno-2026-11-02` (= 8142dc7) y `respaldos/pos-8142dc7.bundle`.

@@ -32,7 +32,7 @@ const ESTADO_COLOR: Record<string, string> = {
 export default function CocinaPage() {
   const empresaNombre = useEmpresaNombre()
   const [ventas, setVentas] = useState<Venta[]>([])
-  const [filtro, setFiltro] = useState<'pendiente' | 'en_proceso' | 'todos'>('pendiente')
+  const [filtro, setFiltro] = useState<'pendiente' | 'en_proceso' | 'todos'>('todos')
   const [hora, setHora] = useState('')
 
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function CocinaPage() {
           {/* Filtros */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center' }}>
             <span style={{ fontFamily: 'var(--display)', fontSize: 13, letterSpacing: 2, color: 'var(--muted)', marginRight: 8 }}>FILTRAR:</span>
-            {[['pendiente', '🔴 Nuevos'], ['en_proceso', '🟡 En proceso'], ['todos', 'Todos']].map(([val, label]) => (
+            {[['todos', 'Todos'], ['pendiente', '🔴 Nuevos']].map(([val, label]) => (
               <button key={val} onClick={() => setFiltro(val as any)} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid ' + (filtro === val ? 'var(--gold)' : 'var(--border)'), background: filtro === val ? 'var(--gold)' : 'transparent', color: filtro === val ? 'var(--on-accent)' : 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>
                 {label}
               </button>
@@ -152,21 +152,10 @@ export default function CocinaPage() {
                         <a href={`/?editar=${venta.id}`} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid var(--gold)', background: 'transparent', color: 'var(--gold)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', textAlign: 'center', textDecoration: 'none' }}>
                           ✏️ Editar
                         </a>
-                        {venta.estado === 'pendiente' && (
-                          <button onClick={() => cambiarEstado(venta.id, 'en_proceso')} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: 'var(--amber)', color: 'var(--on-accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                            🍳 En proceso
-                          </button>
-                        )}
-                        {venta.estado === 'en_proceso' && (
-                          <button onClick={() => cambiarEstado(venta.id, 'listo')} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                            ✅ Listo
-                          </button>
-                        )}
-                        {venta.estado === 'listo' && (
-                          <button onClick={() => cambiarEstado(venta.id, 'entregado')} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                            📦 Entregado
-                          </button>
-                        )}
+                        {/* Un solo toque: «Entregado» retira la comanda de la pantalla (no cambia el cobro). */}
+                        <button onClick={() => cambiarEstado(venta.id, 'entregado')} style={{ flex: 2, padding: '12px 8px', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                          ✅ Entregado
+                        </button>
                       </div>
                     </div>
                   </div>
