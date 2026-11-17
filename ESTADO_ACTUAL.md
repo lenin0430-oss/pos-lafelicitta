@@ -8,6 +8,9 @@ Archivos tocados: `app/page.tsx`, `app/cocina/page.tsx`.
 - Cocina: un solo botón «Entregado» en cada comanda (se quitan En proceso/Listo como pasos obligatorios); filtro por defecto «Todos». Cobrar sigue sin retirar comandas.
 - Menú superior de Caja con texto (Windows 7 no muestra los emojis y las pestañas se veían vacías).
 
+## 0b. Gastos pagados por trabajadores (Claude, 17/11/2026) — publicado
+Migración `supabase/13_reembolsos_trabajador.sql` **aplicada** en producción (reversión en `_REVERSION`). `gastos.pagado_por`, tabla `reembolsos_trabajador`, funciones `reembolsos_pendientes` / `reembolso_pagar` (retiro de caja del turno abierto + registro, atómico). Pantalla Gastos: «¿Quién lo pagó?» y sección «Por devolver» con botón Pagar (solo admin). API `/api/reembolsos`.
+
 ## 1. Fuente principal y qué está publicado
 - Carpeta: `C:\Users\yusma\mesapos-unified` (repo `lenin0430-oss/pos-lafelicitta`). `main` = `origin/main` = **8142dc7** = producción (Vercel `pos-lafelicitta-ndkb`). Menú publicado = 411052f.
 - Rama de trabajo, **solo local, nada publicado ni empujado**: `claude/preparacion-2026-11-02`. Punto de retorno: tag `punto-retorno-2026-11-02` (= 8142dc7) y `respaldos/pos-8142dc7.bundle`.

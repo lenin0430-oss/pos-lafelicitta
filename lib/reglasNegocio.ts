@@ -192,10 +192,14 @@ export function reglasGenericas(tabla: string, filas: Fila[]): Resultado<Resulta
 }
 
 // Gasto: lo registra un caso de uso del servidor (app/api/gastos). Aquí solo la validación pura.
-export function validarGasto(b: unknown): Resultado<{ categoria: string; descripcion: string; monto: number; afecto_caja: boolean }> {
-  if (!esObj(b) || !soloClaves(b, ["categoria", "descripcion", "monto", "afecto_caja", "aprobacion"])) return no("Solicitud inválida");
+// pagado_por: trabajador que pagó con su dinero (queda "por devolver"); en ese caso el gasto NUNCA sale de la caja.
+export function validarGasto(b: unknown): Resultado<{ categoria: string; descripcion: string; monto: number; afecto_caja: boolean; pagado_por: string | null }> {
+  if (!esObj(b) || !soloClaves(b, ["categoria", "descripcion", "monto", "afecto_caja", "aprobacion", "pagado_por"])) return no("Solicitud inválida");
   if (!texto(b.categoria, 60, 1) || !texto(b.descripcion, 300, 1) || !entero(b.monto, 1, MAX_MONTO)) return no("Datos del gasto inválidos");
   if (b.afecto_caja !== undefined && typeof b.afecto_caja !== "boolean") return no("Datos del gasto inválidos");
-  return ok({ categoria: b.categoria as string, descripcion: (b.descripcion as string).trim(), monto: b.monto as number, afecto_caja: b.afecto_caja !== false });
+  if (b.pagado_por !== undefined && b.pagado_por !== null && !texto(b.pagado_por, 60)) return no("Datos del gasto inválidos");
+  const pagadoPor = typeof b.pagado_por === "string" && b.pagado_por.trim() ? b.pagado_por.trim().replace(/\s+/g, " ") : null;
+  return ok({ categoria: b.categoria as string, descripcion: (b.descripcion as string).trim(), monto: b.monto as number,
+              afecto_caja: pagadoPor ? false : b.afecto_caja !== false, pagado_por: pagadoPor });
 }
 export const gastoRequiereAprobacion = (rol: Sesion["rol"], monto: number) => rol !== "admin" && monto >= UMBRAL_GASTO_SIN_APROBACION;

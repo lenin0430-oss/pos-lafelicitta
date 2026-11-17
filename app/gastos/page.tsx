@@ -13,6 +13,7 @@ type Gasto = {
   cajero: string
   apertura_id: string
   afecto_caja: boolean
+  pagado_por?: string | null
   created_at: string
 }
 
@@ -25,6 +26,11 @@ export default function GastosPage() {
   const [monto, setMonto] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [afectoCaja, setAfectoCaja] = useState(true)
+  // Quién puso la plata: '' = la caja / el negocio; un nombre = un trabajador con su dinero (queda «por devolver»).
+  const [pagadoPor, setPagadoPor] = useState('')
+  const [pagoTrabajador, setPagoTrabajador] = useState(false)
+  const [pendientes, setPendientes] = useState<{ persona: string; pendiente: number; gastos: number }[]>([])
+  const [pagando, setPagando] = useState<string | null>(null)
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [cargando, setCargando] = useState(true)
   const [mensaje, setMensaje] = useState<{txt: string, tipo: 'ok'|'err'} | null>(null)
@@ -41,6 +47,28 @@ export default function GastosPage() {
   const isAdmin = esAdmin()
 
   useEffect(() => { cargarGastos() }, [filtroFecha, filtroCategoria, filtroCajero])
+  useEffect(() => { cargarPendientes() }, [])
+
+  async function cargarPendientes() {
+    try {
+      const r = await fetch('/api/reembolsos', { credentials: 'same-origin', cache: 'no-store' })
+      const j = await r.json().catch(() => null)
+      if (r.ok && j?.ok) setPendientes(j.pendientes || [])
+    } catch { /* sin conexión: se reintenta al recargar */ }
+  }
+
+  async function pagarA(persona: string, monto: number) {
+    if (!confirm(`¿Pagar ${fmt(monto)} a ${persona} desde la caja?\nQueda registrado como retiro del turno.`)) return
+    setPagando(persona)
+    try {
+      const r = await fetch('/api/reembolsos', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ persona }) })
+      const j = await r.json().catch(() => null)
+      if (r.ok && j?.ok) mostrarMensaje(`Pagado ${fmt(j.monto)} a ${j.persona} ✓`, 'ok')
+      else mostrarMensaje(j?.error || 'No se pudo pagar', 'err')
+    } catch { mostrarMensaje('Sin conexión con el servidor', 'err') }
+    setPagando(null)
+    cargarPendientes()
+  }
 
   async function cargarGastos() {
     setCargando(true)
@@ -80,7 +108,7 @@ export default function GastosPage() {
     setGuardando(true)
     const r = await fetch('/api/gastos', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categoria: cat, descripcion: desc, monto: mon, afecto_caja: afectoCaja, ...(aprobacion ? { aprobacion } : {}) })
+      body: JSON.stringify({ categoria: cat, descripcion: desc, monto: mon, afecto_caja: pagoTrabajador ? false : afectoCaja, ...(pagoTrabajador && pagadoPor.trim() ? { pagado_por: pagadoPor.trim() } : {}), ...(aprobacion ? { aprobacion } : {}) })
     })
     const data = await r.json().catch(() => null)
 
@@ -91,6 +119,9 @@ export default function GastosPage() {
       setCategoria('Ingredientes / Insumos')
       setDescripcion('')
       setMonto('')
+      setPagadoPor('')
+      setPagoTrabajador(false)
+      cargarPendientes()
       setGastoPendiente(null)
       setEsperandoPin(false)
       setPinAdmin('')
@@ -102,6 +133,7 @@ export default function GastosPage() {
   async function intentarGuardar() {
     if (!descripcion.trim()) { mostrarMensaje('Ingresa una descripcion', 'err'); return }
     if (!monto || parseInt(monto) <= 0) { mostrarMensaje('Ingresa un monto valido', 'err'); return }
+    if (pagoTrabajador && !pagadoPor.trim()) { mostrarMensaje('Escribe el nombre del trabajador que lo pagó', 'err'); return }
 
     const montoNum = parseInt(monto)
 
@@ -191,11 +223,21 @@ export default function GastosPage() {
               <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" style={inp} />
             </div>
             <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 8 }}>Sale de caja</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setAfectoCaja(true)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (afectoCaja ? 'var(--gold)' : 'var(--border)'), background: afectoCaja ? 'var(--gold)' : 'transparent', color: afectoCaja ? 'var(--on-accent)' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: afectoCaja ? 700 : 400 }}>Si - sale de caja</button>
-              <button onClick={() => setAfectoCaja(false)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid ' + (!afectoCaja ? 'var(--gold)' : 'var(--border)'), background: !afectoCaja ? 'var(--gold)' : 'transparent', color: !afectoCaja ? 'var(--on-accent)' : 'var(--muted)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: !afectoCaja ? 700 : 400 }}>No - solo registro</button>
+            <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 8 }}>¿Quién lo pagó?</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {[['caja', 'Salió de la caja'], ['otro', 'Otro medio del negocio'], ['trabajador', 'Un trabajador (devolver)']].map(([k, label]) => {
+                const activo = k === 'trabajador' ? pagoTrabajador : !pagoTrabajador && (k === 'caja' ? afectoCaja : !afectoCaja)
+                return <button key={k} onClick={() => { if (k === 'trabajador') setPagoTrabajador(true); else { setPagoTrabajador(false); setAfectoCaja(k === 'caja') } }}
+                  style={{ flex: '1 1 30%', padding: '10px', borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, border: '1px solid ' + (activo ? 'var(--gold)' : 'var(--border)'), background: activo ? 'var(--gold)' : 'transparent', color: activo ? 'var(--on-accent)' : 'var(--muted)', fontWeight: activo ? 700 : 400 }}>{label}</button>
+              })}
             </div>
+            {pagoTrabajador && (
+              <div style={{ marginTop: 10 }}>
+                <input list="lista-pagado-por" value={pagadoPor} onChange={e => setPagadoPor(e.target.value)} maxLength={60} placeholder="Nombre del trabajador (ej: Adriana Cáceres)" style={inp} />
+                <datalist id="lista-pagado-por">{pendientes.map(p => <option key={p.persona} value={p.persona} />)}</datalist>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>No sale de la caja ahora. Queda en «Por devolver» hasta que se le pague.</div>
+              </div>
+            )}
           </div>
           <button onClick={intentarGuardar} disabled={guardando} style={{
               width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: 'pointer',
@@ -220,6 +262,28 @@ export default function GastosPage() {
                 Autorizar
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Por devolver: gastos que pagó un trabajador con su dinero */}
+        {pendientes.length > 0 && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--gold)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: 'var(--gold)', letterSpacing: 1, textTransform: 'uppercase' as const, fontWeight: 700, marginBottom: 10 }}>Por devolver a trabajadores</div>
+            {pendientes.map(p => (
+              <div key={p.persona} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700 }}>{p.persona}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{p.gastos} gasto(s)</div>
+                </div>
+                <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--gold)' }}>{fmt(p.pendiente)}</div>
+                {isAdmin && (
+                  <button onClick={() => pagarA(p.persona, p.pendiente)} disabled={pagando === p.persona}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                    {pagando === p.persona ? '...' : 'Pagar'}
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
@@ -269,7 +333,7 @@ export default function GastosPage() {
               <div>
                 <div style={{ fontSize: 14 }}>{g.descripcion}</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                  {g.categoria} · {g.cajero || 'sin cajera'} · {new Date(g.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · {g.afecto_caja === false ? 'NO afecto caja' : 'Sale de caja'}
+                  {g.categoria} · {g.cajero || 'sin cajera'} · {new Date(g.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · {g.pagado_por ? `Pagó ${g.pagado_por} (por devolver)` : g.afecto_caja === false ? 'NO afecto caja' : 'Sale de caja'}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
