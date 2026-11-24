@@ -9,6 +9,7 @@ import AuthGuard from '@/components/AuthGuard'
 import { componerCliente } from '@/lib/clienteAbono'
 import SesionBar from '@/components/SesionBar'
 import AvisoConsumos, { EVENTO_CONSUMOS } from '@/components/AvisoConsumos'
+import AvisoPrestamos from '@/components/AvisoPrestamos'
 import BotonCobrarPoint from '@/components/BotonCobrarPoint'
 import { useEmpresaNombre } from '@/lib/useEmpresaNombre'
 import { useEmpresaLogo } from '@/lib/useEmpresaLogo'
@@ -812,12 +813,14 @@ export default function CajaPage() {
           {[['/', '🧾'], ['/cocina', '🍳'], ['/gastos', '💸'], ['/propinas', '💰'], ['/consumos', '🍽️'], ['/reportes', '📊']].map(([href, icon]) => (
             <a key={href} href={href} style={{ padding: '6px 10px', borderRadius: 8, background: href === '/' ? 'var(--gold)' : 'transparent', color: href === '/' ? 'var(--on-accent)' : 'var(--on-navy-muted)', fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>{icon} {({'/':'Caja','/cocina':'Cocina','/gastos':'Gastos','/propinas':'Propinas','/consumos':'Consumos','/reportes':'Reportes'} as Record<string,string>)[href]}</a>
           ))}
+          {esAdmin && <a href="/prestamos" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--on-navy-muted)', fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>🤝 Préstamos</a>}
           {esAdmin && <a href="/cierre" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: '#86EFAC', fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>🔓 Cierre</a>}
           {esAdmin && <a href="/configuracion/mercadopago" title="Mercado Pago" style={{ padding: '6px 10px', borderRadius: 8, background: 'transparent', color: 'var(--muted)', fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>💳 Mercado Pago</a>}
         </nav>
         <div className="pos-header-status">
           {mensaje && <span style={{ fontSize: 12, color: mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)', background: 'var(--surface2)', padding: '3px 8px', borderRadius: 12, border: `1px solid ${mensaje.tipo === 'ok' ? 'var(--green)' : 'var(--red)'}` }}>{mensaje.txt}</span>}
           <AvisoConsumos />
+          <AvisoPrestamos />
           <span className="pos-header-clock">{hora}</span>
           <SesionBar />
         </div>

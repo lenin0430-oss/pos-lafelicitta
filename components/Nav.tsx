@@ -1,12 +1,14 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { getSesion } from '@/lib/auth'
+import AvisoPrestamos from '@/components/AvisoPrestamos'
 
 const LINKS_ADMIN = [
   { href: '/', label: '🧾 Caja' },
   { href: '/cocina', label: '🍳 Cocina' },
   { href: '/por-cobrar', label: '🧾 Por cobrar' },
   { href: '/consumos', label: '🍽️ Consumos' },
+  { href: '/prestamos', label: '🤝 Préstamos' },
   { href: '/productos', label: '🏷️ Productos' },
   { href: '/gastos', label: '💸 Gastos' },
   { href: '/propinas', label: '💰 Propinas' },
@@ -44,7 +46,10 @@ export default function Nav({ active }: { active: string }) {
     <header style={{ background: 'var(--navy)', borderBottom: '3px solid var(--brand-orange)', position: 'sticky', top: 0, zIndex: 100 }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', justifyContent: 'space-between' }}>
         <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 3, color: 'var(--on-navy)' }}>LA FELICITTA</span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--on-navy-muted)' }}>{hora}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AvisoPrestamos />
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--on-navy-muted)' }}>{hora}</span>
+        </span>
       </div>
       <div style={{ display: 'flex', borderTop: '1px solid var(--navy-2)', overflowX: 'auto' }}>
         {links.map(link => (
